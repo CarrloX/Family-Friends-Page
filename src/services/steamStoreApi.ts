@@ -102,11 +102,11 @@ export async function searchSteamStore(query: string): Promise<SteamSearchResult
     return [];
   }
 
-  // 1. Try real Steam Store API via CORS proxy
+  // 1. Try real Steam Store API via CORS proxy with Colombia regional pricing (cc=CO)
   try {
     const targetUrl = `https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(
       cleanTerm
-    )}&l=spanish&cc=US`;
+    )}&l=spanish&cc=CO`;
     const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
 
     const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(4000) });
@@ -124,14 +124,27 @@ export async function searchSteamStore(query: string): Promise<SteamSearchResult
               headerImg = `https://cdn.akamai.steamstatic.com/steam/apps/${item.id}/header.jpg`;
             }
 
+            // Format price in Colombian Pesos (COP)
+            let formattedPrice = 'Ver en Steam';
+            if (item.price && typeof item.price.final === 'number') {
+              if (item.price.final === 0) {
+                formattedPrice = 'Gratis';
+              } else {
+                const copValue = item.price.final / 100;
+                formattedPrice = new Intl.NumberFormat('es-CO', {
+                  style: 'currency',
+                  currency: 'COP',
+                  maximumFractionDigits: 0,
+                }).format(copValue) + ' COP';
+              }
+            }
+
             return {
               id: item.id,
               name: item.name,
               tiny_image: tinyImg,
               header_image: headerImg,
-              price_formatted: item.price?.final
-                ? `$${(item.price.final / 100).toFixed(2)}`
-                : 'Juego de Steam',
+              price_formatted: formattedPrice,
             };
           }
         );

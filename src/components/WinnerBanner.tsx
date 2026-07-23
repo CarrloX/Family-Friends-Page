@@ -9,6 +9,11 @@ export const WinnerBanner: React.FC<WinnerBannerProps> = ({ results }) => {
   const winner = results[0];
   const runnersUp = results.slice(1);
 
+  // High-Definition Steam Cover (616x353 HD capsule) for 1st Place Winner
+  const winnerHdCover = winner?.game?.appId
+    ? `https://cdn.akamai.steamstatic.com/steam/apps/${winner.game.appId}/capsule_616x353.jpg`
+    : winner?.game?.coverImage;
+
   return (
     <section className="winner-section">
       {/* Featured Winner Card */}
@@ -22,18 +27,14 @@ export const WinnerBanner: React.FC<WinnerBannerProps> = ({ results }) => {
           <div className="winner-content">
             <div className="winner-image-container">
               <img
-                src={winner.game.coverImage}
+                src={winnerHdCover}
                 alt={winner.game.title}
                 className="winner-image"
                 onError={(e) => {
                   const target = e.currentTarget;
                   if (!target.dataset.failed) {
                     target.dataset.failed = 'true';
-                    if (winner.game?.tinyCoverImage) {
-                      target.src = winner.game.tinyCoverImage;
-                    } else if (winner.game?.appId) {
-                      target.src = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${winner.game.appId}/capsule_sm_120.jpg`;
-                    }
+                    target.src = winner.game?.coverImage || winner.game?.tinyCoverImage || '';
                   }
                 }}
               />

@@ -34,6 +34,12 @@ export const SteamVotingDashboard: React.FC = () => {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) {
+          // Clean stale USD prices from old cache
+          Object.keys(parsed).forEach((key) => {
+            if (parsed[key]?.genre && /^\$\d+(\.\d{2})?$/.test(parsed[key].genre.trim())) {
+              parsed[key].genre = 'Actualizar en Modo Edición';
+            }
+          });
           return parsed;
         }
       }
