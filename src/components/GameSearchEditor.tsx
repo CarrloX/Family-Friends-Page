@@ -176,9 +176,10 @@ const SingleGameSlotEditor: React.FC<SingleGameSlotEditorProps> = ({
       </div>
 
       <div className="slot-search-container" ref={dropdownRef}>
-        <label className="slot-label">🔍 Buscar en Steam Store:</label>
+        <label htmlFor="slot-search-input" className="slot-label">🔍 Buscar en Steam Store:</label>
         <div className="search-input-wrapper">
           <input
+            id="slot-search-input"
             type="text"
             className="slot-search-input"
             placeholder="Escribe para buscar (ej: Helldivers, Elden, Rust)..."
@@ -193,8 +194,9 @@ const SingleGameSlotEditor: React.FC<SingleGameSlotEditorProps> = ({
         {showDropdown && searchResults.length > 0 && (
           <div className="steam-search-dropdown">
             {searchResults.map((item) => (
-              <div
+              <button
                 key={item.id}
+                type="button"
                 className="dropdown-item-row"
                 onClick={() => handleSelectSteamGame(item)}
               >
@@ -205,7 +207,7 @@ const SingleGameSlotEditor: React.FC<SingleGameSlotEditorProps> = ({
                     AppID: {item.id} • {item.price_formatted}
                   </span>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         )}
@@ -214,8 +216,9 @@ const SingleGameSlotEditor: React.FC<SingleGameSlotEditorProps> = ({
       {/* MANUAL FALLBACK EDITORS */}
       <div className="slot-manual-controls">
         <div className="manual-field">
-          <label className="manual-label">Editar Nombre Manual:</label>
+          <label htmlFor="manual-title-input" className="manual-label">Editar Nombre Manual:</label>
           <input
+            id="manual-title-input"
             type="text"
             className="manual-input"
             value={game?.title || ''}
@@ -224,8 +227,9 @@ const SingleGameSlotEditor: React.FC<SingleGameSlotEditorProps> = ({
         </div>
 
         <div className="manual-field">
-          <label className="manual-label">Editar Descripción Manual:</label>
+          <label htmlFor="desc-input" className="manual-label">Editar Descripción Manual:</label>
           <input
+            id="desc-input"
             type="text"
             className="manual-input"
             value={game?.description || ''}
@@ -235,9 +239,10 @@ const SingleGameSlotEditor: React.FC<SingleGameSlotEditorProps> = ({
         </div>
 
         <div className="manual-field">
-          <label className="manual-label">Portada por URL / Archivo:</label>
+          <label htmlFor="cover-url-input" className="manual-label">Portada por URL / Archivo:</label>
           <div className="manual-cover-row">
             <input
+              id="cover-url-input"
               type="text"
               className="manual-input small-input"
               placeholder="Pegar URL de portada..."
@@ -248,7 +253,7 @@ const SingleGameSlotEditor: React.FC<SingleGameSlotEditorProps> = ({
               Ok
             </button>
             <label className="file-cover-btn" title="Subir imagen local">
-              📁
+              <span>📁</span>
               <input type="file" accept="image/*" onChange={handleFileUpload} />
             </label>
           </div>

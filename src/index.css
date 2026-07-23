@@ -19,6 +19,14 @@
   --neon-cyan-accent: #38bdf8;
   --neon-gold-accent: #fbbf24;
 
+  /* Contrast-safe solid backgrounds (≥4.5:1 with #fff) */
+  --bg-purple-solid: #6b21a8;   /* purple-800  — ratio ~8:1 */
+  --bg-blue-solid:   #0369a1;   /* sky-700     — ratio ~5.4:1 */
+  --bg-gold-solid:   #92400e;   /* amber-800   — ratio ~7:1 */
+  --bg-red-solid:    #991b1b;   /* red-800     — ratio ~7.5:1 */
+  --bg-green-solid:  #166534;   /* green-800   — ratio ~9:1 */
+  --text-on-dark:    #ffffff;
+
   /* Typography */
   --font-main: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-display: 'Space Grotesk', var(--font-main);

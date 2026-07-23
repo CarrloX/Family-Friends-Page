@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import type { Voter, AuraRank, Game } from '../types/voting';
-import { GAMES } from '../data/votingData';
 import { fetchSteamProfile, isValidSteamId64 } from '../services/steamApi';
 
 interface UserCardProps {
@@ -21,7 +20,7 @@ interface UserCardProps {
 
 export const UserCard: React.FC<UserCardProps> = ({
   voter,
-  gamesMap = GAMES,
+  gamesMap = {} as Record<string, Game>,
   isEditMode = false,
   apiKey = '',
   onUpdateVoter,
@@ -201,9 +200,10 @@ export const UserCard: React.FC<UserCardProps> = ({
       {isEditMode && (
         <div className="card-edit-panel">
           <div className="edit-field-group">
-            <label className="edit-label">🌐 SteamID64 (Auto-Perfil Steam):</label>
+            <label htmlFor="steam-id-input" className="edit-label">🌐 SteamID64 (Auto-Perfil Steam):</label>
             <div className="steam-fetch-row">
               <input
+                id="steam-id-input"
                 type="text"
                 className="edit-input"
                 placeholder="Ej: 76561198000000001"
@@ -225,17 +225,18 @@ export const UserCard: React.FC<UserCardProps> = ({
           </div>
 
           <div className="edit-field-group">
-            <label className="edit-label">👤 Nombre de usuario:</label>
+            <label htmlFor="voter-name-input" className="edit-label">👤 Nombre de usuario:</label>
             <input
+              id="voter-name-input"
               type="text"
               className="edit-input"
               value={voter.name}
-              onChange={(e) => onUpdateVoter && onUpdateVoter({ ...voter, name: e.target.value })}
+              onChange={(e) => onUpdateVoter?.({ ...voter, name: e.target.value })}
             />
           </div>
 
           <div className="edit-field-group">
-            <label className="edit-label">🖼️ Cambiar Foto de Avatar:</label>
+            <label htmlFor="voter-avatar-url" className="edit-label">🖼️ Cambiar Foto de Avatar:</label>
             <div className="avatar-options-grid">
               <label className="file-upload-btn">
                 <span>📁 Subir desde equipo</span>
@@ -243,6 +244,7 @@ export const UserCard: React.FC<UserCardProps> = ({
               </label>
               <div className="url-avatar-row">
                 <input
+                  id="voter-avatar-url"
                   type="text"
                   className="edit-input small-input"
                   placeholder="O pegar URL de imagen..."
@@ -272,7 +274,7 @@ export const UserCard: React.FC<UserCardProps> = ({
             <label className="edit-label">🎮 Asignación de Puntos por Juego:</label>
             <div className="game-votes-editor">
               {voter.votes.map((vote) => {
-                const game = gamesMap[vote.gameId] || GAMES[vote.gameId];
+                const game = gamesMap[vote.gameId];
                 return (
                   <div key={vote.gameId} className="game-vote-edit-row">
                     <span className="game-edit-name">{game?.title || vote.gameId}</span>
@@ -297,7 +299,7 @@ export const UserCard: React.FC<UserCardProps> = ({
       {/* NORMAL VOTES DISPLAY */}
       <div className="votes-list">
         {voter.votes.map((vote) => {
-          const game = gamesMap[vote.gameId] || GAMES[vote.gameId];
+          const game = gamesMap[vote.gameId];
           const is3Pts = vote.points === 3;
           const is2Pts = vote.points === 2;
           const is1Pt = vote.points === 1;

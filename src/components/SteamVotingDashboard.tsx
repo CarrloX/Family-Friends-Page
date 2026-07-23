@@ -5,7 +5,7 @@ import { WinnerBanner } from './WinnerBanner';
 import { GameSearchEditor } from './GameSearchEditor';
 import { FinishVotingModal } from './FinishVotingModal';
 import { VotingHistoryModal } from './VotingHistoryModal';
-import { VOTERS, GAMES, calculateResults } from '../data/votingData';
+import { calculateResults } from '../data/votingData';
 import type { Voter, Game, VotingHistoryRecord } from '../types/voting';
 
 const LOCAL_STORAGE_KEY_VOTERS = 'steam_voting_voters_v1';
@@ -48,7 +48,7 @@ export const SteamVotingDashboard: React.FC = () => {
     } catch (err) {
       console.warn('No se pudo cargar el caché de localStorage:', err);
     }
-    return VOTERS;
+    return [];
   });
 
   // Load initial games dictionary from localStorage cache if present
@@ -70,7 +70,7 @@ export const SteamVotingDashboard: React.FC = () => {
     } catch (err) {
       console.warn('No se pudo cargar juegos de localStorage:', err);
     }
-    return GAMES;
+    return {};
   });
 
   // Load initial voting history from localStorage cache if present
@@ -174,8 +174,8 @@ export const SteamVotingDashboard: React.FC = () => {
 
   const handleResetData = () => {
     if (window.confirm('¿Deseas restablecer los datos originales de todos los integrantes y juegos?')) {
-      setVoters(VOTERS);
-      setGamesMap(GAMES);
+      setVoters([]);
+      setGamesMap({});
       setSteamApiKey('');
       try {
         localStorage.removeItem(LOCAL_STORAGE_KEY_VOTERS);

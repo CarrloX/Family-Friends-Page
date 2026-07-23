@@ -94,6 +94,7 @@
   gap: 16px;
   background: linear-gradient(135deg, #ffffff 30%, var(--steam-blue-light) 70%, var(--neon-purple-bright) 100%);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
   text-shadow: 0 0 30px rgba(157, 78, 221, 0.3);
 }
@@ -275,22 +276,30 @@
 }
 
 .aura-badge.vip {
-  background: linear-gradient(135deg, rgba(157, 78, 221, 0.3) 0%, rgba(245, 158, 11, 0.25) 100%);
-  border: 1px solid var(--neon-purple-bright);
-  color: #f3e8ff;
-  box-shadow: 0 0 10px rgba(157, 78, 221, 0.3);
+  background: linear-gradient(
+    135deg,
+    rgba(88, 28, 135, 0.95) 0%,
+    rgba(146, 64, 14, 0.95) 100%
+  );
+  color: #fff;
 }
 
 .aura-badge.regular {
-  background: rgba(2, 132, 199, 0.25);
-  border: 1px solid var(--neon-cyan-accent);
-  color: #e0f2fe;
+  background-color: #0c4a6e;
+  background-image: linear-gradient(
+      rgba(2, 132, 199, 0.25),
+      rgba(2, 132, 199, 0.25)
+  );
+  color: #fff;
 }
 
 .aura-badge.observacion {
-  background: rgba(251, 191, 36, 0.2);
-  border: 1px solid var(--neon-gold-accent);
-  color: #fef3c7;
+  background: linear-gradient(
+    135deg,
+    rgba(120, 53, 15, 0.95) 0%,
+    rgba(167, 94, 0, 0.95) 100%
+  );
+  color: #fff;
 }
 
 .badge-icon {
@@ -407,8 +416,8 @@
 }
 
 .favorite-badge {
-  background: rgba(251, 191, 36, 0.2);
-  color: #fef08a;
+  background: rgba(180, 83, 9, 0.9);
+  color: #fff;
   border: 1px solid rgba(251, 191, 36, 0.4);
   font-size: 9px;
   font-weight: 800;
@@ -487,9 +496,9 @@
   align-items: center;
   gap: 8px;
   align-self: flex-start;
-  background: rgba(251, 191, 36, 0.15);
+  background: rgba(180, 83, 9, 0.8);
   border: 1px solid #fbbf24;
-  color: #fef08a;
+  color: #fff7cc;
   padding: 6px 14px;
   border-radius: 20px;
   font-size: 13px;
@@ -537,7 +546,7 @@
   top: 10px;
   left: 10px;
   background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-  color: #ffffff;
+  color: #1f2937; /* o #111827 */
   font-size: 12px;
   font-weight: 900;
   padding: 4px 10px;
@@ -671,8 +680,9 @@
 .podium-rank {
   font-size: 11px;
   font-weight: 800;
-  color: #cbd5e1;
-  background: rgba(255, 255, 255, 0.08);
+  color: #f1f5f9;
+  background: rgba(30, 41, 59, 0.85);
+  border: 1px solid rgba(148, 163, 184, 0.4);
   padding: 3px 8px;
   border-radius: 6px;
   white-space: nowrap;
@@ -740,6 +750,7 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
@@ -764,7 +775,6 @@
   opacity: 1;
   background: rgba(168, 85, 247, 0.25);
   border-color: #a855f7;
-  color: #ffffff;
   box-shadow: 0 0 15px rgba(168, 85, 247, 0.8);
 }
 
@@ -781,6 +791,7 @@
   background: rgba(15, 15, 27, 0.95);
   border-bottom: 2px solid #a855f7;
   box-shadow: 0 4px 30px rgba(168, 85, 247, 0.3);
+  -webkit-backdrop-filter: blur(16px);
   backdrop-filter: blur(16px);
   animation: slide-down 0.3s ease-out;
 }
@@ -804,8 +815,8 @@
 }
 
 .edit-badge {
-  background: linear-gradient(135deg, #a855f7, #7e22ce);
-  color: #ffffff;
+  background: linear-gradient(135deg, #7e22ce, #5b21b6);
+  color: var(--text-on-dark);
   font-weight: 800;
   font-size: 12px;
   padding: 4px 12px;
@@ -851,9 +862,9 @@
 }
 
 .btn-reset-data {
-  background: rgba(239, 68, 68, 0.15);
-  border: 1px solid rgba(239, 68, 68, 0.4);
-  color: #fca5a5;
+  background: var(--bg-red-solid);
+  border: 1px solid rgba(239, 68, 68, 0.6);
+  color: var(--text-on-dark);
   padding: 6px 14px;
   border-radius: 6px;
   font-size: 12px;
@@ -863,15 +874,15 @@
 }
 
 .btn-reset-data:hover {
-  background: rgba(239, 68, 68, 0.3);
+  background: #7f1d1d;
   border-color: #ef4444;
-  color: #ffffff;
+  color: var(--text-on-dark);
 }
 
 .btn-save-edit {
-  background: linear-gradient(135deg, #a855f7 0%, #3b82f6 100%);
+  background: linear-gradient(135deg, #7e22ce 0%, #1d4ed8 100%);
   border: none;
-  color: #ffffff;
+  color: var(--text-on-dark);
   padding: 8px 18px;
   border-radius: 8px;
   font-size: 13px;
@@ -966,9 +977,9 @@
 }
 
 .steam-fetch-btn {
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
   border: none;
-  color: #ffffff;
+  color: var(--text-on-dark);
   font-weight: 700;
   font-size: 11px;
   padding: 0 12px;
@@ -996,21 +1007,21 @@
 }
 
 .steam-status-msg.success {
-  background: rgba(16, 185, 129, 0.2);
-  color: #34d399;
-  border: 1px solid rgba(16, 185, 129, 0.3);
+  background: #064e3b;
+  color: var(--text-on-dark);
+  border: 1px solid #059669;
 }
 
 .steam-status-msg.error {
-  background: rgba(239, 68, 68, 0.2);
-  color: #fca5a5;
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: var(--bg-red-solid);
+  color: var(--text-on-dark);
+  border: 1px solid #dc2626;
 }
 
 .steam-status-msg.info {
-  background: rgba(59, 130, 246, 0.2);
-  color: #93c5fd;
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  background: var(--bg-blue-solid);
+  color: var(--text-on-dark);
+  border: 1px solid #2563eb;
 }
 
 .avatar-options-grid {
@@ -1023,9 +1034,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: rgba(168, 85, 247, 0.15);
-  border: 1px dashed rgba(168, 85, 247, 0.5);
-  color: #c084fc;
+  background: var(--bg-purple-solid);
+  border: 1px solid rgba(168, 85, 247, 0.6);
+  color: var(--text-on-dark);
   padding: 8px 12px;
   border-radius: 6px;
   font-size: 11px;
@@ -1036,9 +1047,9 @@
 }
 
 .file-upload-btn:hover {
-  background: rgba(168, 85, 247, 0.3);
+  background: #581c87;
   border-color: #a855f7;
-  color: #ffffff;
+  color: var(--text-on-dark);
 }
 
 .file-upload-btn input[type="file"] {
@@ -1055,9 +1066,9 @@
 }
 
 .apply-url-btn {
-  background: rgba(59, 130, 246, 0.2);
-  border: 1px solid rgba(59, 130, 246, 0.4);
-  color: #60a5fa;
+  background: var(--bg-blue-solid);
+  border: 1px solid #0284c7;
+  color: var(--text-on-dark);
   font-weight: 700;
   font-size: 11px;
   padding: 0 12px;
@@ -1067,8 +1078,8 @@
 }
 
 .apply-url-btn:hover {
-  background: rgba(59, 130, 246, 0.4);
-  color: #ffffff;
+  background: #075985;
+  color: var(--text-on-dark);
 }
 
 .game-votes-editor {
@@ -1112,6 +1123,7 @@
 .user-card {
   cursor: grab;
   transition: transform 0.25s cubic-bezier(0.2, 0, 0, 1), box-shadow 0.25s ease, opacity 0.2s ease, border-color 0.2s ease;
+  -webkit-user-select: none;
   user-select: none;
 }
 
@@ -1134,14 +1146,15 @@
   align-items: center;
   gap: 4px;
   pointer-events: none;
+  -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
   transition: all 0.2s ease;
 }
 
 .user-card:hover .drag-handle-pill {
   border-color: #a855f7;
-  color: #ffffff;
-  background: rgba(168, 85, 247, 0.3);
+  color: var(--text-on-dark);
+  background: var(--bg-purple-solid);
   box-shadow: 0 0 10px rgba(168, 85, 247, 0.5);
 }
 
@@ -1202,9 +1215,9 @@
 }
 
 .slot-badge {
-  background: rgba(168, 85, 247, 0.2);
-  border: 1px solid rgba(168, 85, 247, 0.4);
-  color: #d8b4fe;
+  background: var(--bg-purple-solid);
+  border: 1px solid rgba(168, 85, 247, 0.6);
+  color: var(--text-on-dark);
   border-radius: 20px;
   font-weight: 700;
   font-size: 11px;
@@ -1319,6 +1332,7 @@
   border: 1px solid #a855f7;
   border-radius: 8px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.9);
+  -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
 }
 
@@ -1407,9 +1421,9 @@
 }
 
 .btn-apply-cover {
-  background: rgba(59, 130, 246, 0.25);
-  border: 1px solid rgba(59, 130, 246, 0.4);
-  color: #60a5fa;
+  background: var(--bg-blue-solid);
+  border: 1px solid #0284c7;
+  color: var(--text-on-dark);
   font-weight: 700;
   font-size: 11px;
   padding: 0 10px;
@@ -1418,22 +1432,22 @@
 }
 
 .btn-apply-cover:hover {
-  background: rgba(59, 130, 246, 0.45);
-  color: #ffffff;
+  background: #075985;
+  color: var(--text-on-dark);
 }
 
 /* ==================== AURA SYSTEM BADGES ==================== */
 .aura-badge.minimo {
-  background: rgba(249, 115, 22, 0.2);
+  background: var(--bg-gold-solid);
   border: 1px solid #f97316;
-  color: #fdba74;
+  color: var(--text-on-dark);
   box-shadow: 0 0 8px rgba(249, 115, 22, 0.4);
 }
 
 .aura-badge.congelado {
-  background: rgba(239, 68, 68, 0.2);
+  background: var(--bg-red-solid);
   border: 1px solid #ef4444;
-  color: #fca5a5;
+  color: var(--text-on-dark);
   box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);
 }
 
@@ -1465,8 +1479,8 @@
 }
 
 .btn-action-primary {
-  background: linear-gradient(135deg, #a855f7 0%, #6366f1 100%);
-  color: #ffffff;
+  background: linear-gradient(135deg, #7e22ce 0%, #4338ca 100%);
+  color: var(--text-on-dark);
   padding: 10px 24px;
   border-radius: 24px;
   font-size: 13px;
@@ -1492,14 +1506,15 @@
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
+  -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   transition: all 0.2s ease;
 }
 
 .btn-action-secondary:hover {
-  background: rgba(168, 85, 247, 0.25);
+  background: var(--bg-purple-solid);
   border-color: #a855f7;
-  color: #ffffff;
+  color: var(--text-on-dark);
   box-shadow: 0 0 15px rgba(168, 85, 247, 0.4);
 }
 
@@ -1509,6 +1524,7 @@
   inset: 0;
   z-index: 2000;
   background: rgba(0, 0, 0, 0.8);
+  -webkit-backdrop-filter: blur(14px);
   backdrop-filter: blur(14px);
   display: flex;
   align-items: center;
@@ -1561,9 +1577,9 @@
 }
 
 .modal-close-btn {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #ffffff;
+  background: rgba(30, 27, 75, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: var(--text-on-dark);
   width: 32px;
   height: 32px;
   border-radius: 50%;
@@ -1716,16 +1732,16 @@
 }
 
 .toggle-choice-btn.btn-yes.active {
-  background: #10b981;
-  border-color: #10b981;
-  color: #ffffff;
+  background: #065f46;
+  border-color: #059669;
+  color: var(--text-on-dark);
   box-shadow: 0 0 12px rgba(16, 185, 129, 0.6);
 }
 
 .toggle-choice-btn.btn-no.active {
-  background: #ef4444;
-  border-color: #ef4444;
-  color: #ffffff;
+  background: var(--bg-red-solid);
+  border-color: #dc2626;
+  color: var(--text-on-dark);
   box-shadow: 0 0 12px rgba(239, 68, 68, 0.6);
 }
 
@@ -1775,9 +1791,9 @@
 }
 
 .btn-modal-cancel {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.8);
+  background: rgba(30, 27, 75, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: var(--text-on-dark);
   padding: 8px 16px;
   border-radius: 8px;
   font-size: 12px;
@@ -1786,9 +1802,9 @@
 }
 
 .btn-modal-confirm {
-  background: linear-gradient(135deg, #a855f7 0%, #10b981 100%);
+  background: linear-gradient(135deg, #7e22ce 0%, #065f46 100%);
   border: none;
-  color: #ffffff;
+  color: var(--text-on-dark);
   padding: 9px 20px;
   border-radius: 8px;
   font-size: 13px;
@@ -2048,9 +2064,9 @@
 }
 
 .btn-clear-history {
-  background: rgba(239, 68, 68, 0.15);
-  border: 1px solid rgba(239, 68, 68, 0.4);
-  color: #fca5a5;
+  background: var(--bg-red-solid);
+  border: 1px solid rgba(239, 68, 68, 0.6);
+  color: var(--text-on-dark);
   padding: 6px 14px;
   border-radius: 6px;
   font-size: 12px;
@@ -2087,9 +2103,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: rgba(168, 85, 247, 0.15);
-  border: 1px solid rgba(168, 85, 247, 0.3);
-  color: #d8b4fe;
+  background: var(--bg-purple-solid);
+  border: 1px solid rgba(168, 85, 247, 0.5);
+  color: var(--text-on-dark);
   padding: 0 10px;
   border-radius: 6px;
   cursor: pointer;
