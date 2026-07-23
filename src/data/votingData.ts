@@ -41,6 +41,7 @@ export const GAMES: Record<string, Game> = {
 export const VOTERS: Voter[] = [
   {
     id: 'user_1',
+    steamId64: '76561198000000001',
     name: 'Alex "Viper"',
     avatar: avatarViper,
     auraRank: 'VIP',
@@ -54,6 +55,7 @@ export const VOTERS: Voter[] = [
   },
   {
     id: 'user_2',
+    steamId64: '76561198000000002',
     name: 'Elena "Nebula"',
     avatar: avatarNebula,
     auraRank: 'VIP',
@@ -67,6 +69,7 @@ export const VOTERS: Voter[] = [
   },
   {
     id: 'user_3',
+    steamId64: '76561198000000003',
     name: 'Carlos "Ghost"',
     avatar: avatarGhost,
     auraRank: 'Regular',
@@ -80,6 +83,7 @@ export const VOTERS: Voter[] = [
   },
   {
     id: 'user_4',
+    steamId64: '76561198000000004',
     name: 'Sofía "Pixel"',
     avatar: avatarPixel,
     auraRank: 'Regular',
@@ -93,6 +97,7 @@ export const VOTERS: Voter[] = [
   },
   {
     id: 'user_5',
+    steamId64: '76561198000000005',
     name: 'Mateo "Rookie"',
     avatar: avatarRookie,
     auraRank: 'Observación',
@@ -106,15 +111,14 @@ export const VOTERS: Voter[] = [
   },
 ];
 
-export function calculateResults(): GameResult[] {
-  const scoreMap: Record<string, { raw: number; weighted: number; firsts: number }> = {
-    helldivers2: { raw: 0, weighted: 0, firsts: 0 },
-    hades2: { raw: 0, weighted: 0, firsts: 0 },
-    eldenring: { raw: 0, weighted: 0, firsts: 0 },
-    lethalcompany: { raw: 0, weighted: 0, firsts: 0 },
-  };
+export function calculateResults(votersList: Voter[] = VOTERS): GameResult[] {
+  const scoreMap: Record<string, { raw: number; weighted: number; firsts: number }> = {};
 
-  VOTERS.forEach((voter) => {
+  Object.keys(GAMES).forEach((gameId) => {
+    scoreMap[gameId] = { raw: 0, weighted: 0, firsts: 0 };
+  });
+
+  votersList.forEach((voter) => {
     voter.votes.forEach((vote) => {
       if (scoreMap[vote.gameId]) {
         scoreMap[vote.gameId].raw += vote.points;
@@ -129,9 +133,9 @@ export function calculateResults(): GameResult[] {
   return Object.keys(GAMES)
     .map((gameId) => ({
       game: GAMES[gameId],
-      rawPoints: scoreMap[gameId].raw,
-      weightedPoints: Number(scoreMap[gameId].weighted.toFixed(2)),
-      firstPlaceVotes: scoreMap[gameId].firsts,
+      rawPoints: scoreMap[gameId]?.raw || 0,
+      weightedPoints: Number((scoreMap[gameId]?.weighted || 0).toFixed(2)),
+      firstPlaceVotes: scoreMap[gameId]?.firsts || 0,
     }))
     .sort((a, b) => b.weightedPoints - a.weightedPoints);
 }

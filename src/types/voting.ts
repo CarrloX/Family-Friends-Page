@@ -18,6 +18,7 @@ export interface GameVote {
 
 export interface Voter {
   id: string;
+  steamId64?: string;
   name: string;
   avatar: string;
   auraRank: AuraRank;
