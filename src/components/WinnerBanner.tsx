@@ -21,7 +21,22 @@ export const WinnerBanner: React.FC<WinnerBannerProps> = ({ results }) => {
 
           <div className="winner-content">
             <div className="winner-image-container">
-              <img src={winner.game.coverImage} alt={winner.game.title} className="winner-image" />
+              <img
+                src={winner.game.coverImage}
+                alt={winner.game.title}
+                className="winner-image"
+                onError={(e) => {
+                  const target = e.currentTarget;
+                  if (!target.dataset.failed) {
+                    target.dataset.failed = 'true';
+                    if (winner.game?.tinyCoverImage) {
+                      target.src = winner.game.tinyCoverImage;
+                    } else if (winner.game?.appId) {
+                      target.src = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${winner.game.appId}/capsule_sm_120.jpg`;
+                    }
+                  }
+                }}
+              />
               <div className="winner-badge-overlay">1º LUGAR</div>
             </div>
 
@@ -62,7 +77,22 @@ export const WinnerBanner: React.FC<WinnerBannerProps> = ({ results }) => {
             return (
               <div key={result.game.id} className={`podium-card position-${rankPosition}`}>
                 <div className="podium-rank">{rankLabel}</div>
-                <img src={result.game.coverImage} alt={result.game.title} className="podium-thumb" />
+                <img
+                  src={result.game.coverImage}
+                  alt={result.game.title}
+                  className="podium-thumb"
+                  onError={(e) => {
+                    const target = e.currentTarget;
+                    if (!target.dataset.failed) {
+                      target.dataset.failed = 'true';
+                      if (result.game?.tinyCoverImage) {
+                        target.src = result.game.tinyCoverImage;
+                      } else if (result.game?.appId) {
+                        target.src = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${result.game.appId}/capsule_sm_120.jpg`;
+                      }
+                    }
+                  }}
+                />
                 <div className="podium-info">
                   <span className="podium-title">{result.game.title}</span>
                   <span className="podium-score">

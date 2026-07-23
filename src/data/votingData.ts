@@ -111,10 +111,13 @@ export const VOTERS: Voter[] = [
   },
 ];
 
-export function calculateResults(votersList: Voter[] = VOTERS): GameResult[] {
+export function calculateResults(
+  votersList: Voter[] = VOTERS,
+  gamesMap: Record<string, Game> = GAMES
+): GameResult[] {
   const scoreMap: Record<string, { raw: number; weighted: number; firsts: number }> = {};
 
-  Object.keys(GAMES).forEach((gameId) => {
+  Object.keys(gamesMap).forEach((gameId) => {
     scoreMap[gameId] = { raw: 0, weighted: 0, firsts: 0 };
   });
 
@@ -130,12 +133,13 @@ export function calculateResults(votersList: Voter[] = VOTERS): GameResult[] {
     });
   });
 
-  return Object.keys(GAMES)
+  return Object.keys(gamesMap)
     .map((gameId) => ({
-      game: GAMES[gameId],
+      game: gamesMap[gameId],
       rawPoints: scoreMap[gameId]?.raw || 0,
       weightedPoints: Number((scoreMap[gameId]?.weighted || 0).toFixed(2)),
       firstPlaceVotes: scoreMap[gameId]?.firsts || 0,
     }))
+    .filter((res) => Boolean(res.game))
     .sort((a, b) => b.weightedPoints - a.weightedPoints);
 }

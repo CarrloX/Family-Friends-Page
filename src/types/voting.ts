@@ -5,9 +5,11 @@ export const VOTING_TYPE_MARKER = true;
 
 export interface Game {
   id: string;
+  appId?: number;
   title: string;
   genre: string;
   coverImage: string;
+  tinyCoverImage?: string;
   description: string;
 }
 

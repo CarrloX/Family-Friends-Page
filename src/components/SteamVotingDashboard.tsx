@@ -2,11 +2,13 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Header } from './Header';
 import { UserCard } from './UserCard';
 import { WinnerBanner } from './WinnerBanner';
-import { VOTERS, calculateResults } from '../data/votingData';
-import type { Voter } from '../types/voting';
+import { GameSearchEditor } from './GameSearchEditor';
+import { VOTERS, GAMES, calculateResults } from '../data/votingData';
+import type { Voter, Game } from '../types/voting';
 
 const LOCAL_STORAGE_KEY_VOTERS = 'steam_voting_voters_v1';
 const LOCAL_STORAGE_KEY_API_KEY = 'steam_voting_api_key_v1';
+const LOCAL_STORAGE_KEY_GAMES = 'steam_voting_games_v1';
 
 export const SteamVotingDashboard: React.FC = () => {
   // Load initial voters from localStorage cache if present
@@ -23,6 +25,22 @@ export const SteamVotingDashboard: React.FC = () => {
       console.warn('No se pudo cargar el caché de localStorage:', err);
     }
     return VOTERS;
+  });
+
+  // Load initial games dictionary from localStorage cache if present
+  const [gamesMap, setGamesMap] = useState<Record<string, Game>>(() => {
+    try {
+      const saved = localStorage.getItem(LOCAL_STORAGE_KEY_GAMES);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) {
+          return parsed;
+        }
+      }
+    } catch (err) {
+      console.warn('No se pudo cargar juegos de localStorage:', err);
+    }
+    return GAMES;
   });
 
   const [isEditMode, setIsEditMode] = useState<boolean>(false);
@@ -49,6 +67,15 @@ export const SteamVotingDashboard: React.FC = () => {
     }
   }, [voters]);
 
+  // Automatically save games map to localStorage on every change
+  useEffect(() => {
+    try {
+      localStorage.setItem(LOCAL_STORAGE_KEY_GAMES, JSON.stringify(gamesMap));
+    } catch (err) {
+      console.warn('Error guardando caché de juegos:', err);
+    }
+  }, [gamesMap]);
+
   // Automatically save API key to localStorage
   useEffect(() => {
     try {
@@ -58,19 +85,28 @@ export const SteamVotingDashboard: React.FC = () => {
     }
   }, [steamApiKey]);
 
-  // Calculate live results based on state
-  const results = useMemo(() => calculateResults(voters), [voters]);
+  // Calculate live results based on dynamic voters and games state
+  const results = useMemo(() => calculateResults(voters, gamesMap), [voters, gamesMap]);
 
   const handleUpdateVoter = (updatedVoter: Voter) => {
     setVoters((prev) => prev.map((v) => (v.id === updatedVoter.id ? updatedVoter : v)));
   };
 
+  const handleUpdateGame = (gameId: string, updatedGame: Game) => {
+    setGamesMap((prev) => ({
+      ...prev,
+      [gameId]: updatedGame,
+    }));
+  };
+
   const handleResetData = () => {
-    if (window.confirm('¿Deseas restablecer los datos originales de todos los integrantes?')) {
+    if (window.confirm('¿Deseas restablecer los datos originales de todos los integrantes y juegos?')) {
       setVoters(VOTERS);
+      setGamesMap(GAMES);
       setSteamApiKey('');
       try {
         localStorage.removeItem(LOCAL_STORAGE_KEY_VOTERS);
+        localStorage.removeItem(LOCAL_STORAGE_KEY_GAMES);
         localStorage.removeItem(LOCAL_STORAGE_KEY_API_KEY);
       } catch (err) {
         console.warn('Error al limpiar localStorage:', err);
@@ -141,7 +177,7 @@ export const SteamVotingDashboard: React.FC = () => {
           <div className="edit-bar-left">
             <span className="edit-badge">⚙️ MODO EDICIÓN ACTIVO</span>
             <span className="edit-help-text">
-              Podés arrastrar las tarjetas (Drag & Drop) para cambiar su posición. Autoguardado activo.
+              Buscá juegos en Steam, edita perfiles y arrastrá tarjetas. Autoguardado activo.
             </span>
           </div>
 
@@ -176,6 +212,11 @@ export const SteamVotingDashboard: React.FC = () => {
       <div className="dashboard-content">
         <Header />
 
+        {/* DYNAMIC STEAM GAME SEARCH & EDITOR (ONLY IN EDIT MODE) */}
+        {isEditMode && (
+          <GameSearchEditor gamesMap={gamesMap} onUpdateGame={handleUpdateGame} />
+        )}
+
         {/* 5 User Cards Grid */}
         <section className="voters-section">
           <div className="section-title-wrapper">
@@ -183,7 +224,7 @@ export const SteamVotingDashboard: React.FC = () => {
               <span className="title-icon">🎮</span> PONDERACIÓN POR INTEGRANTE ({voters.length} USUARIOS)
             </h2>
             <span className="voter-count-badge">
-              {isEditMode ? '🖐️ Arrastrá las tarjetas para reordenar' : `${voters.length} / ${voters.length} Votantes Activos (Arrastrables)`}
+              {isEditMode ? '🖐️ Arrastrá tarjetas / Editá juegos arriba' : `${voters.length} / ${voters.length} Votantes Activos`}
             </span>
           </div>
 
@@ -192,6 +233,7 @@ export const SteamVotingDashboard: React.FC = () => {
               <UserCard
                 key={voter.id}
                 voter={voter}
+                gamesMap={gamesMap}
                 isEditMode={isEditMode}
                 apiKey={steamApiKey}
                 onUpdateVoter={handleUpdateVoter}

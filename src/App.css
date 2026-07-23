@@ -1155,3 +1155,268 @@
   border: 2px solid #38bdf8 !important;
   box-shadow: 0 0 30px rgba(56, 189, 248, 0.7) !important;
 }
+
+/* ==================== GAME SEARCH & STORE TYPEAHEAD EDITOR ==================== */
+.game-search-editor-container {
+  background: linear-gradient(180deg, rgba(23, 26, 33, 0.95) 0%, rgba(15, 15, 27, 0.95) 100%);
+  border: 1px solid rgba(168, 85, 247, 0.4);
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 0 25px rgba(168, 85, 247, 0.2);
+  margin-bottom: 24px;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.editor-header-title h3 {
+  font-size: 15px;
+  font-weight: 800;
+  color: #c084fc;
+  margin-bottom: 4px;
+  letter-spacing: 0.5px;
+}
+
+.editor-header-title p {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  margin: 0;
+}
+
+.game-slots-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.game-slot-card {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(168, 85, 247, 0.25);
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  position: relative;
+}
+
+.slot-badge {
+  background: rgba(168, 85, 247, 0.2);
+  border: 1px solid rgba(168, 85, 247, 0.4);
+  color: #d8b4fe;
+  border-radius: 20px;
+  font-weight: 700;
+  font-size: 11px;
+  padding: 2px 10px;
+  width: fit-content;
+}
+
+.slot-current-preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.slot-cover-thumb {
+  width: 70px;
+  height: 35px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+.slot-game-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.slot-search-container {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.slot-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #a7f3d0;
+}
+
+.search-input-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.slot-search-input {
+  width: 100%;
+  background: rgba(15, 15, 27, 0.9);
+  border: 1px solid rgba(168, 85, 247, 0.4);
+  color: #ffffff;
+  font-size: 12px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  outline: none;
+  transition: all 0.2s;
+}
+
+.slot-search-input:focus {
+  border-color: #a855f7;
+  box-shadow: 0 0 12px rgba(168, 85, 247, 0.4);
+}
+
+.search-spinner {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  animation: spin 1s infinite linear;
+}
+
+@keyframes spin {
+  100% {
+    transform: translateY(-50%) rotate(360deg);
+  }
+}
+
+/* STEAM TYPEAHEAD SEARCH DROPDOWN */
+.steam-search-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 100;
+  max-height: 240px;
+  overflow-y: auto;
+  background: rgba(15, 15, 27, 0.98);
+  border: 1px solid #a855f7;
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.9);
+  backdrop-filter: blur(12px);
+}
+
+.dropdown-item-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  transition: background 0.2s;
+}
+
+.dropdown-item-row:last-child {
+  border-bottom: none;
+}
+
+.dropdown-item-row:hover {
+  background: rgba(168, 85, 247, 0.3);
+}
+
+.dropdown-item-thumb {
+  width: 54px;
+  height: 28px;
+  object-fit: cover;
+  border-radius: 4px;
+}
+
+.dropdown-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.dropdown-item-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dropdown-item-meta {
+  font-size: 10px;
+  color: #38bdf8;
+}
+
+.slot-manual-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding-top: 8px;
+}
+
+.manual-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.manual-label {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.manual-input {
+  background: rgba(15, 15, 27, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 6px 8px;
+  color: #ffffff;
+  font-size: 11px;
+  outline: none;
+}
+
+.manual-input:focus {
+  border-color: #a855f7;
+}
+
+.manual-cover-row {
+  display: flex;
+  gap: 6px;
+}
+
+.btn-apply-cover {
+  background: rgba(59, 130, 246, 0.25);
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  color: #60a5fa;
+  font-weight: 700;
+  font-size: 11px;
+  padding: 0 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.btn-apply-cover:hover {
+  background: rgba(59, 130, 246, 0.45);
+  color: #ffffff;
+}
+
+.file-cover-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(168, 85, 247, 0.15);
+  border: 1px solid rgba(168, 85, 247, 0.3);
+  color: #d8b4fe;
+  padding: 0 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.file-cover-btn input {
+  display: none;
+}

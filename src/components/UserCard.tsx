@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import type { Voter, AuraRank } from '../types/voting';
+import type { Voter, AuraRank, Game } from '../types/voting';
 import { GAMES } from '../data/votingData';
 import { fetchSteamProfile, isValidSteamId64 } from '../services/steamApi';
 
 interface UserCardProps {
   voter: Voter;
+  gamesMap?: Record<string, Game>;
   isEditMode?: boolean;
   apiKey?: string;
   onUpdateVoter?: (updatedVoter: Voter) => void;
@@ -20,6 +21,7 @@ interface UserCardProps {
 
 export const UserCard: React.FC<UserCardProps> = ({
   voter,
+  gamesMap = GAMES,
   isEditMode = false,
   apiKey = '',
   onUpdateVoter,
@@ -278,7 +280,7 @@ export const UserCard: React.FC<UserCardProps> = ({
             <label className="edit-label">🎮 Asignación de Puntos por Juego:</label>
             <div className="game-votes-editor">
               {voter.votes.map((vote) => {
-                const game = GAMES[vote.gameId];
+                const game = gamesMap[vote.gameId] || GAMES[vote.gameId];
                 return (
                   <div key={vote.gameId} className="game-vote-edit-row">
                     <span className="game-edit-name">{game?.title || vote.gameId}</span>
@@ -303,7 +305,7 @@ export const UserCard: React.FC<UserCardProps> = ({
       {/* NORMAL VOTES DISPLAY */}
       <div className="votes-list">
         {voter.votes.map((vote) => {
-          const game = GAMES[vote.gameId];
+          const game = gamesMap[vote.gameId] || GAMES[vote.gameId];
           const is3Pts = vote.points === 3;
           const is2Pts = vote.points === 2;
           const is1Pt = vote.points === 1;
@@ -320,7 +322,22 @@ export const UserCard: React.FC<UserCardProps> = ({
           return (
             <div key={vote.gameId} className={voteItemClass}>
               <div className="game-thumb-container">
-                <img src={game.coverImage} alt={game.title} className="game-thumb" />
+                <img
+                  src={game?.coverImage}
+                  alt={game?.title}
+                  className="game-thumb"
+                  onError={(e) => {
+                    const target = e.currentTarget;
+                    if (!target.dataset.failed) {
+                      target.dataset.failed = 'true';
+                      if (game?.tinyCoverImage) {
+                        target.src = game.tinyCoverImage;
+                      } else if (game?.appId) {
+                        target.src = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${game.appId}/capsule_sm_120.jpg`;
+                      }
+                    }
+                  }}
+                />
               </div>
 
               <div className="vote-game-info">
