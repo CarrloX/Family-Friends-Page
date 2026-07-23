@@ -3,21 +3,45 @@ import { Header } from './Header';
 import { UserCard } from './UserCard';
 import { WinnerBanner } from './WinnerBanner';
 import { GameSearchEditor } from './GameSearchEditor';
+import { FinishVotingModal } from './FinishVotingModal';
+import { VotingHistoryModal } from './VotingHistoryModal';
 import { VOTERS, GAMES, calculateResults } from '../data/votingData';
-import type { Voter, Game } from '../types/voting';
+import type { Voter, Game, VotingHistoryRecord } from '../types/voting';
 
 const LOCAL_STORAGE_KEY_VOTERS = 'steam_voting_voters_v1';
 const LOCAL_STORAGE_KEY_API_KEY = 'steam_voting_api_key_v1';
 const LOCAL_STORAGE_KEY_GAMES = 'steam_voting_games_v1';
+const LOCAL_STORAGE_KEY_HISTORY = 'steam_voting_history_v1';
 
 export const SteamVotingDashboard: React.FC = () => {
   // Load initial voters from localStorage cache if present
   const [voters, setVoters] = useState<Voter[]>(() => {
     try {
-      const saved = localStorage.getItem(LOCAL_STORAGE_KEY_VOTERS);
-      if (saved) {
-        const parsed = JSON.parse(saved);
+      const savedVoters = localStorage.getItem(LOCAL_STORAGE_KEY_VOTERS);
+      const savedHistory = localStorage.getItem(LOCAL_STORAGE_KEY_HISTORY);
+      const historyIsEmpty =
+        !savedHistory ||
+        (() => {
+          try {
+            const h = JSON.parse(savedHistory);
+            return !Array.isArray(h) || h.length === 0;
+          } catch {
+            return true;
+          }
+        })();
+
+      if (savedVoters) {
+        const parsed = JSON.parse(savedVoters);
         if (Array.isArray(parsed) && parsed.length > 0) {
+          // If there are no voting records yet, reset Aura to neutral baseline
+          if (historyIsEmpty) {
+            return parsed.map((v) => ({
+              ...v,
+              auraRank: 'Socio Regular',
+              auraQuotaBalance: 0,
+              multiplier: 1.0,
+            }));
+          }
           return parsed;
         }
       }
@@ -49,7 +73,23 @@ export const SteamVotingDashboard: React.FC = () => {
     return GAMES;
   });
 
+  // Load initial voting history from localStorage cache if present
+  const [history, setHistory] = useState<VotingHistoryRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem(LOCAL_STORAGE_KEY_HISTORY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (err) {
+      console.warn('No se pudo cargar historial de localStorage:', err);
+    }
+    return [];
+  });
+
   const [isEditMode, setIsEditMode] = useState<boolean>(false);
+  const [showFinishModal, setShowFinishModal] = useState<boolean>(false);
+  const [showHistoryModal, setShowHistoryModal] = useState<boolean>(false);
 
   // Load initial API key from localStorage cache if present
   const [steamApiKey, setSteamApiKey] = useState<string>(() => {
@@ -82,6 +122,15 @@ export const SteamVotingDashboard: React.FC = () => {
     }
   }, [gamesMap]);
 
+  // Automatically save voting history to localStorage on every change
+  useEffect(() => {
+    try {
+      localStorage.setItem(LOCAL_STORAGE_KEY_HISTORY, JSON.stringify(history));
+    } catch (err) {
+      console.warn('Error guardando historial:', err);
+    }
+  }, [history]);
+
   // Automatically save API key to localStorage
   useEffect(() => {
     try {
@@ -103,6 +152,24 @@ export const SteamVotingDashboard: React.FC = () => {
       ...prev,
       [gameId]: updatedGame,
     }));
+  };
+
+  const handleConfirmFinishVoting = (
+    updatedVoters: Voter[],
+    historyRecord: VotingHistoryRecord
+  ) => {
+    setVoters(updatedVoters);
+    setHistory((prev) => [historyRecord, ...prev]);
+    setShowFinishModal(false);
+  };
+
+  const handleClearHistory = () => {
+    setHistory([]);
+    try {
+      localStorage.removeItem(LOCAL_STORAGE_KEY_HISTORY);
+    } catch (err) {
+      console.warn('Error al borrar historial:', err);
+    }
   };
 
   const handleResetData = () => {
@@ -176,6 +243,25 @@ export const SteamVotingDashboard: React.FC = () => {
           <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
         </svg>
       </button>
+
+      {/* ACTION BAR: FINISH VOTING & HISTORY BUTTONS */}
+      <div className="top-action-navigation">
+        <button
+          type="button"
+          className="btn-action-primary btn-finish-voting"
+          onClick={() => setShowFinishModal(true)}
+        >
+          🏆 Finalizar Votación
+        </button>
+
+        <button
+          type="button"
+          className="btn-action-secondary btn-view-history"
+          onClick={() => setShowHistoryModal(true)}
+        >
+          📜 Historial ({history.length})
+        </button>
+      </div>
 
       {/* TOP EDIT MODE CONTROL BAR */}
       {isEditMode && (
@@ -263,6 +349,26 @@ export const SteamVotingDashboard: React.FC = () => {
           <p>© 2026 Steam Co-Op Game Voting • Diseñado con paleta oficial de Steam & Acentos Neón</p>
         </footer>
       </div>
+
+      {/* FINISH VOTING MODAL */}
+      {showFinishModal && results.length > 0 && (
+        <FinishVotingModal
+          allResults={results}
+          gamesMap={gamesMap}
+          voters={voters}
+          onConfirmFinish={handleConfirmFinishVoting}
+          onClose={() => setShowFinishModal(false)}
+        />
+      )}
+
+      {/* VOTING HISTORY MODAL */}
+      {showHistoryModal && (
+        <VotingHistoryModal
+          history={history}
+          onClearHistory={handleClearHistory}
+          onClose={() => setShowHistoryModal(false)}
+        />
+      )}
     </div>
   );
 };

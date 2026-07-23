@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { Game } from '../types/voting';
-import { searchSteamStore, type SteamSearchResultItem } from '../services/steamStoreApi';
+import { searchSteamStore, fetchSteamGameDetails, type SteamSearchResultItem } from '../services/steamStoreApi';
 
 interface GameSearchEditorProps {
   gamesMap: Record<string, Game>;
@@ -14,7 +14,7 @@ export const GameSearchEditor: React.FC<GameSearchEditorProps> = ({ gamesMap, on
     <div className="game-search-editor-container">
       <div className="editor-header-title">
         <h3>🎮 BÚSQUEDA Y EDICIÓN DE LOS 4 JUEGOS DE LA VOTACIÓN</h3>
-        <p>Buscá cualquier juego en la Tienda de Steam para autocompletar su portada y nombre oficial.</p>
+        <p>Buscá cualquier juego en la Tienda de Steam para autocompletar su portada, nombre y descripción oficial.</p>
       </div>
 
       <div className="game-slots-grid">
@@ -83,24 +83,44 @@ const SingleGameSlotEditor: React.FC<SingleGameSlotEditorProps> = ({
   }, []);
 
   // Handle selecting a game from Steam Search results
-  const handleSelectSteamGame = (item: SteamSearchResultItem) => {
-    const updatedGame: Game = {
+  const handleSelectSteamGame = async (item: SteamSearchResultItem) => {
+    const baseGame: Game = {
       ...game,
       appId: item.id,
       title: item.name,
       coverImage: item.header_image,
       tinyCoverImage: item.tiny_image,
       genre: item.price_formatted || 'Juego de Steam',
-      description: game.description || `Juego oficial de Steam (AppID: ${item.id}).`,
+      description: 'Cargando descripción oficial de Steam...',
     };
-    onUpdateGame(gameId, updatedGame);
+
+    onUpdateGame(gameId, baseGame);
     setSearchTerm('');
     setShowDropdown(false);
+
+    // Fetch official short description from Steam AppDetails API
+    const details = await fetchSteamGameDetails(item.id);
+    if (details.description) {
+      onUpdateGame(gameId, {
+        ...baseGame,
+        description: details.description,
+      });
+    } else {
+      onUpdateGame(gameId, {
+        ...baseGame,
+        description: `Juego oficial de la Tienda de Steam (${item.name}).`,
+      });
+    }
   };
 
   // Handle manual title edit
   const handleTitleChange = (newTitle: string) => {
     onUpdateGame(gameId, { ...game, title: newTitle });
+  };
+
+  // Handle manual description edit
+  const handleDescriptionChange = (newDesc: string) => {
+    onUpdateGame(gameId, { ...game, description: newDesc });
   };
 
   // Handle custom cover image URL
@@ -149,7 +169,10 @@ const SingleGameSlotEditor: React.FC<SingleGameSlotEditorProps> = ({
             }
           }}
         />
-        <div className="slot-game-title">{game?.title || 'Seleccionar juego'}</div>
+        <div className="slot-preview-meta">
+          <div className="slot-game-title">{game?.title || 'Seleccionar juego'}</div>
+          <div className="slot-game-desc-snippet">{game?.description || 'Sin descripción'}</div>
+        </div>
       </div>
 
       <div className="slot-search-container" ref={dropdownRef}>
@@ -197,6 +220,17 @@ const SingleGameSlotEditor: React.FC<SingleGameSlotEditorProps> = ({
             className="manual-input"
             value={game?.title || ''}
             onChange={(e) => handleTitleChange(e.target.value)}
+          />
+        </div>
+
+        <div className="manual-field">
+          <label className="manual-label">Editar Descripción Manual:</label>
+          <input
+            type="text"
+            className="manual-input"
+            value={game?.description || ''}
+            onChange={(e) => handleDescriptionChange(e.target.value)}
+            placeholder="Descripción corta del juego..."
           />
         </div>
 

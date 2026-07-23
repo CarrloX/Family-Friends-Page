@@ -43,12 +43,19 @@ export const UserCard: React.FC<UserCardProps> = ({
 
   const getBadgeClass = (rank: AuraRank) => {
     switch (rank) {
+      case 'Socio VIP':
       case 'VIP':
         return 'aura-badge vip';
+      case 'Socio Regular':
       case 'Regular':
         return 'aura-badge regular';
+      case 'En Observación':
       case 'Observación':
         return 'aura-badge observacion';
+      case 'Voto Mínimo':
+        return 'aura-badge minimo';
+      case 'Congelado':
+        return 'aura-badge congelado';
       default:
         return 'aura-badge';
     }
@@ -126,21 +133,6 @@ export const UserCard: React.FC<UserCardProps> = ({
     }
   };
 
-  // Rank Selector Handler
-  const handleRankChange = (newRank: AuraRank) => {
-    if (!onUpdateVoter) return;
-    let newMult = 1.0;
-    if (newRank === 'VIP') newMult = 1.5;
-    if (newRank === 'Regular') newMult = 1.0;
-    if (newRank === 'Observación') newMult = 0.75;
-
-    onUpdateVoter({
-      ...voter,
-      auraRank: newRank,
-      multiplier: newMult,
-    });
-  };
-
   // Game Points Handler
   const handlePointsChange = (gameId: string, newPoints: number) => {
     if (!onUpdateVoter) return;
@@ -186,7 +178,6 @@ export const UserCard: React.FC<UserCardProps> = ({
       <div className="card-header">
         <div className="avatar-wrapper">
           <img src={voter.avatar} alt={voter.name} className="user-avatar" />
-          <span className="avatar-status-ring"></span>
         </div>
 
         <div className="user-meta">
@@ -200,7 +191,9 @@ export const UserCard: React.FC<UserCardProps> = ({
       </div>
 
       <div className="multiplier-bar">
-        <span className="multiplier-label">EFECTO DE AURA:</span>
+        <span className="multiplier-label">
+          SALDO DE AURA ({voter.auraQuotaBalance >= 0 ? `+${voter.auraQuotaBalance}` : voter.auraQuotaBalance} Cuota{Math.abs(voter.auraQuotaBalance) === 1 ? '' : 's'}):
+        </span>
         <span className="multiplier-value">{voter.multiplier}x Ponderación</span>
       </div>
 
@@ -264,16 +257,15 @@ export const UserCard: React.FC<UserCardProps> = ({
           </div>
 
           <div className="edit-field-group">
-            <label className="edit-label">✦ Rango de Aura Actual:</label>
-            <select
-              className="edit-select"
-              value={voter.auraRank}
-              onChange={(e) => handleRankChange(e.target.value as AuraRank)}
-            >
-              <option value="VIP">VIP (1.5x Multiplicador)</option>
-              <option value="Regular">Regular (1.0x Multiplicador)</option>
-              <option value="Observación">Observación (0.75x Multiplicador)</option>
-            </select>
+            <label className="edit-label">✦ Estado de Aura (Calculado Automáticamente):</label>
+            <div className="edit-aura-info-box">
+              <span className={getBadgeClass(voter.auraRank)}>
+                <span className="badge-icon">✦</span> {voter.auraRank} ({voter.multiplier}x)
+              </span>
+              <span className="aura-balance-pill">
+                Saldo: <strong>{voter.auraQuotaBalance >= 0 ? `+${voter.auraQuotaBalance}` : voter.auraQuotaBalance} Cuotas</strong>
+              </span>
+            </div>
           </div>
 
           <div className="edit-field-group">

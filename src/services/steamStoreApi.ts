@@ -117,7 +117,7 @@ export async function searchSteamStore(query: string): Promise<SteamSearchResult
           (item: { id: number; name: string; tiny_image?: string; price?: { final?: number } }) => {
             const tinyImg =
               item.tiny_image || `https://cdn.akamai.steamstatic.com/steam/apps/${item.id}/capsule_sm_120.jpg`;
-            
+
             // Derive header image directly from Steam's CDN url or pattern
             let headerImg = tinyImg.replace(/capsule_[^/]+\.jpg/i, 'header.jpg');
             if (headerImg === tinyImg) {
@@ -165,4 +165,36 @@ export async function searchSteamStore(query: string): Promise<SteamSearchResult
     header_image: g.coverImage,
     price_formatted: g.genre,
   }));
+}
+
+/**
+ * Fetches short_description and genres for a game by appId using Steam App Details API.
+ */
+export async function fetchSteamGameDetails(appId: number): Promise<{ description?: string; genres?: string }> {
+  try {
+    const targetUrl = `https://store.steampowered.com/api/appdetails?appids=${appId}&l=spanish`;
+    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
+    const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(3500) });
+    if (res.ok) {
+      const data = await res.json();
+      const appInfo = data?.[appId.toString()]?.data;
+      if (appInfo) {
+        // Strip HTML tags from short_description
+        const cleanDesc = appInfo.short_description
+          ? appInfo.short_description.replace(/<[^>]*>?/gm, '').trim()
+          : undefined;
+        const genresList = Array.isArray(appInfo.genres)
+          ? appInfo.genres.map((g: { description: string }) => g.description).join(' / ')
+          : undefined;
+
+        return {
+          description: cleanDesc,
+          genres: genresList,
+        };
+      }
+    }
+  } catch (err) {
+    console.warn(`Error fetching Steam AppDetails for appId ${appId}:`, err);
+  }
+  return {};
 }
