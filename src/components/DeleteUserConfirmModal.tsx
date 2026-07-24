@@ -13,10 +13,15 @@ export const DeleteUserConfirmModal: React.FC<DeleteUserConfirmModalProps> = ({
   onConfirm,
 }) => {
   return (
-    <div className="modal-backdrop" onClick={onCancel}>
+    <div className="modal-backdrop">
+      <button
+        type="button"
+        className="modal-backdrop-close"
+        onClick={onCancel}
+        aria-label="Cerrar modal"
+      />
       <div
         className="delete-confirm-modal-container"
-        onClick={(e) => e.stopPropagation()}
       >
         <div className="modal-header">
           <div className="modal-title-group">

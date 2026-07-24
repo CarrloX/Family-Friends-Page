@@ -231,10 +231,15 @@ export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = ({
 
         {/* CLEAR HISTORY CONFIRM MODAL */}
         {showClearConfirm && (
-          <div className="modal-backdrop" onClick={() => setShowClearConfirm(false)}>
+          <div className="modal-backdrop">
+            <button
+              type="button"
+              className="modal-backdrop-close"
+              onClick={() => setShowClearConfirm(false)}
+              aria-label="Cerrar modal"
+            />
             <div
               className="delete-confirm-modal-container"
-              onClick={(e) => e.stopPropagation()}
             >
               <div className="modal-header">
                 <div className="modal-title-group">

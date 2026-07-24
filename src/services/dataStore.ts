@@ -209,7 +209,7 @@ export async function addHistoryRecord(record: VotingHistoryRecord): Promise<Syn
 }
 
 /**
- * Carga todo el historial de votaciones. Prioriza Firestore, fallback a localStorage.
+ * Carga tod0 el historial de votaciones. Prioriza Firestore, fallback a localStorage.
  */
 export async function loadHistory(): Promise<VotingHistoryRecord[]> {
   if (isFirebaseReady()) {
@@ -331,7 +331,7 @@ function isValidBackup(data: unknown): data is BackupData {
   if (!Array.isArray(d.history)) return false;
 
   // Verificar steamApiKey (string opcional)
-  if (typeof d.steamApiKey !== 'undefined' && typeof d.steamApiKey !== 'string') return false;
+  if (d.steamApiKey !== undefined && typeof d.steamApiKey !== 'string') return false;
 
   return true;
 }
@@ -359,7 +359,7 @@ export function exportBackup(): void {
     link.download = BACKUP_FILENAME;
     document.body.appendChild(link);
     link.click();
-    document.body.removeChild(link);
+    link.remove();
     URL.revokeObjectURL(url);
 
     console.log(`[DataStore] Backup exportado: ${BACKUP_FILENAME}`);
@@ -403,7 +403,7 @@ export function downloadBackup(backup: BackupData): void {
     link.download = BACKUP_FILENAME;
     document.body.appendChild(link);
     link.click();
-    document.body.removeChild(link);
+    link.remove();
     URL.revokeObjectURL(url);
 
     console.log('[DataStore] Backup descargado desde datos en memoria.');
@@ -416,32 +416,23 @@ export function downloadBackup(backup: BackupData): void {
 /**
  * Lee un archivo JSON y devuelve los datos parseados.
  */
-export function readBackupFile(file: File): Promise<BackupData> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
+export async function readBackupFile(file: File): Promise<BackupData> {
+  try {
+    const text = await file.text();
+    const data = JSON.parse(text);
 
-    reader.onload = (event) => {
-      try {
-        const text = event.target?.result as string;
-        const data = JSON.parse(text);
+    if (!isValidBackup(data)) {
+      throw new Error('El archivo no tiene un formato de backup válido.');
+    }
 
-        if (!isValidBackup(data)) {
-          reject(new Error('El archivo no tiene un formato de backup válido.'));
-          return;
-        }
+    return data;
+  } catch (err) {
+    if (err instanceof Error) {
+      throw err;
+    }
 
-        resolve(data);
-      } catch {
-        reject(new Error('No se pudo leer el archivo. Asegúrate de que sea un JSON válido.'));
-      }
-    };
-
-    reader.onerror = () => {
-      reject(new Error('Error al leer el archivo.'));
-    };
-
-    reader.readAsText(file);
-  });
+    throw new Error('No se pudo leer el archivo. Asegúrate de que sea un JSON válido.');
+  }
 }
 
 /**

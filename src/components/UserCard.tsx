@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { Voter, AuraRank, Game } from '../types/voting';
 import { fetchSteamProfile, isValidSteamId64 } from '../services/steamApi';
+import { FaTimes } from "react-icons/fa";
 
 interface UserCardProps {
   voter: Voter;
@@ -184,7 +185,7 @@ export const UserCard: React.FC<UserCardProps> = ({
           }
           aria-label={`Eliminar a ${voter.name}`}
         >
-          ✕
+          <FaTimes />
         </button>
       )}
 

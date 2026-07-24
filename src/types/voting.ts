@@ -95,7 +95,7 @@ export function calculateAuraStatus(
     };
   }
 
-  let newRank: AuraRank = 'Socio Regular';
+  let newRank: AuraRank;
   let newMultiplier = 1.0;
 
   if (newBalance >= 3) {
@@ -103,7 +103,7 @@ export function calculateAuraStatus(
     newMultiplier = 1.5;
   } else if (newBalance >= 0) {
     newRank = 'Socio Regular';
-    newMultiplier = 1.0;
+    newMultiplier = 1;
   } else if (newBalance >= -2) {
     newRank = 'En Observación';
     newMultiplier = 0.75;
