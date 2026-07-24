@@ -193,6 +193,9 @@
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
+  cursor: grab;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .user-card:hover {
@@ -794,6 +797,7 @@
   -webkit-backdrop-filter: blur(16px);
   backdrop-filter: blur(16px);
   animation: slide-down 0.3s ease-out;
+  border-radius: 12px;
 }
 
 @keyframes slide-down {
@@ -1120,13 +1124,6 @@
 }
 
 /* ==================== DRAG & DROP STYLES ==================== */
-.user-card {
-  cursor: grab;
-  transition: transform 0.25s cubic-bezier(0.2, 0, 0, 1), box-shadow 0.25s ease, opacity 0.2s ease, border-color 0.2s ease;
-  -webkit-user-select: none;
-  user-select: none;
-}
-
 .user-card:active {
   cursor: grabbing;
 }
@@ -1720,9 +1717,9 @@
 }
 
 .toggle-choice-btn {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.6);
+  background: rgba(51, 65, 85, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #f8fafc;
   padding: 6px 14px;
   border-radius: 8px;
   font-size: 11px;

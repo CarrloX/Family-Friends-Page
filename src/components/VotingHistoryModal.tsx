@@ -46,7 +46,8 @@ export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = ({
                 {history.map((rec) => {
                   const isSelected = rec.id === selectedRecordId;
                   return (
-                    <div
+                    <button
+                      type="button"
                       key={rec.id}
                       className={`history-list-item ${isSelected ? 'selected' : ''}`}
                       onClick={() => setSelectedRecordId(rec.id)}
@@ -71,7 +72,7 @@ export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = ({
                         <span className="history-item-winner">🏆 {rec.winningGame?.title}</span>
                         <span className="history-item-date">{rec.date}</span>
                       </div>
-                    </div>
+                    </button>
                   );
                 })}
               </div>
@@ -112,7 +113,11 @@ export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = ({
                       // Support both GameResult[] and Game[] shapes
                       const game = 'game' in item ? item.game : item;
                       const pts = 'weightedPoints' in item ? item.weightedPoints : null;
-                      const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}º`;
+                      let medal: string;
+                      if (idx === 0) medal = '🥇';
+                      else if (idx === 1) medal = '🥈';
+                      else if (idx === 2) medal = '🥉';
+                      else medal = `${idx + 1}º`;
                       return (
                         <div key={game.id} className={`competitor-card ${idx === 0 ? 'winner-competitor' : ''}`}>
                           <img

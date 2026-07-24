@@ -10,9 +10,25 @@ export const WinnerBanner: React.FC<WinnerBannerProps> = ({ results }) => {
   const runnersUp = results.slice(1);
 
   // High-Definition Steam Cover (616x353 HD capsule) for 1st Place Winner
-  const winnerHdCover = winner?.game?.appId
-    ? `https://cdn.akamai.steamstatic.com/steam/apps/${winner.game.appId}/capsule_616x353.jpg`
+  const appId = winner?.game?.appId;
+  const cdnBase = 'https://cdn.akamai.steamstatic.com/steam/apps';
+  const winnerHdCover = appId
+    ? `${cdnBase}/${appId}/capsule_616x353.jpg`
     : winner?.game?.coverImage;
+
+  // Fallback chain for winner cover: HD → header → small capsule → coverImage → tinyCoverImage
+  const winnerCoverFallbacks: string[] = [];
+  if (appId) {
+    winnerCoverFallbacks.push(
+      `${cdnBase}/${appId}/header.jpg`,
+      `${cdnBase}/${appId}/capsule_sm_120.jpg`
+    );
+  }
+  if (winner?.game?.coverImage) winnerCoverFallbacks.push(winner.game.coverImage);
+  if (winner?.game?.tinyCoverImage) winnerCoverFallbacks.push(winner.game.tinyCoverImage);
+
+  console.log(`[WinnerBanner] Portada HD del ganador: ${winnerHdCover}`);
+  console.log(`[WinnerBanner] Fallbacks disponibles:`, winnerCoverFallbacks);
 
   return (
     <section className="winner-section">
@@ -32,9 +48,12 @@ export const WinnerBanner: React.FC<WinnerBannerProps> = ({ results }) => {
                 className="winner-image"
                 onError={(e) => {
                   const target = e.currentTarget;
-                  if (!target.dataset.failed) {
-                    target.dataset.failed = 'true';
-                    target.src = winner.game?.coverImage || winner.game?.tinyCoverImage || '';
+                  const currentFallback = Number.parseInt(target.dataset.fallbackLevel || '0', 10);
+                  if (currentFallback < winnerCoverFallbacks.length) {
+                    const nextUrl = winnerCoverFallbacks[currentFallback];
+                    console.log(`[WinnerBanner] Fallback #${currentFallback + 1} para portada HD: ${nextUrl}`);
+                    target.dataset.fallbackLevel = String(currentFallback + 1);
+                    target.src = nextUrl;
                   }
                 }}
               />
@@ -73,7 +92,14 @@ export const WinnerBanner: React.FC<WinnerBannerProps> = ({ results }) => {
         <div className="podium-grid">
           {runnersUp.map((result, idx) => {
             const rankPosition = idx + 2;
-            const rankLabel = rankPosition === 2 ? '2º LUGAR 🥈' : rankPosition === 3 ? '3º LUGAR 🥉' : '4º LUGAR';
+            let rankLabel: string;
+            if (rankPosition === 2) {
+              rankLabel = '2º LUGAR 🥈';
+            } else if (rankPosition === 3) {
+              rankLabel = '3º LUGAR 🥉';
+            } else {
+              rankLabel = '4º LUGAR';
+            }
 
             return (
               <div key={result.game.id} className={`podium-card position-${rankPosition}`}>

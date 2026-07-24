@@ -176,7 +176,7 @@ export const UserCard: React.FC<UserCardProps> = ({
       {/* Header Info */}
       <div className="card-header">
         <div className="avatar-wrapper">
-          <img src={voter.avatar} alt={voter.name} className="user-avatar" />
+          <img key={voter.avatar} src={voter.avatar} alt={voter.name} className="user-avatar" />
         </div>
 
         <div className="user-meta">
@@ -259,7 +259,7 @@ export const UserCard: React.FC<UserCardProps> = ({
           </div>
 
           <div className="edit-field-group">
-            <label className="edit-label">✦ Estado de Aura (Calculado Automáticamente):</label>
+            <span className="edit-label">✦ Estado de Aura (Calculado Automáticamente):</span>
             <div className="edit-aura-info-box">
               <span className={getBadgeClass(voter.auraRank)}>
                 <span className="badge-icon">✦</span> {voter.auraRank} ({voter.multiplier}x)
@@ -271,7 +271,7 @@ export const UserCard: React.FC<UserCardProps> = ({
           </div>
 
           <div className="edit-field-group">
-            <label className="edit-label">🎮 Asignación de Puntos por Juego:</label>
+            <span className="edit-label">🎮 Asignación de Puntos por Juego:</span>
             <div className="game-votes-editor">
               {voter.votes.map((vote) => {
                 const game = gamesMap[vote.gameId];
@@ -317,18 +317,22 @@ export const UserCard: React.FC<UserCardProps> = ({
             <div key={vote.gameId} className={voteItemClass}>
               <div className="game-thumb-container">
                 <img
+                  key={game?.id || vote.gameId}
                   src={game?.coverImage}
                   alt={game?.title}
                   className="game-thumb"
                   onError={(e) => {
                     const target = e.currentTarget;
-                    if (!target.dataset.failed) {
-                      target.dataset.failed = 'true';
+                    if (!target.dataset.fallback) {
+                      target.dataset.fallback = '1';
                       if (game?.tinyCoverImage) {
                         target.src = game.tinyCoverImage;
                       } else if (game?.appId) {
                         target.src = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${game.appId}/capsule_sm_120.jpg`;
                       }
+                    } else if (target.dataset.fallback === '1' && game?.appId) {
+                      target.dataset.fallback = '2';
+                      target.src = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${game.appId}/capsule_sm_120.jpg`;
                     }
                   }}
                 />

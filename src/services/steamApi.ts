@@ -46,6 +46,60 @@ export function isValidSteamId64(steamId: string): boolean {
 }
 
 /**
+ * Attempts to fetch a Steam profile using the provided API key via CORS proxy.
+ * Returns the profile result on success, or null on failure.
+ */
+async function fetchFromSteamApi(apiKey: string, steamId: string): Promise<SteamProfileResult | null> {
+  try {
+    const targetUrl = `https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/?key=${apiKey}&steamids=${steamId}`;
+    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
+    const response = await fetch(proxyUrl);
+    if (!response.ok) return null;
+    const data = await response.json();
+    const player = data?.response?.players?.[0];
+    if (!player) return null;
+    const avatarUrl = player.avatarfull || player.avatarmedium || player.avatar;
+    console.log(`[SteamApi] Avatar URL obtenida (API Key): ${avatarUrl}`);
+    return {
+      success: true,
+      steamId64: steamId,
+      personaname: player.personaname,
+      avatarfull: avatarUrl,
+    };
+  } catch {
+    console.warn('Steam API direct fetch failed, attempting open proxy fallback...');
+    return null;
+  }
+}
+
+/**
+ * Attempts to fetch a Steam profile using the public DEMO key via CORS proxy.
+ * Returns the profile result on success, or null on failure.
+ */
+async function fetchFromPublicProxy(steamId: string): Promise<SteamProfileResult | null> {
+  try {
+    const publicUrl = `https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/?key=DEMO&steamids=${steamId}`;
+    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(publicUrl)}`;
+    const response = await fetch(proxyUrl, { signal: AbortSignal.timeout(3000) });
+    if (!response.ok) return null;
+    const data = await response.json();
+    const player = data?.response?.players?.[0];
+    if (!player?.personaname) return null;
+    const avatarUrl = player.avatarfull || player.avatarmedium;
+    console.log(`[SteamApi] Avatar URL obtenida (proxy público): ${avatarUrl}`);
+    return {
+      success: true,
+      steamId64: steamId,
+      personaname: player.personaname,
+      avatarfull: avatarUrl,
+    };
+  } catch {
+    console.warn('Open proxy fallback timed out or failed.');
+    return null;
+  }
+}
+
+/**
  * Main fetcher function for Steam Profile Info
  */
 export async function fetchSteamProfile(
@@ -64,60 +118,27 @@ export async function fetchSteamProfile(
 
   // 1. Check if mock profile exists for instant testing
   if (MOCK_STEAM_PROFILES[cleanId]) {
+    const mockProfile = MOCK_STEAM_PROFILES[cleanId];
+    console.log(`[SteamApi] Usando mock profile: ${mockProfile.personaname}, avatar: ${mockProfile.avatarfull}`);
     return {
       success: true,
       steamId64: cleanId,
-      ...MOCK_STEAM_PROFILES[cleanId],
+      ...mockProfile,
     };
   }
 
   // 2. Try fetching from Steam API if API Key provided
-  if (apiKey && apiKey.trim().length > 0) {
-    try {
-      const targetUrl = `https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/?key=${apiKey.trim()}&steamids=${cleanId}`;
-      const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
-
-      const response = await fetch(proxyUrl);
-      if (response.ok) {
-        const data = await response.json();
-        const player = data?.response?.players?.[0];
-
-        if (player) {
-          return {
-            success: true,
-            steamId64: cleanId,
-            personaname: player.personaname,
-            avatarfull: player.avatarfull || player.avatarmedium || player.avatar,
-          };
-        }
-      }
-    } catch (e) {
-      console.warn('Steam API direct fetch failed, attempting open proxy fallback...', e);
-    }
+  if (apiKey?.trim()) {
+    const result = await fetchFromSteamApi(apiKey.trim(), cleanId);
+    if (result) return result;
   }
 
   // 3. Open CORS fallback fetch attempt
-  try {
-    const publicUrl = `https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/?key=DEMO&steamids=${cleanId}`;
-    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(publicUrl)}`;
-    const response = await fetch(proxyUrl, { signal: AbortSignal.timeout(3000) });
-    if (response.ok) {
-      const data = await response.json();
-      const player = data?.response?.players?.[0];
-      if (player && player.personaname) {
-        return {
-          success: true,
-          steamId64: cleanId,
-          personaname: player.personaname,
-          avatarfull: player.avatarfull || player.avatarmedium,
-        };
-      }
-    }
-  } catch (err) {
-    console.warn('Open proxy fallback timed out or failed.', err);
-  }
+  const fallbackResult = await fetchFromPublicProxy(cleanId);
+  if (fallbackResult) return fallbackResult;
 
   // 4. Fallback response (doesn't break interface)
+  console.log(`[SteamApi] Usando fallback por defecto para ${cleanId}`);
   return {
     success: false,
     steamId64: cleanId,

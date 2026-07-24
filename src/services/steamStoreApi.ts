@@ -1,6 +1,3 @@
-
-
-
 export interface SteamSearchResultItem {
   id: number;
   name: string;
@@ -8,8 +5,6 @@ export interface SteamSearchResultItem {
   header_image: string;
   price_formatted?: string;
 }
-
-
 
 /**
  * Searches Steam Store API for games matching `term`.
@@ -31,7 +26,7 @@ export async function searchSteamStore(query: string): Promise<SteamSearchResult
     if (res.ok) {
       const data = await res.json();
       if (data && Array.isArray(data.items) && data.items.length > 0) {
-        return data.items.map(
+        const results = data.items.map(
           (item: { id: number; name: string; tiny_image?: string; price?: { final?: number } }) => {
             const tinyImg =
               item.tiny_image || `https://cdn.akamai.steamstatic.com/steam/apps/${item.id}/capsule_sm_120.jpg`;
@@ -66,12 +61,15 @@ export async function searchSteamStore(query: string): Promise<SteamSearchResult
             };
           }
         );
+        console.log(`[SteamStoreApi] ${results.length} juegos encontrados. Miniaturas:`, results.map((r: { name: string; tiny_image: string; header_image: string }) => ({ name: r.name, tiny: r.tiny_image, header: r.header_image })));
+        return results;
       }
     }
   } catch (err) {
     console.warn('Steam Store API search error or CORS timeout, using fallback games database...', err);
   }
 
+  console.log('[SteamStoreApi] No se encontraron juegos, retornando array vacío.');
   return [];
 }
 
@@ -95,6 +93,7 @@ export async function fetchSteamGameDetails(appId: number): Promise<{ descriptio
           ? appInfo.genres.map((g: { description: string }) => g.description).join(' / ')
           : undefined;
 
+        console.log(`[SteamStoreApi] Detalles obtenidos para appId ${appId}:`, { description: cleanDesc?.slice(0, 50), genres: genresList });
         return {
           description: cleanDesc,
           genres: genresList,
