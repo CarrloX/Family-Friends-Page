@@ -110,6 +110,7 @@
   font-size: 16px;
   color: var(--steam-text-muted);
   font-weight: 500;
+  max-width: 90%;
 }
 
 .header-divider {
@@ -241,8 +242,6 @@
   border: 2px solid var(--neon-purple-bright);
   box-shadow: 0 0 12px var(--neon-purple-glow);
 }
-
-
 
 .user-meta {
   display: flex;
@@ -549,7 +548,7 @@
   top: 10px;
   left: 10px;
   background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-  color: #1f2937; /* o #111827 */
+  color: #1f2937;
   font-size: 12px;
   font-weight: 900;
   padding: 4px 10px;
@@ -2111,4 +2110,554 @@
 
 .file-cover-btn input {
   display: none;
+}
+
+/* ====================================================================
+   ==================== RESPONSIVE MOBILE IMPROVEMENTS ====================
+   ==================================================================== */
+
+/* Small phones: < 480px */
+@media (max-width: 480px) {
+  /* Container - reduce padding */
+  .steam-dashboard-container {
+    padding: 16px 12px 40px;
+  }
+
+  .dashboard-content {
+    gap: 24px;
+  }
+
+  /* Header - reduce title size */
+  .steam-title {
+    font-size: 22px;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .steam-icon {
+    width: 28px;
+    height: 28px;
+  }
+
+  .steam-header-badge {
+    font-size: 10px;
+    padding: 4px 10px;
+    gap: 6px;
+    letter-spacing: 0.5px;
+  }
+
+  .steam-subtitle {
+    font-size: 12px;
+    max-width: 100%;
+  }
+
+  .header-divider {
+    width: 100px;
+  }
+
+  /* Section titles */
+  .section-title {
+    font-size: 16px;
+  }
+
+  .section-title-wrapper {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  /* User cards - reduce padding */
+  .user-card {
+    padding: 14px;
+    gap: 12px;
+  }
+
+  .card-header {
+    gap: 10px;
+  }
+
+  .avatar-wrapper {
+    width: 44px;
+    height: 44px;
+  }
+
+  .user-name {
+    font-size: 14px;
+  }
+
+  .aura-badge {
+    font-size: 10px;
+    padding: 2px 7px;
+  }
+
+  .multiplier-bar {
+    font-size: 11px;
+    padding: 5px 8px;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  /* Vote items */
+  .vote-item {
+    padding: 6px 8px;
+    gap: 8px;
+  }
+
+  .game-thumb-container {
+    width: 44px;
+    height: 24px;
+  }
+
+  .game-title {
+    font-size: 12px;
+  }
+
+  .vote-points-row {
+    font-size: 10px;
+    flex-wrap: wrap;
+  }
+
+  .favorite-badge {
+    font-size: 8px;
+    padding: 1px 4px;
+  }
+
+  /* Winner banner */
+  .winner-banner {
+    padding: 16px;
+    gap: 14px;
+  }
+
+  .winner-banner-glow {
+    border-radius: 14px;
+  }
+
+  .winner-trophy-tag {
+    font-size: 10px;
+    padding: 4px 10px;
+    gap: 6px;
+  }
+
+  .winner-image-container {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .winner-badge-overlay {
+    font-size: 10px;
+    padding: 3px 8px;
+    top: 6px;
+    left: 6px;
+  }
+
+  .winner-genre {
+    font-size: 11px;
+  }
+
+  .winner-title {
+    font-size: 22px;
+  }
+
+  .winner-description {
+    font-size: 12px;
+  }
+
+  .winner-stats-grid {
+    gap: 10px;
+  }
+
+  .stat-value {
+    font-size: 18px;
+  }
+
+  /* Podium */
+  .podium-container {
+    padding: 14px;
+  }
+
+  .podium-heading {
+    font-size: 13px;
+  }
+
+  .podium-card {
+    padding: 8px 10px;
+    gap: 8px;
+  }
+
+  .podium-thumb {
+    width: 50px;
+    height: 26px;
+  }
+
+  .podium-title {
+    font-size: 12px;
+  }
+
+  .podium-score {
+    font-size: 11px;
+  }
+
+  .podium-rank {
+    font-size: 10px;
+    padding: 2px 6px;
+  }
+
+  /* Top action navigation */
+  .top-action-navigation {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .btn-action-primary,
+  .btn-action-secondary {
+    width: 100%;
+    text-align: center;
+    padding: 10px 16px;
+    font-size: 12px;
+  }
+
+  /* Edit mode top bar */
+  .edit-mode-top-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 8px;
+  }
+
+  .edit-bar-left {
+    justify-content: center;
+  }
+
+  .edit-bar-controls {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .api-key-input-container {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+  }
+
+  .api-key-input {
+    width: 100%;
+  }
+
+  .btn-save-edit,
+  .btn-reset-data {
+    width: 100%;
+    text-align: center;
+  }
+
+  /* Modals */
+  .modal-backdrop {
+    padding: 8px;
+  }
+
+  .finish-modal-container,
+  .history-modal-container {
+    padding: 16px;
+    gap: 16px;
+    border-radius: 14px;
+  }
+
+  .modal-header {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .modal-title-group h2 {
+    font-size: 15px;
+  }
+
+  .modal-title-group p {
+    font-size: 11px;
+  }
+
+  .modal-winner-card {
+    flex-direction: column;
+    text-align: center;
+    padding: 10px 14px;
+  }
+
+  .winner-modal-thumb {
+    width: 100%;
+    height: auto;
+    max-height: 60px;
+  }
+
+  .winner-modal-info h4 {
+    font-size: 14px;
+  }
+
+  /* Voter payment rows */
+  .voter-payment-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 10px 12px;
+  }
+
+  .voter-pay-user {
+    gap: 8px;
+  }
+
+  .pay-user-avatar {
+    width: 32px;
+    height: 32px;
+  }
+
+  .pay-user-name {
+    font-size: 12px;
+  }
+
+  .toggle-btn-group {
+    justify-content: center;
+  }
+
+  .new-aura-preview {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    min-width: auto;
+    width: 100%;
+  }
+
+  .modal-footer-actions {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .btn-modal-cancel,
+  .btn-modal-confirm {
+    width: 100%;
+    text-align: center;
+  }
+
+  /* History modal */
+  .history-sidebar {
+    border-right: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding-right: 0;
+    padding-bottom: 12px;
+  }
+
+  .history-items-list {
+    max-height: 200px;
+  }
+
+  .history-record-header {
+    flex-direction: column;
+    text-align: center;
+    gap: 8px;
+  }
+
+  .history-details-banner {
+    width: 100%;
+    height: auto;
+    max-height: 60px;
+  }
+
+  .winner-details-badge h3 {
+    font-size: 14px;
+  }
+
+  .competitors-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .history-voters-table {
+    font-size: 10px;
+  }
+
+  .history-voters-table th,
+  .history-voters-table td {
+    padding: 6px 6px;
+  }
+
+  .table-avatar {
+    width: 20px;
+    height: 20px;
+  }
+
+  /* Game search editor */
+  .game-search-editor-container {
+    padding: 14px;
+  }
+
+  .game-slots-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .game-slot-card {
+    padding: 10px;
+  }
+
+  .slot-cover-thumb {
+    width: 56px;
+    height: 28px;
+  }
+
+  .slot-game-title {
+    font-size: 12px;
+  }
+
+  .slot-game-desc-snippet {
+    max-width: 120px;
+  }
+
+  /* Card edit panel */
+  .card-edit-panel {
+    padding: 10px;
+  }
+
+  .steam-fetch-row {
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .steam-fetch-btn {
+    padding: 6px 12px;
+    width: 100%;
+  }
+
+  .game-vote-edit-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+
+  .points-select {
+    width: 100%;
+  }
+
+  .edit-aura-info-box {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  /* Hidden gear button - adjust position */
+  .hidden-gear-btn {
+    top: 10px;
+    right: 10px;
+    width: 36px;
+    height: 36px;
+  }
+
+  .hidden-gear-btn svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  /* Footer */
+  .steam-footer {
+    font-size: 11px;
+    padding: 14px 0;
+  }
+}
+
+/* Medium phones: 481px - 600px */
+@media (min-width: 481px) and (max-width: 600px) {
+  .steam-dashboard-container {
+    padding: 20px 16px 48px;
+  }
+
+  .steam-title {
+    font-size: 28px;
+  }
+
+  .steam-icon {
+    width: 32px;
+    height: 32px;
+  }
+
+  .winner-title {
+    font-size: 28px;
+  }
+
+  .winner-banner {
+    padding: 20px;
+  }
+
+  .top-action-navigation {
+    flex-wrap: wrap;
+  }
+
+  .edit-mode-top-bar {
+    flex-wrap: wrap;
+  }
+
+  .edit-bar-controls {
+    flex-wrap: wrap;
+  }
+}
+
+/* Tablets: 601px - 768px */
+@media (min-width: 601px) and (max-width: 768px) {
+  .steam-title {
+    font-size: 32px;
+  }
+
+  .winner-title {
+    font-size: 30px;
+  }
+
+  .winner-banner {
+    padding: 24px;
+  }
+
+  .edit-mode-top-bar {
+    flex-wrap: wrap;
+  }
+}
+
+/* Landscape phones and small tablets */
+@media (max-height: 500px) and (orientation: landscape) {
+  .steam-dashboard-container {
+    padding: 12px 16px 32px;
+  }
+
+  .steam-title {
+    font-size: 24px;
+  }
+
+  .steam-icon {
+    width: 28px;
+    height: 28px;
+  }
+
+  .steam-header {
+    gap: 8px;
+    padding-top: 8px;
+  }
+
+  .dashboard-content {
+    gap: 20px;
+  }
+
+  .winner-banner {
+    padding: 14px;
+  }
+
+  .winner-title {
+    font-size: 22px;
+  }
+
+  .winner-content {
+    flex-direction: row;
+  }
+
+  .winner-image-container {
+    width: 200px;
+  }
+
+  .winner-stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .user-cards-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
