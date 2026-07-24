@@ -7,7 +7,68 @@ import { FinishVotingModal } from './FinishVotingModal';
 import { VotingHistoryModal } from './VotingHistoryModal';
 import { DeleteUserConfirmModal } from './DeleteUserConfirmModal';
 import { calculateResults } from '../data/votingData';
-import type { Voter, Game, VotingHistoryRecord } from '../types/voting';
+import type { Voter, Game, VotingHistoryRecord, AuraRank } from '../types/voting';
+
+// Confirmation modal for resetting all Aura
+const ResetAuraConfirmModal: React.FC<{
+  onConfirm: () => void;
+  onCancel: () => void;
+}> = ({ onConfirm, onCancel }) => {
+  return (
+    <div className="modal-backdrop" onClick={onCancel}>
+      <div
+        className="delete-confirm-modal-container"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="modal-header">
+          <div className="modal-title-group">
+            <h2>⚠️ Restablecer Aura</h2>
+            <p>Esta acción no se puede deshacer fácilmente.</p>
+          </div>
+          <button
+            type="button"
+            className="modal-close-btn"
+            onClick={onCancel}
+            aria-label="Cerrar"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className="delete-warning-content">
+          <div className="delete-warning-text">
+            <p>
+              ¿Estás seguro de que deseas restablecer el <strong>Aura de todos los integrantes</strong>?
+            </p>
+            <p className="delete-warning-sub">
+              Todos los integrantes volverán a ser <strong>Socio Regular</strong> con <strong>0 Cuotas</strong> y multiplicador <strong>1.0x</strong>.
+            </p>
+            <p className="delete-warning-note">
+              📊 <strong>Nota:</strong> Esta acción no afectará el historial de votaciones ni los juegos guardados. Solo se modificarán los niveles de Aura.
+            </p>
+          </div>
+        </div>
+
+        <div className="modal-footer-actions delete-modal-actions">
+          <button
+            type="button"
+            className="btn-modal-cancel"
+            onClick={onCancel}
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            className="btn-modal-confirm-delete"
+            onClick={onConfirm}
+          >
+            Confirmar Restablecimiento
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 import {
   saveVoters,
   saveGames,
@@ -44,6 +105,7 @@ export const SteamVotingDashboard: React.FC = () => {
   const [showFinishModal, setShowFinishModal] = useState<boolean>(false);
   const [showHistoryModal, setShowHistoryModal] = useState<boolean>(false);
   const [voterToDelete, setVoterToDelete] = useState<Voter | null>(null);
+  const [showResetAuraConfirm, setShowResetAuraConfirm] = useState(false);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -165,7 +227,53 @@ export const SteamVotingDashboard: React.FC = () => {
     setSyncState(result);
   };
 
+  /**
+   * Revierte los cambios de Aura acumulados de múltiples votaciones,
+   * devolviendo a cada votante al estado MÁS ANTIGUO (balance inicial).
+   * El historial se espera en orden descendente (más reciente primero).
+   */
+  const revertVotersAura = useCallback(
+    (records: VotingHistoryRecord[]) => {
+      setVoters((prevVoters) => {
+        // Acumular los cambios invertidos para cada votante
+        const reverts = new Map<string, { balance: number; rank: AuraRank; multiplier: number }>();
+
+        // Procesar del más reciente al más antiguo.
+        // El último snapshot que permanezca en el mapa será el del registro más antiguo,
+        // que representa el estado inicial antes de cualquier votación.
+        for (const record of records) {
+          if (!record.votersSnapshots) continue;
+          for (const snap of record.votersSnapshots) {
+            reverts.set(snap.voterId, {
+              balance: snap.previousBalance,
+              rank: snap.previousRank,
+              multiplier: snap.previousMultiplier,
+            });
+          }
+        }
+
+        return prevVoters.map((voter) => {
+          const rev = reverts.get(voter.id);
+          if (!rev) return voter;
+
+          return {
+            ...voter,
+            auraQuotaBalance: rev.balance,
+            auraRank: rev.rank,
+            multiplier: rev.multiplier,
+          };
+        });
+      });
+    },
+    [setVoters]
+  );
+
   const handleClearHistory = async () => {
+    // Revertir Aura usando todos los registros del historial
+    if (history.length > 0) {
+      revertVotersAura(history);
+    }
+
     setHistory([]);
     setSyncState({ status: 'saving', message: 'Limpiando...' });
     const result = await clearHistoryStore();
@@ -174,8 +282,30 @@ export const SteamVotingDashboard: React.FC = () => {
 
   const handleDeleteHistoryRecord = async (recordId: string) => {
     setSyncState({ status: 'saving', message: 'Eliminando registro...' });
+
+    // Buscar el registro en el historial local para obtener los snapshots
+    const recordToDelete = history.find((r) => r.id === recordId);
+
+    // Eliminar el registro de Firestore/localStorage
     const result = await deleteHistoryRecord(recordId);
     setSyncState(result);
+
+    // Revertir solo los cambios del registro eliminado
+    if (recordToDelete?.votersSnapshots) {
+      setVoters((prev) =>
+        prev.map((voter) => {
+          const snap = recordToDelete.votersSnapshots!.find((s) => s.voterId === voter.id);
+          if (!snap) return voter;
+
+          return {
+            ...voter,
+            auraQuotaBalance: snap.previousBalance,
+            auraRank: snap.previousRank,
+            multiplier: snap.previousMultiplier,
+          };
+        })
+      );
+    }
 
     // Actualizar el estado local del historial
     setHistory((prev) => prev.filter((r) => r.id !== recordId));
@@ -200,6 +330,26 @@ export const SteamVotingDashboard: React.FC = () => {
       await resetAllData();
       setSyncState({ status: 'synced', message: 'Datos restablecidos' });
     }
+  };
+
+  const handleResetAllAura = async () => {
+    setVoters((prev) =>
+      prev.map((voter) => ({
+        ...voter,
+        auraQuotaBalance: 0,
+        auraRank: 'Socio Regular',
+        multiplier: 1.0,
+      }))
+    );
+    setSyncState({ status: 'synced', message: 'Aura restablecido para todos' });
+    setTimeout(() => {
+      setSyncState((prev) =>
+        prev.status === 'synced' && prev.message === 'Aura restablecido para todos'
+          ? { status: 'idle', message: '' }
+          : prev
+      );
+    }, 3000);
+    setShowResetAuraConfirm(false);
   };
 
   // ─── Drag and Drop ────────────────────────────────────────
@@ -492,6 +642,15 @@ export const SteamVotingDashboard: React.FC = () => {
 
             <button
               type="button"
+              className="btn-reset-aura"
+              onClick={() => setShowResetAuraConfirm(true)}
+              title="Restablece el Aura de todos los integrantes a Socio Regular (0 Cuotas, 1.0x)"
+            >
+              🔄 Restablecer Aura
+            </button>
+
+            <button
+              type="button"
               className="btn-save-edit"
               onClick={() => setIsEditMode(false)}
             >
@@ -579,6 +738,14 @@ export const SteamVotingDashboard: React.FC = () => {
           voter={voterToDelete}
           onCancel={handleCancelDeleteVoter}
           onConfirm={handleConfirmDeleteVoter}
+        />
+      )}
+
+      {/* RESET AURA CONFIRMATION MODAL */}
+      {showResetAuraConfirm && (
+        <ResetAuraConfirmModal
+          onConfirm={handleResetAllAura}
+          onCancel={() => setShowResetAuraConfirm(false)}
         />
       )}
     </div>
