@@ -1,148 +1,145 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Header } from './Header';
 import { UserCard } from './UserCard';
 import { WinnerBanner } from './WinnerBanner';
 import { GameSearchEditor } from './GameSearchEditor';
 import { FinishVotingModal } from './FinishVotingModal';
 import { VotingHistoryModal } from './VotingHistoryModal';
+import { DeleteUserConfirmModal } from './DeleteUserConfirmModal';
 import { calculateResults } from '../data/votingData';
 import type { Voter, Game, VotingHistoryRecord } from '../types/voting';
+import {
+  saveVoters,
+  saveGames,
+  addHistoryRecord,
+  loadVoters,
+  loadGames,
+  loadHistory,
+  clearHistory as clearHistoryStore,
+  deleteHistoryRecord,
+  resetAllData,
+  saveApiKey,
+  loadApiKey,
+  createBackupData,
+  downloadBackup,
+  importBackup,
+  type SyncState,
+} from '../services/dataStore';
 
-const LOCAL_STORAGE_KEY_VOTERS = 'steam_voting_voters_v1';
-const LOCAL_STORAGE_KEY_API_KEY = 'steam_voting_api_key_v1';
-const LOCAL_STORAGE_KEY_GAMES = 'steam_voting_games_v1';
-const LOCAL_STORAGE_KEY_HISTORY = 'steam_voting_history_v1';
+const MIN_VOTERS = 2;
+const MAX_VOTERS = 6;
+
+// Tiempo de debounce para guardar en la nube (ms)
+const DEBOUNCE_MS = 800;
 
 export const SteamVotingDashboard: React.FC = () => {
-  // Load initial voters from localStorage cache if present
-  const [voters, setVoters] = useState<Voter[]>(() => {
-    try {
-      const savedVoters = localStorage.getItem(LOCAL_STORAGE_KEY_VOTERS);
-      const savedHistory = localStorage.getItem(LOCAL_STORAGE_KEY_HISTORY);
-      const historyIsEmpty =
-        !savedHistory ||
-        (() => {
-          try {
-            const h = JSON.parse(savedHistory);
-            return !Array.isArray(h) || h.length === 0;
-          } catch {
-            return true;
-          }
-        })();
+  // ─── Estados de datos ─────────────────────────────────────
+  const [voters, setVoters] = useState<Voter[]>([]);
+  const [gamesMap, setGamesMap] = useState<Record<string, Game>>({});
+  const [history, setHistory] = useState<VotingHistoryRecord[]>([]);
+  const [steamApiKey, setSteamApiKey] = useState<string>('');
 
-      if (savedVoters) {
-        const parsed = JSON.parse(savedVoters);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          // If there are no voting records yet, reset Aura to neutral baseline
-          if (historyIsEmpty) {
-            return parsed.map((v) => ({
-              ...v,
-              auraRank: 'Socio Regular',
-              auraQuotaBalance: 0,
-              multiplier: 1.0,
-            }));
-          }
-          return parsed;
-        }
-      }
-    } catch (err) {
-      console.warn('No se pudo cargar el caché de localStorage:', err);
-    }
-    return [];
-  });
-
-  // Load initial games dictionary from localStorage cache if present
-  const [gamesMap, setGamesMap] = useState<Record<string, Game>>(() => {
-    try {
-      const saved = localStorage.getItem(LOCAL_STORAGE_KEY_GAMES);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) {
-          // Clean stale USD prices from old cache
-          Object.keys(parsed).forEach((key) => {
-            if (parsed[key]?.genre && /^\$\d+(\.\d{2})?$/.test(parsed[key].genre.trim())) {
-              parsed[key].genre = 'Actualizar en Modo Edición';
-            }
-          });
-          return parsed;
-        }
-      }
-    } catch (err) {
-      console.warn('No se pudo cargar juegos de localStorage:', err);
-    }
-    return {};
-  });
-
-  // Load initial voting history from localStorage cache if present
-  const [history, setHistory] = useState<VotingHistoryRecord[]>(() => {
-    try {
-      const saved = localStorage.getItem(LOCAL_STORAGE_KEY_HISTORY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
-      }
-    } catch (err) {
-      console.warn('No se pudo cargar historial de localStorage:', err);
-    }
-    return [];
-  });
-
+  // ─── Estados de UI ────────────────────────────────────────
   const [isEditMode, setIsEditMode] = useState<boolean>(false);
   const [showFinishModal, setShowFinishModal] = useState<boolean>(false);
   const [showHistoryModal, setShowHistoryModal] = useState<boolean>(false);
-
-  // Load initial API key from localStorage cache if present
-  const [steamApiKey, setSteamApiKey] = useState<string>(() => {
-    try {
-      return localStorage.getItem(LOCAL_STORAGE_KEY_API_KEY) || '';
-    } catch {
-      return '';
-    }
-  });
-
-  // Drag & Drop State
+  const [voterToDelete, setVoterToDelete] = useState<Voter | null>(null);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // Automatically save voters state to localStorage on every change
+  // ─── Estado de sincronización ─────────────────────────────
+  const [syncState, setSyncState] = useState<SyncState>({
+    status: 'idle',
+    message: '',
+  });
+
+  // Refs para debounce
+  const votersDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const gamesDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const importFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // ─── Carga inicial de datos ───────────────────────────────
   useEffect(() => {
-    try {
-      localStorage.setItem(LOCAL_STORAGE_KEY_VOTERS, JSON.stringify(voters));
-    } catch (err) {
-      console.warn('Error guardando caché de votantes:', err);
-    }
-  }, [voters]);
+    const loadAllData = async () => {
+      setIsLoading(true);
+      try {
+        const [loadedVoters, loadedGames, loadedHistory, loadedApiKey] =
+          await Promise.all([
+            loadVoters(),
+            loadGames(),
+            loadHistory(),
+            Promise.resolve(loadApiKey()),
+          ]);
 
-  // Automatically save games map to localStorage on every change
+        setVoters(loadedVoters);
+        setGamesMap(loadedGames);
+        setHistory(loadedHistory);
+        setSteamApiKey(loadedApiKey);
+
+        if (loadedVoters.length > 0 || Object.keys(loadedGames).length > 0) {
+          setSyncState({ status: 'synced', message: 'Datos cargados' });
+        }
+      } catch (err) {
+        console.warn('[Dashboard] Error en carga inicial:', err);
+        setSyncState({ status: 'error', message: 'Error al cargar datos' });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadAllData();
+  }, []);
+
+  // ─── Sincronización con debounce para votantes ────────────
+  const debouncedSaveVoters = useCallback((votersToSave: Voter[]) => {
+    if (votersDebounceRef.current) {
+      clearTimeout(votersDebounceRef.current);
+    }
+    setSyncState({ status: 'saving', message: 'Guardando...' });
+    votersDebounceRef.current = setTimeout(async () => {
+      const result = await saveVoters(votersToSave);
+      setSyncState(result);
+    }, DEBOUNCE_MS);
+  }, []);
+
+  // ─── Sincronización con debounce para juegos ──────────────
+  const debouncedSaveGames = useCallback((gamesToSave: Record<string, Game>) => {
+    if (gamesDebounceRef.current) {
+      clearTimeout(gamesDebounceRef.current);
+    }
+    setSyncState({ status: 'saving', message: 'Guardando...' });
+    gamesDebounceRef.current = setTimeout(async () => {
+      const result = await saveGames(gamesToSave);
+      setSyncState(result);
+    }, DEBOUNCE_MS);
+  }, []);
+
+  // ─── Efecto: guardar votantes cuando cambian ──────────────
   useEffect(() => {
-    try {
-      localStorage.setItem(LOCAL_STORAGE_KEY_GAMES, JSON.stringify(gamesMap));
-    } catch (err) {
-      console.warn('Error guardando caché de juegos:', err);
+    if (!isLoading) {
+      debouncedSaveVoters(voters);
     }
-  }, [gamesMap]);
+  }, [voters, isLoading, debouncedSaveVoters]);
 
-  // Automatically save voting history to localStorage on every change
+  // ─── Efecto: guardar juegos cuando cambian ────────────────
   useEffect(() => {
-    try {
-      localStorage.setItem(LOCAL_STORAGE_KEY_HISTORY, JSON.stringify(history));
-    } catch (err) {
-      console.warn('Error guardando historial:', err);
+    if (!isLoading) {
+      debouncedSaveGames(gamesMap);
     }
-  }, [history]);
+  }, [gamesMap, isLoading, debouncedSaveGames]);
 
-  // Automatically save API key to localStorage
+  // ─── Efecto: guardar API key (solo localStorage) ──────────
   useEffect(() => {
-    try {
-      localStorage.setItem(LOCAL_STORAGE_KEY_API_KEY, steamApiKey);
-    } catch (err) {
-      console.warn('Error guardando API key:', err);
+    if (!isLoading) {
+      saveApiKey(steamApiKey);
     }
-  }, [steamApiKey]);
+  }, [steamApiKey, isLoading]);
 
-  // Calculate live results based on dynamic voters and games state
+  // ─── Calcular resultados en vivo ──────────────────────────
   const results = useMemo(() => calculateResults(voters, gamesMap), [voters, gamesMap]);
 
+  // ─── Handlers ─────────────────────────────────────────────
   const handleUpdateVoter = (updatedVoter: Voter) => {
     setVoters((prev) => prev.map((v) => (v.id === updatedVoter.id ? updatedVoter : v)));
   };
@@ -154,40 +151,58 @@ export const SteamVotingDashboard: React.FC = () => {
     }));
   };
 
-  const handleConfirmFinishVoting = (
+  const handleConfirmFinishVoting = async (
     updatedVoters: Voter[],
     historyRecord: VotingHistoryRecord
   ) => {
     setVoters(updatedVoters);
     setHistory((prev) => [historyRecord, ...prev]);
     setShowFinishModal(false);
+
+    // Guardar historial en Firestore/localStorage
+    setSyncState({ status: 'saving', message: 'Guardando...' });
+    const result = await addHistoryRecord(historyRecord);
+    setSyncState(result);
   };
 
-  const handleClearHistory = () => {
+  const handleClearHistory = async () => {
     setHistory([]);
-    try {
-      localStorage.removeItem(LOCAL_STORAGE_KEY_HISTORY);
-    } catch (err) {
-      console.warn('Error al borrar historial:', err);
-    }
+    setSyncState({ status: 'saving', message: 'Limpiando...' });
+    const result = await clearHistoryStore();
+    setSyncState(result);
   };
 
-  const handleResetData = () => {
+  const handleDeleteHistoryRecord = async (recordId: string) => {
+    setSyncState({ status: 'saving', message: 'Eliminando registro...' });
+    const result = await deleteHistoryRecord(recordId);
+    setSyncState(result);
+
+    // Actualizar el estado local del historial
+    setHistory((prev) => prev.filter((r) => r.id !== recordId));
+
+    // Si el registro eliminado estaba seleccionado, seleccionar otro
+    setTimeout(() => {
+      setSyncState((prev) =>
+        prev.status === 'synced' && prev.message === 'Registro eliminado'
+          ? { status: 'idle', message: '' }
+          : prev
+      );
+    }, 3000);
+  };
+
+  const handleResetData = async () => {
     if (window.confirm('¿Deseas restablecer los datos originales de todos los integrantes y juegos?')) {
       setVoters([]);
       setGamesMap({});
       setSteamApiKey('');
-      try {
-        localStorage.removeItem(LOCAL_STORAGE_KEY_VOTERS);
-        localStorage.removeItem(LOCAL_STORAGE_KEY_GAMES);
-        localStorage.removeItem(LOCAL_STORAGE_KEY_API_KEY);
-      } catch (err) {
-        console.warn('Error al limpiar localStorage:', err);
-      }
+      setHistory([]);
+      setSyncState({ status: 'saving', message: 'Restableciendo...' });
+      await resetAllData();
+      setSyncState({ status: 'synced', message: 'Datos restablecidos' });
     }
   };
 
-  // Drag and Drop Handlers
+  // ─── Drag and Drop ────────────────────────────────────────
   const handleDragStart = (e: React.DragEvent, index: number) => {
     setDraggedIndex(index);
     e.dataTransfer.effectAllowed = 'move';
@@ -219,16 +234,165 @@ export const SteamVotingDashboard: React.FC = () => {
     setDragOverIndex(null);
   };
 
+  const handleAddVoter = () => {
+    if (voters.length >= MAX_VOTERS) return;
+    const newId = `voter_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    const newVoter: Voter = {
+      id: newId,
+      name: `Integrante ${voters.length + 1}`,
+      avatar: 'https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/730/capsule_sm_120.jpg',
+      auraRank: 'Socio Regular',
+      auraQuotaBalance: 0,
+      multiplier: 1.0,
+      votes: Object.keys(gamesMap).map((gameId) => ({
+        gameId,
+        points: 0 as const,
+      })),
+    };
+    setVoters((prev) => [...prev, newVoter]);
+  };
+
+  const handleRequestDeleteVoter = (voter: Voter) => {
+    setVoterToDelete(voter);
+  };
+
+  const handleConfirmDeleteVoter = () => {
+    if (!voterToDelete) return;
+    if (voters.length <= MIN_VOTERS) {
+      setVoterToDelete(null);
+      return;
+    }
+    setVoters((prev) => prev.filter((v) => v.id !== voterToDelete.id));
+    setVoterToDelete(null);
+  };
+
+  const handleCancelDeleteVoter = () => {
+    setVoterToDelete(null);
+  };
+
   const handleDragEnd = () => {
     setDraggedIndex(null);
     setDragOverIndex(null);
   };
+
+  // ─── Backup: Exportar ─────────────────────────────────────
+  const handleExportBackup = () => {
+    const backup = createBackupData(voters, gamesMap, history, steamApiKey);
+    downloadBackup(backup);
+    setSyncState({ status: 'synced', message: 'Backup exportado ✅' });
+    setTimeout(() => {
+      setSyncState((prev) =>
+        prev.status === 'synced' && prev.message === 'Backup exportado ✅'
+          ? { status: 'idle', message: '' }
+          : prev
+      );
+    }, 3000);
+  };
+
+  // ─── Backup: Importar ─────────────────────────────────────
+  const handleImportClick = () => {
+    importFileInputRef.current?.click();
+  };
+
+  const handleImportFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Confirmar antes de sobrescribir
+    if (voters.length > 0 || history.length > 0) {
+      const confirmed = window.confirm(
+        '⚠️ Al importar un backup se sobrescribirán TODOS los datos actuales.\n\n¿Estás seguro de continuar?'
+      );
+      if (!confirmed) {
+        // Resetear el input
+        if (importFileInputRef.current) importFileInputRef.current.value = '';
+        return;
+      }
+    }
+
+    try {
+      setSyncState({ status: 'saving', message: 'Importando backup...' });
+
+      const result = await importBackup(file);
+
+      // Actualizar todos los estados
+      setVoters(result.voters);
+      setGamesMap(result.gamesMap);
+      setHistory(result.history);
+      setSteamApiKey(result.steamApiKey);
+
+      setSyncState({ status: 'synced', message: `✅ Backup importado: ${result.voters.length} integrantes, ${result.history.length} registros` });
+
+      // Limpiar el input para permitir re-importar el mismo archivo
+      if (importFileInputRef.current) importFileInputRef.current.value = '';
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Error desconocido';
+      console.error('[Dashboard] Error al importar backup:', err);
+      setSyncState({ status: 'error', message: `❌ ${errorMsg}` });
+      if (importFileInputRef.current) importFileInputRef.current.value = '';
+    }
+  };
+
+  // ─── Render del indicador de sincronización ───────────────
+  const renderSyncIndicator = () => {
+    if (isLoading) return null;
+
+    const { status, message } = syncState;
+
+    let icon = '';
+    let className = 'sync-indicator';
+
+    switch (status) {
+      case 'saving':
+        icon = '⏳';
+        className += ' sync-saving';
+        break;
+      case 'synced':
+        icon = '✅';
+        className += ' sync-synced';
+        break;
+      case 'error':
+        icon = '❌';
+        className += ' sync-error';
+        break;
+      case 'local':
+        icon = '💾';
+        className += ' sync-local';
+        break;
+      default:
+        return null;
+    }
+
+    return (
+      <div className={className} title={message}>
+        <span className="sync-icon">{icon}</span>
+        <span className="sync-text">{message}</span>
+      </div>
+    );
+  };
+
+  // ─── Loading state ────────────────────────────────────────
+  if (isLoading) {
+    return (
+      <div className="steam-dashboard-container">
+        <div className="bg-gradient-overlay"></div>
+        <div className="bg-grid-lines"></div>
+        <div className="loading-container">
+          <div className="loading-spinner"></div>
+          <p className="loading-text">Cargando datos...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="steam-dashboard-container">
       {/* Background Steam Particles & Gradients */}
       <div className="bg-gradient-overlay"></div>
       <div className="bg-grid-lines"></div>
+
+      {/* INDICADOR DE SINCRONIZACIÓN */}
+      {renderSyncIndicator()}
 
       {/* DISCRETE HIDDEN EDIT MODE TOGGLE BUTTON (TOP-RIGHT CORNER) */}
       <button
@@ -274,6 +438,16 @@ export const SteamVotingDashboard: React.FC = () => {
           </div>
 
           <div className="edit-bar-controls">
+            <button
+              type="button"
+              className="btn-add-voter"
+              onClick={handleAddVoter}
+              disabled={voters.length >= MAX_VOTERS}
+              title={voters.length >= MAX_VOTERS ? `Máximo de ${MAX_VOTERS} integrantes alcanzado (límite Steam Families)` : 'Añadir nuevo integrante'}
+            >
+              ➕ Añadir Integrante ({voters.length}/{MAX_VOTERS})
+            </button>
+
             <div className="api-key-input-container">
               <label htmlFor="steam-api-key-input">Steam Web API Key (opcional):</label>
               <input
@@ -283,6 +457,32 @@ export const SteamVotingDashboard: React.FC = () => {
                 value={steamApiKey}
                 onChange={(e) => setSteamApiKey(e.target.value)}
                 className="api-key-input"
+              />
+            </div>
+
+            <div className="backup-btn-group">
+              <button
+                type="button"
+                className="btn-backup btn-export"
+                onClick={handleExportBackup}
+                title="Descargar backup completo en JSON"
+              >
+                📥 Exportar Backup
+              </button>
+              <button
+                type="button"
+                className="btn-backup btn-import"
+                onClick={handleImportClick}
+                title="Restaurar datos desde un archivo JSON"
+              >
+                📤 Importar Backup
+              </button>
+              <input
+                ref={importFileInputRef}
+                type="file"
+                accept=".json"
+                onChange={handleImportFileChange}
+                style={{ display: 'none' }}
               />
             </div>
 
@@ -336,6 +536,8 @@ export const SteamVotingDashboard: React.FC = () => {
                 onDragEnd={handleDragEnd}
                 isDragging={draggedIndex === index}
                 isDragOver={dragOverIndex === index}
+                onRequestDelete={handleRequestDeleteVoter}
+                canDelete={voters.length > MIN_VOTERS}
               />
             ))}
           </div>
@@ -366,7 +568,17 @@ export const SteamVotingDashboard: React.FC = () => {
         <VotingHistoryModal
           history={history}
           onClearHistory={handleClearHistory}
+          onDeleteRecord={handleDeleteHistoryRecord}
           onClose={() => setShowHistoryModal(false)}
+        />
+      )}
+
+      {/* DELETE USER CONFIRMATION MODAL */}
+      {voterToDelete && (
+        <DeleteUserConfirmModal
+          voter={voterToDelete}
+          onCancel={handleCancelDeleteVoter}
+          onConfirm={handleConfirmDeleteVoter}
         />
       )}
     </div>

@@ -16,6 +16,9 @@ interface UserCardProps {
   onDragEnd?: (e: React.DragEvent) => void;
   isDragging?: boolean;
   isDragOver?: boolean;
+  // Delete user props
+  onRequestDelete?: (voter: Voter) => void;
+  canDelete?: boolean;
 }
 
 export const UserCard: React.FC<UserCardProps> = ({
@@ -31,6 +34,8 @@ export const UserCard: React.FC<UserCardProps> = ({
   onDragEnd,
   isDragging = false,
   isDragOver = false,
+  onRequestDelete,
+  canDelete = true,
 }) => {
   const [steamInput, setSteamInput] = useState(voter.steamId64 || '');
   const [isLoadingSteam, setIsLoadingSteam] = useState(false);
@@ -165,6 +170,24 @@ export const UserCard: React.FC<UserCardProps> = ({
         <span className="drag-icon">⋮⋮</span>
       </div>
 
+      {/* DELETE USER BUTTON (only visible in edit mode) */}
+      {isEditMode && onRequestDelete && (
+        <button
+          type="button"
+          className="delete-voter-btn"
+          onClick={() => onRequestDelete(voter)}
+          disabled={!canDelete}
+          title={
+            !canDelete
+              ? `Debe haber al menos 2 integrantes en el grupo`
+              : `Eliminar a ${voter.name} del grupo`
+          }
+          aria-label={`Eliminar a ${voter.name}`}
+        >
+          ✕
+        </button>
+      )}
+
       {/* Edit Mode Badge Header inside Card if editing */}
       {isEditMode && (
         <div className="card-edit-header">
@@ -201,24 +224,22 @@ export const UserCard: React.FC<UserCardProps> = ({
         <div className="card-edit-panel">
           <div className="edit-field-group">
             <label htmlFor="steam-id-input" className="edit-label">🌐 SteamID64 (Auto-Perfil Steam):</label>
-            <div className="steam-fetch-row">
-              <input
-                id="steam-id-input"
-                type="text"
-                className="edit-input"
-                placeholder="Ej: 76561198000000001"
-                value={steamInput}
-                onChange={(e) => setSteamInput(e.target.value)}
-              />
-              <button
-                type="button"
-                className="steam-fetch-btn"
-                onClick={handleFetchSteam}
-                disabled={isLoadingSteam}
-              >
-                {isLoadingSteam ? 'Cargando...' : 'Cargar Steam'}
-              </button>
-            </div>
+            <input
+              id="steam-id-input"
+              type="text"
+              className="edit-input"
+              placeholder="Ej: 76561198000000001"
+              value={steamInput}
+              onChange={(e) => setSteamInput(e.target.value)}
+            />
+            <button
+              type="button"
+              className="steam-fetch-btn"
+              onClick={handleFetchSteam}
+              disabled={isLoadingSteam}
+            >
+              {isLoadingSteam ? 'Cargando...' : 'Cargar Steam'}
+            </button>
             {steamStatus.msg && (
               <div className={`steam-status-msg ${steamStatus.type}`}>{steamStatus.msg}</div>
             )}

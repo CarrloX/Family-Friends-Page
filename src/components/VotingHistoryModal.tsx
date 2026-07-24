@@ -1,15 +1,18 @@
 import React, { useState } from 'react';
 import type { VotingHistoryRecord } from '../types/voting';
+import { DeleteHistoryRecordConfirmModal } from './DeleteHistoryRecordConfirmModal';
 
 interface VotingHistoryModalProps {
   history: VotingHistoryRecord[];
   onClearHistory: () => void;
+  onDeleteRecord: (recordId: string) => void;
   onClose: () => void;
 }
 
 export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = ({
   history,
   onClearHistory,
+  onDeleteRecord,
   onClose,
 }) => {
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(
@@ -17,6 +20,8 @@ export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = ({
   );
 
   const selectedRecord = history.find((h) => h.id === selectedRecordId) || history[0];
+  const [recordToDelete, setRecordToDelete] = useState<VotingHistoryRecord | null>(null);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   return (
     <div className="modal-backdrop">
@@ -46,33 +51,45 @@ export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = ({
                 {history.map((rec) => {
                   const isSelected = rec.id === selectedRecordId;
                   return (
-                    <button
-                      type="button"
-                      key={rec.id}
-                      className={`history-list-item ${isSelected ? 'selected' : ''}`}
-                      onClick={() => setSelectedRecordId(rec.id)}
-                    >
-                      <img
-                        src={rec.winningGame?.coverImage}
-                        alt={rec.winningGame?.title}
-                        className="history-item-thumb"
-                        onError={(e) => {
-                          const target = e.currentTarget;
-                          if (!target.dataset.failed) {
-                            target.dataset.failed = 'true';
-                            if (rec.winningGame?.tinyCoverImage) {
-                              target.src = rec.winningGame.tinyCoverImage;
-                            } else if (rec.winningGame?.appId) {
-                              target.src = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${rec.winningGame.appId}/capsule_sm_120.jpg`;
+                    <div key={rec.id} className="history-list-item-wrapper">
+                      <button
+                        type="button"
+                        className={`history-list-item ${isSelected ? 'selected' : ''}`}
+                        onClick={() => setSelectedRecordId(rec.id)}
+                      >
+                        <img
+                          src={rec.winningGame?.coverImage}
+                          alt={rec.winningGame?.title}
+                          className="history-item-thumb"
+                          onError={(e) => {
+                            const target = e.currentTarget;
+                            if (!target.dataset.failed) {
+                              target.dataset.failed = 'true';
+                              if (rec.winningGame?.tinyCoverImage) {
+                                target.src = rec.winningGame.tinyCoverImage;
+                              } else if (rec.winningGame?.appId) {
+                                target.src = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${rec.winningGame.appId}/capsule_sm_120.jpg`;
+                              }
                             }
-                          }
+                          }}
+                        />
+                        <div className="history-item-info">
+                          <span className="history-item-winner">🏆 {rec.winningGame?.title}</span>
+                          <span className="history-item-date">{rec.date}</span>
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        className="history-delete-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setRecordToDelete(rec);
                         }}
-                      />
-                      <div className="history-item-info">
-                        <span className="history-item-winner">🏆 {rec.winningGame?.title}</span>
-                        <span className="history-item-date">{rec.date}</span>
-                      </div>
-                    </button>
+                        title="Eliminar este registro"
+                      >
+                        🗑️
+                      </button>
+                    </div>
                   );
                 })}
               </div>
@@ -202,11 +219,7 @@ export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = ({
             <button
               type="button"
               className="btn-clear-history"
-              onClick={() => {
-                if (window.confirm('¿Eliminar todo el historial de votaciones pasadas?')) {
-                  onClearHistory();
-                }
-              }}
+              onClick={() => setShowClearConfirm(true)}
             >
               🗑️ Limpiar Historial
             </button>
@@ -215,6 +228,77 @@ export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = ({
             Cerrar
           </button>
         </div>
+
+        {/* CLEAR HISTORY CONFIRM MODAL */}
+        {showClearConfirm && (
+          <div className="modal-backdrop" onClick={() => setShowClearConfirm(false)}>
+            <div
+              className="delete-confirm-modal-container"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="modal-header">
+                <div className="modal-title-group">
+                  <h2>⚠️ Limpiar Historial Completo</h2>
+                  <p>Esta acción no se puede deshacer fácilmente.</p>
+                </div>
+                <button
+                  type="button"
+                  className="modal-close-btn"
+                  onClick={() => setShowClearConfirm(false)}
+                  aria-label="Cerrar"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="delete-warning-content">
+                <div className="delete-warning-text">
+                  <p>
+                    ¿Estás seguro de que deseas eliminar <strong>todo el historial de votaciones pasadas</strong>?
+                  </p>
+                  <p className="delete-warning-sub">
+                    Se perderán permanentemente todos los registros históricos.
+                  </p>
+                  <p className="delete-warning-note">
+                    📊 <strong>Nota:</strong> Esta acción eliminará todas las votaciones guardadas, incluyendo registros de cuotas pagadas y evolución de Aura. Esta acción no se puede deshacer.
+                  </p>
+                </div>
+              </div>
+
+              <div className="modal-footer-actions delete-modal-actions">
+                <button
+                  type="button"
+                  className="btn-modal-cancel"
+                  onClick={() => setShowClearConfirm(false)}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  className="btn-modal-confirm-delete"
+                  onClick={() => {
+                    onClearHistory();
+                    setShowClearConfirm(false);
+                  }}
+                >
+                  Confirmar Eliminación
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* DELETE CONFIRM MODAL */}
+        {recordToDelete && (
+          <DeleteHistoryRecordConfirmModal
+            record={recordToDelete}
+            onCancel={() => setRecordToDelete(null)}
+            onConfirm={() => {
+              onDeleteRecord(recordToDelete.id);
+              setRecordToDelete(null);
+            }}
+          />
+        )}
       </div>
     </div>
   );
