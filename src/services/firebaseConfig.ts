@@ -14,13 +14,13 @@ import { getFirestore, type Firestore } from 'firebase/firestore';
  * 4. Copia el objeto "firebaseConfig"
  */
 const firebaseConfig = {
-  apiKey: 'AIzaSyAHlnvqJgJOKIG4uPHy9Sp7bVf8zk_hRJI',
-  authDomain: 'familyandfriendssteam.firebaseapp.com',
-  projectId: 'familyandfriendssteam',
-  storageBucket: 'familyandfriendssteam.firebasestorage.app',
-  messagingSenderId: '480076511985',
-  appId: '1:480076511985:web:f252d6a15a0e1b1986c750',
-  measurementId: 'G-67QZMY9N6E',
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 };
 
 let app: FirebaseApp | null = null;
