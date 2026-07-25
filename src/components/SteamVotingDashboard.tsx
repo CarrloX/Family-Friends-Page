@@ -3,6 +3,7 @@ import { Header } from './Header';
 import { UserCard } from './UserCard';
 import { WinnerBanner } from './WinnerBanner';
 import { GameSearchEditor } from './GameSearchEditor';
+import { InstallPrompt } from './InstallPrompt';
 import { FinishVotingModal } from './FinishVotingModal';
 import { VotingHistoryModal } from './VotingHistoryModal';
 import { DeleteUserConfirmModal } from './DeleteUserConfirmModal';
@@ -594,6 +595,8 @@ export const SteamVotingDashboard: React.FC = () => {
       <div className="bg-grid-lines"></div>
 
       {renderSyncIndicator()}
+
+      <InstallPrompt />
 
       {canManageContent && (
         <button
