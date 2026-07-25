@@ -9,12 +9,32 @@ export const WinnerBanner: React.FC<WinnerBannerProps> = ({ results }) => {
   const winner = results[0];
   const runnersUp = results.slice(1);
 
+  if (!winner?.game) {
+    return (
+      <section className="winner-section">
+        <div className="winner-banner-glow">
+          <div className="winner-banner">
+            <div className="winner-content">
+              <div className="winner-details">
+                <div className="winner-genre">SIN RESULTADOS AÚN</div>
+                <h2 className="winner-title">No hay datos de votación para mostrar todavía</h2>
+                <p className="winner-description">
+                  Cuando se registren votos y juegos, aparecerá aquí el ganador y el podio final.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   // High-Definition Steam Cover (616x353 HD capsule) for 1st Place Winner
-  const appId = winner?.game?.appId;
+  const appId = winner.game.appId;
   const cdnBase = 'https://cdn.akamai.steamstatic.com/steam/apps';
   const winnerHdCover = appId
     ? `${cdnBase}/${appId}/capsule_616x353.jpg`
-    : winner?.game?.coverImage;
+    : winner.game.coverImage;
 
   // Fallback chain for winner cover: HD → header → small capsule → coverImage → tinyCoverImage
   const winnerCoverFallbacks: string[] = [];
@@ -24,8 +44,8 @@ export const WinnerBanner: React.FC<WinnerBannerProps> = ({ results }) => {
       `${cdnBase}/${appId}/capsule_sm_120.jpg`
     );
   }
-  if (winner?.game?.coverImage) winnerCoverFallbacks.push(winner.game.coverImage);
-  if (winner?.game?.tinyCoverImage) winnerCoverFallbacks.push(winner.game.tinyCoverImage);
+  if (winner.game.coverImage) winnerCoverFallbacks.push(winner.game.coverImage);
+  if (winner.game.tinyCoverImage) winnerCoverFallbacks.push(winner.game.tinyCoverImage);
 
   console.log(`[WinnerBanner] Portada HD del ganador: ${winnerHdCover}`);
   console.log(`[WinnerBanner] Fallbacks disponibles:`, winnerCoverFallbacks);
