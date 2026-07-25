@@ -6,11 +6,10 @@ interface HeaderProps {
   canManageContent?: boolean;
 }
 
-export const Header: React.FC<HeaderProps> = ({ onRequestAdminAccess, canManageContent = false }) => {
+export const Header: React.FC<HeaderProps> = ({ canManageContent = false }) => {
   const handleKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
-      onRequestAdminAccess?.();
     }
   };
 
@@ -26,13 +25,11 @@ export const Header: React.FC<HeaderProps> = ({ onRequestAdminAccess, canManageC
       <button
         type="button"
         className={`steam-title${canManageContent ? '' : ' admin-access-trigger'}`}
-        onClick={() => {
-          if (!canManageContent) {
-            onRequestAdminAccess?.();
-          }
+        onClick={(event) => {
+          event.preventDefault();
         }}
         onKeyDown={handleKeyDown}
-        title={canManageContent ? undefined : 'Haz clic para desbloquear edición temporal'}
+        title={canManageContent ? undefined : 'Solo disponible con Alt + Shift + A'}
       >
         <FaSteam className="steam-icon" />
         <span>RESULTADOS DE VOTACIÓN STEAM</span>

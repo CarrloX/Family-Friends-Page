@@ -1233,6 +1233,12 @@
   backdrop-filter: blur(10px);
 }
 
+@media (max-width: 1024px) {
+  .read-only-banner {
+    display: none;
+  }
+}
+
 .steam-title.admin-access-trigger {
   cursor: pointer;
 }
