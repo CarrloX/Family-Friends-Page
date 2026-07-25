@@ -1,77 +1,93 @@
-# React + TypeScript + Vite
+# Family & Friends Page
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Aplicación web desarrollada con React, TypeScript y Vite para gestionar votaciones entre familiares y amigos, con seguimiento de resultados, historial y administración básica del contenido.
 
-Currently, two official plugins are available:
+## Características principales
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- Gestión de participantes y juegos para una votación compartida.
+- Cálculo automático de resultados y ranking de Aura.
+- Historial de votaciones con posibilidad de revertir cambios.
+- Modal de finalización de votación y respaldo/importación de datos.
+- Integración opcional con Firebase Firestore para sincronización en la nube.
+- Modo de administración temporal protegido por PIN.
 
-## React Compiler
+## Tecnologías
 
-The React Compiler is enabled on this template. See [this documentation](https://react.dev/learn/react-compiler) for more information.
+- React 19
+- TypeScript
+- Vite
+- Firebase
+- ESLint
 
-Note: This will impact Vite dev & build performances.
+## Requisitos
 
-## Expanding the ESLint configuration
+- Node.js 20 o superior
+- pnpm
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## Instalación
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+1. Clona este repositorio.
+2. Instala las dependencias:
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```bash
+pnpm install
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+3. Crea un archivo `.env` en la raíz del proyecto con las variables necesarias.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Variables de entorno
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+La aplicación usa las siguientes variables de entorno:
 
+```env
+VITE_FIREBASE_API_KEY=tu_api_key
+VITE_FIREBASE_AUTH_DOMAIN=tu_auth_domain
+VITE_FIREBASE_PROJECT_ID=tu_project_id
+VITE_FIREBASE_STORAGE_BUCKET=tu_storage_bucket
+VITE_FIREBASE_MESSAGING_SENDER_ID=tu_sender_id
+VITE_FIREBASE_APP_ID=tu_app_id
+VITE_FIREBASE_MEASUREMENT_ID=tu_measurement_id
+VITE_ADMIN_PIN=FAMILY2026
 ```
+
+> Si no configurás Firebase, la app seguirá funcionando con almacenamiento local en el navegador.
+
+## Scripts disponibles
+
+```bash
+pnpm dev
+```
+
+Inicia el servidor de desarrollo de Vite.
+
+```bash
+pnpm build
+```
+
+Genera una build lista para producción.
+
+```bash
+pnpm lint
+```
+
+Ejecuta ESLint sobre el proyecto.
+
+## Estructura del proyecto
+
+```text
+src/
+  components/     Componentes de la interfaz
+  data/           Lógica y datos de votación
+  services/       Firebase, control de acceso y almacenamiento
+  types/          Tipos TypeScript
+```
+
+## Uso
+
+- Abre la app en el navegador y comienza a agregar participantes y juegos.
+- Para habilitar edición administrativa, accedé desde un entorno local o usá el parámetro `?admin=true` en la URL.
+- En producción, el PIN de administrador se puede definir con `VITE_ADMIN_PIN`.
+
+## Notas
+
+Este proyecto está pensado para uso compartido en un entorno familiar o de amigos, con una experiencia simple y rápida para organizar votaciones de juegos.
