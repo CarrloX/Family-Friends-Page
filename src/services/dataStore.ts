@@ -11,6 +11,7 @@ import {
   deleteDoc,
 } from 'firebase/firestore';
 import { getFirestoreInstance, isFirebaseReady } from './firebaseConfig';
+import { getAdminAccessState } from './accessControl';
 import type { Voter, Game, VotingHistoryRecord } from '../types/voting';
 
 // ============================================================
@@ -24,7 +25,7 @@ const LS_KEY_API_KEY = 'steam_voting_api_key_v1';
 // ============================================================
 // Tipos de estado de sincronización
 // ============================================================
-export type SyncStatus = 'idle' | 'saving' | 'synced' | 'error' | 'local';
+export type SyncStatus = 'idle' | 'saving' | 'synced' | 'error' | 'local' | 'read-only';
 
 export interface SyncState {
   status: SyncStatus;
@@ -60,6 +61,17 @@ function removeLocal(key: string): void {
   }
 }
 
+function canWriteToPersistence(): boolean {
+  if (typeof window === 'undefined') {
+    return true;
+  }
+  return getAdminAccessState().canManageContent;
+}
+
+function buildReadOnlyState(message = 'Solo lectura activa'): SyncState {
+  return { status: 'read-only', message };
+}
+
 // ============================================================
 // Colecciones de Firestore
 // ============================================================
@@ -84,6 +96,10 @@ interface GrupoDocument {
  * Guarda la lista de votantes. Prioriza Firestore, fallback a localStorage.
  */
 export async function saveVoters(voters: Voter[]): Promise<SyncState> {
+  if (!canWriteToPersistence()) {
+    return buildReadOnlyState();
+  }
+
   if (isFirebaseReady()) {
     try {
       const db = getFirestoreInstance()!;
@@ -134,6 +150,10 @@ export async function loadVoters(): Promise<Voter[]> {
  * Guarda el mapa de juegos. Prioriza Firestore, fallback a localStorage.
  */
 export async function saveGames(gamesMap: Record<string, Game>): Promise<SyncState> {
+  if (!canWriteToPersistence()) {
+    return buildReadOnlyState();
+  }
+
   if (isFirebaseReady()) {
     try {
       const db = getFirestoreInstance()!;
@@ -183,6 +203,10 @@ export async function loadGames(): Promise<Record<string, Game>> {
  * Agrega un registro al historial de votaciones. Firestore usa addDoc, localStorage usa array.
  */
 export async function addHistoryRecord(record: VotingHistoryRecord): Promise<SyncState> {
+  if (!canWriteToPersistence()) {
+    return buildReadOnlyState();
+  }
+
   if (isFirebaseReady()) {
     try {
       const db = getFirestoreInstance()!;
@@ -239,6 +263,10 @@ export async function loadHistory(): Promise<VotingHistoryRecord[]> {
  * Elimina un registro específico del historial por su ID.
  */
 export async function deleteHistoryRecord(recordId: string): Promise<SyncState> {
+  if (!canWriteToPersistence()) {
+    return buildReadOnlyState();
+  }
+
   if (isFirebaseReady()) {
     try {
       const db = getFirestoreInstance()!;
@@ -265,6 +293,10 @@ export async function deleteHistoryRecord(recordId: string): Promise<SyncState> 
  * Limpia el historial de votaciones en Firestore y localStorage.
  */
 export async function clearHistory(): Promise<SyncState> {
+  if (!canWriteToPersistence()) {
+    return buildReadOnlyState();
+  }
+
   if (isFirebaseReady()) {
     try {
       const db = getFirestoreInstance()!;
@@ -285,6 +317,9 @@ export async function clearHistory(): Promise<SyncState> {
  * Guarda la API key de Steam (solo localStorage, por seguridad).
  */
 export function saveApiKey(apiKey: string): void {
+  if (!canWriteToPersistence()) {
+    return;
+  }
   writeLocal(LS_KEY_API_KEY, apiKey);
 }
 
@@ -447,6 +482,16 @@ export async function importBackup(
   history: VotingHistoryRecord[];
   steamApiKey: string;
 }> {
+  if (!canWriteToPersistence()) {
+    const currentData = {
+      voters: readLocal<Voter[]>(LS_KEY_VOTERS, []),
+      gamesMap: readLocal<Record<string, Game>>(LS_KEY_GAMES, {}),
+      history: readLocal<VotingHistoryRecord[]>(LS_KEY_HISTORY, []),
+      steamApiKey: readLocal<string>(LS_KEY_API_KEY, ''),
+    };
+    return currentData;
+  }
+
   const data = await readBackupFile(file);
 
   // Guardar en localStorage
@@ -499,6 +544,10 @@ export async function importBackup(
  * Limpia todos los datos (reset).
  */
 export async function resetAllData(): Promise<void> {
+  if (!canWriteToPersistence()) {
+    return;
+  }
+
   removeLocal(LS_KEY_VOTERS);
   removeLocal(LS_KEY_GAMES);
   removeLocal(LS_KEY_HISTORY);

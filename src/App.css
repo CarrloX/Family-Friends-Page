@@ -252,6 +252,9 @@
   text-shadow: 0 0 30px rgba(157, 78, 221, 0.3);
   animation: fadeInScale 1s ease-out 0.3s both;
   transition: all 0.3s ease;
+  border: none;
+  padding: 0;
+  background-color: transparent;
 }
 
 .steam-title:hover {
@@ -1214,6 +1217,31 @@
 }
 
 /* ==================== HIDDEN GEAR BUTTON (EDIT MODE TOGGLE) ==================== */
+.read-only-banner {
+  position: fixed;
+  top: 72px;
+  right: 16px;
+  z-index: 999;
+  max-width: min(360px, calc(100vw - 32px));
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(15, 15, 27, 0.92);
+  border: 1px solid rgba(168, 85, 247, 0.35);
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 12px;
+  box-shadow: 0 8px 24px rgba(168, 85, 247, 0.2);
+  backdrop-filter: blur(10px);
+}
+
+.steam-title.admin-access-trigger {
+  cursor: pointer;
+}
+
+.steam-title.admin-access-trigger:hover {
+  color: var(--neon-purple-bright, #c084fc);
+  text-shadow: 0 0 18px rgba(168, 85, 247, 0.6);
+}
+
 .hidden-gear-btn {
   position: fixed;
   top: 16px;

@@ -26,6 +26,7 @@ import {
   importBackup,
   type SyncState,
 } from '../services/dataStore';
+import { getAdminAccessState, requestAdminUnlock } from '../services/accessControl';
 
 const MIN_VOTERS = 2;
 const MAX_VOTERS = 6;
@@ -140,6 +141,7 @@ export const SteamVotingDashboard: React.FC = () => {
   const [isEditMode, setIsEditMode] = useState<boolean>(false);
   const [showFinishModal, setShowFinishModal] = useState<boolean>(false);
   const [showHistoryModal, setShowHistoryModal] = useState<boolean>(false);
+  const [adminAccess, setAdminAccess] = useState(() => getAdminAccessState());
   const [voterToDelete, setVoterToDelete] = useState<Voter | null>(null);
   const [showResetAuraConfirm, setShowResetAuraConfirm] = useState(false);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
@@ -151,6 +153,9 @@ export const SteamVotingDashboard: React.FC = () => {
   const votersDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const gamesDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const importFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const canManageContent = adminAccess.canManageContent;
+  const isReadOnlyMode = adminAccess.isReadOnly;
 
   // ─── Carga inicial de datos ───────────────────────────────
   useEffect(() => {
@@ -182,6 +187,41 @@ export const SteamVotingDashboard: React.FC = () => {
     };
 
     loadAllData();
+  }, []);
+
+  useEffect(() => {
+    const state = getAdminAccessState();
+    if (state.isLocalEnvironment || state.requestedAdmin) {
+      const unlocked = requestAdminUnlock();
+      setAdminAccess(getAdminAccessState());
+      if (!unlocked) {
+        setIsEditMode(false);
+      }
+    } else {
+      setAdminAccess(state);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!canManageContent) {
+      setIsEditMode(false);
+    }
+  }, [canManageContent]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.shiftKey && event.altKey && event.key.toLowerCase() === 'a') {
+        event.preventDefault();
+        const unlocked = requestAdminUnlock();
+        setAdminAccess(getAdminAccessState());
+        if (unlocked) {
+          setIsEditMode(false);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   // ─── Sincronización con debounce ─────────────────────────
@@ -238,6 +278,26 @@ export const SteamVotingDashboard: React.FC = () => {
       ...prev,
       [gameId]: updatedGame,
     }));
+  };
+
+  const handleToggleEditMode = () => {
+    if (!canManageContent) {
+      const unlocked = requestAdminUnlock();
+      setAdminAccess(getAdminAccessState());
+      if (!unlocked) {
+        return;
+      }
+    }
+
+    setIsEditMode((prev) => !prev);
+  };
+
+  const handleRequestAdminAccess = () => {
+    const unlocked = requestAdminUnlock();
+    setAdminAccess(getAdminAccessState());
+    if (unlocked) {
+      setIsEditMode(false);
+    }
   };
 
   const handleConfirmFinishVoting = async (
@@ -512,26 +572,35 @@ export const SteamVotingDashboard: React.FC = () => {
 
       {renderSyncIndicator()}
 
-      {/* Botón de modo edición oculto */}
-      <button
-        type="button"
-        className={`hidden-gear-btn ${isEditMode ? 'active' : ''}`}
-        onClick={() => setIsEditMode(!isEditMode)}
-        title={isEditMode ? 'Desactivar Modo Edición' : 'Activar Modo Edición (Oculto)'}
-        aria-label="Modo Edición"
-      >
-        <FaCog size={20} />
-      </button>
+      {canManageContent && (
+        <button
+          type="button"
+          className={`hidden-gear-btn ${isEditMode ? 'active' : ''}`}
+          onClick={handleToggleEditMode}
+          title={isEditMode ? 'Desactivar Modo Edición' : 'Activar Modo Edición (Oculto)'}
+          aria-label="Modo Edición"
+        >
+          <FaCog size={20} />
+        </button>
+      )}
+
+      {isReadOnlyMode && (
+        <div className="read-only-banner">
+          Modo lectura activo. Usa <strong>?admin=true</strong> o <strong>Shift + Alt + A</strong> para desbloquear edición temporal.
+        </div>
+      )}
 
       {/* Botones de acción principales */}
       <div className="top-action-navigation">
-        <button
-          type="button"
-          className="btn-action-primary btn-finish-voting"
-          onClick={() => setShowFinishModal(true)}
-        >
-          🏆 Finalizar Votación
-        </button>
+        {canManageContent && (
+          <button
+            type="button"
+            className="btn-action-primary btn-finish-voting"
+            onClick={() => setShowFinishModal(true)}
+          >
+            🏆 Finalizar Votación
+          </button>
+        )}
 
         <button
           type="button"
@@ -543,7 +612,7 @@ export const SteamVotingDashboard: React.FC = () => {
       </div>
 
       {/* Barra de edición */}
-      {isEditMode && (
+      {canManageContent && isEditMode && (
         <div className="edit-mode-top-bar">
           <div className="edit-bar-left">
             <span className="edit-badge">⚙️ MODO EDICIÓN ACTIVO</span>
@@ -627,9 +696,12 @@ export const SteamVotingDashboard: React.FC = () => {
 
       {/* Contenido principal */}
       <div className="dashboard-content">
-        <Header />
+        <Header
+          onRequestAdminAccess={handleRequestAdminAccess}
+          canManageContent={canManageContent}
+        />
 
-        {isEditMode && (
+        {canManageContent && isEditMode && (
           <GameSearchEditor gamesMap={gamesMap} onUpdateGame={handleUpdateGame} />
         )}
 
@@ -690,6 +762,7 @@ export const SteamVotingDashboard: React.FC = () => {
           onClearHistory={handleClearHistory}
           onDeleteRecord={handleDeleteHistoryRecord}
           onClose={() => setShowHistoryModal(false)}
+          canManageContent={canManageContent}
         />
       )}
 

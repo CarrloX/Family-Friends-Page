@@ -7,6 +7,7 @@ interface VotingHistoryModalProps {
   onClearHistory: () => void;
   onDeleteRecord: (recordId: string) => void;
   onClose: () => void;
+  canManageContent?: boolean;
 }
 
 export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = ({
@@ -14,6 +15,7 @@ export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = ({
   onClearHistory,
   onDeleteRecord,
   onClose,
+  canManageContent = false,
 }) => {
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(
     history.length > 0 ? history[0].id : null
@@ -78,17 +80,19 @@ export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = ({
                           <span className="history-item-date">{rec.date}</span>
                         </div>
                       </button>
-                      <button
-                        type="button"
-                        className="history-delete-btn"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setRecordToDelete(rec);
-                        }}
-                        title="Eliminar este registro"
-                      >
-                        🗑️
-                      </button>
+                      {canManageContent && (
+                        <button
+                          type="button"
+                          className="history-delete-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setRecordToDelete(rec);
+                          }}
+                          title="Eliminar este registro"
+                        >
+                          🗑️
+                        </button>
+                      )}
                     </div>
                   );
                 })}
@@ -215,7 +219,7 @@ export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = ({
 
         {/* MODAL FOOTER */}
         <div className="modal-footer-actions">
-          {history.length > 0 && (
+          {canManageContent && history.length > 0 && (
             <button
               type="button"
               className="btn-clear-history"
