@@ -2147,6 +2147,54 @@
   transform: translateY(-4px) scale(1.08);
 }
 
+/* ==================== HISTORY FOOTER ACTION ==================== */
+.history-footer-action {
+  display: flex;
+  justify-content: center;
+  margin: 18px 0 8px;
+  animation: fadeInUp 0.8s ease-out 0.8s both;
+}
+
+.btn-history-glow {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 22px;
+  border: 1px solid rgba(168, 85, 247, 0.45);
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 27, 75, 0.95));
+  color: #f5e9ff;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  box-shadow: 0 0 0 rgba(168, 85, 247, 0.35), 0 0 18px rgba(168, 85, 247, 0.25);
+  transition: all 0.35s ease;
+  overflow: hidden;
+}
+
+.btn-history-glow::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.18), transparent);
+  transform: translateX(-120%);
+  transition: transform 0.6s ease;
+}
+
+.btn-history-glow:hover {
+  transform: translateY(-3px) scale(1.03);
+  color: #ffffff;
+  border-color: rgba(192, 132, 252, 0.95);
+  box-shadow: 0 0 18px rgba(168, 85, 247, 0.55), 0 0 38px rgba(168, 85, 247, 0.3);
+}
+
+.btn-history-glow:hover::before {
+  transform: translateX(120%);
+}
+
 /* ==================== DELETE CONFIRM MODAL ==================== */
 .delete-confirm-modal-container {
   background: linear-gradient(180deg, rgba(23, 26, 33, 0.98) 0%, rgba(15, 15, 27, 0.98) 100%);

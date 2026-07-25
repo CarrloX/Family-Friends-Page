@@ -624,14 +624,6 @@ export const SteamVotingDashboard: React.FC = () => {
             🏆 Finalizar Votación
           </button>
         )}
-
-        <button
-          type="button"
-          className="btn-action-secondary btn-view-history"
-          onClick={() => setShowHistoryModal(true)}
-        >
-          📜 Historial ({history.length})
-        </button>
       </div>
 
       {/* Barra de edición */}
@@ -762,6 +754,16 @@ export const SteamVotingDashboard: React.FC = () => {
         </section>
 
         <WinnerBanner results={results} />
+
+        <div className="history-footer-action">
+          <button
+            type="button"
+            className="btn-history-glow"
+            onClick={() => setShowHistoryModal(true)}
+          >
+            📜 Ver historial
+          </button>
+        </div>
 
         <footer className="steam-footer">
           <p>© 2026 Steam Co-Op Game Voting • Diseñado con paleta oficial de Steam & Acentos Neón</p>
