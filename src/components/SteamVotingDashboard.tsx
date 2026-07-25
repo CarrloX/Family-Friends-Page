@@ -148,6 +148,7 @@ export const SteamVotingDashboard: React.FC = () => {
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [showReadOnlyBanner, setShowReadOnlyBanner] = useState<boolean>(false);
 
   const [syncState, setSyncState] = useState<SyncState>({ status: 'idle', message: '' });
 
@@ -157,6 +158,17 @@ export const SteamVotingDashboard: React.FC = () => {
 
   const canManageContent = adminAccess.canManageContent;
   const isReadOnlyMode = adminAccess.isReadOnly;
+
+  useEffect(() => {
+    if (!isReadOnlyMode) {
+      setShowReadOnlyBanner(false);
+      return;
+    }
+
+    setShowReadOnlyBanner(true);
+    const timer = window.setTimeout(() => setShowReadOnlyBanner(false), 3000);
+    return () => window.clearTimeout(timer);
+  }, [isReadOnlyMode]);
 
   // ─── Carga inicial de datos ───────────────────────────────
   useEffect(() => {
@@ -595,7 +607,7 @@ export const SteamVotingDashboard: React.FC = () => {
         </button>
       )}
 
-      {isReadOnlyMode && (
+      {showReadOnlyBanner && isReadOnlyMode && (
         <div className="read-only-banner">
           Modo lectura activo. Usa <strong>?admin=true</strong> o <strong>Shift + Alt + A</strong> para desbloquear edición temporal.
         </div>
