@@ -10,7 +10,7 @@ import {
   Timestamp,
   deleteDoc,
 } from 'firebase/firestore';
-import { getFirestoreInstance, isFirebaseReady } from './firebaseConfig';
+import { getFirestoreInstance, isFirebaseReady, ensureFirebaseAuth } from './firebaseConfig';
 import { getAdminAccessState } from './accessControl';
 import type { Voter, Game, VotingHistoryRecord } from '../types/voting';
 
@@ -21,6 +21,7 @@ const LS_KEY_VOTERS = 'steam_voting_voters_v1';
 const LS_KEY_GAMES = 'steam_voting_games_v1';
 const LS_KEY_HISTORY = 'steam_voting_history_v1';
 const LS_KEY_API_KEY = 'steam_voting_api_key_v1';
+const LS_KEY_ACTIVE_VOTING = 'steam_voting_active_state_v1';
 
 // ============================================================
 // Tipos de estado de sincronización
@@ -78,11 +79,19 @@ function buildReadOnlyState(message = 'Solo lectura activa'): SyncState {
 const COLLECTION_GROUP = 'grupo';
 const DOC_MIEMBROS = 'miembros';
 const COLLECTION_HISTORY = 'votaciones_pasadas';
+const COLLECTION_ACTIVE_VOTING = 'votacion_actual';
+const DOC_ACTIVE_VOTING = 'estado';
 
 // ============================================================
 // Interfaz del documento en Firestore para el grupo
 // ============================================================
 interface GrupoDocument {
+  voters: Voter[];
+  gamesMap: Record<string, Game>;
+  lastUpdated: Timestamp;
+}
+
+interface ActiveVotingDocument {
   voters: Voter[];
   gamesMap: Record<string, Game>;
   lastUpdated: Timestamp;
@@ -102,6 +111,7 @@ export async function saveVoters(voters: Voter[]): Promise<SyncState> {
 
   if (isFirebaseReady()) {
     try {
+      await ensureFirebaseAuth();
       const db = getFirestoreInstance()!;
       const docRef = doc(db, COLLECTION_GROUP, DOC_MIEMBROS);
       await setDoc(
@@ -122,11 +132,74 @@ export async function saveVoters(voters: Voter[]): Promise<SyncState> {
 }
 
 /**
- * Carga la lista de votantes. Prioriza Firestore, fallback a localStorage.
+ * Guarda el estado activo de la votación actual en Firestore y localStorage.
  */
-export async function loadVoters(): Promise<Voter[]> {
+export async function saveActiveVotingState(voters: Voter[], gamesMap: Record<string, Game>): Promise<SyncState> {
+  if (!canWriteToPersistence()) {
+    return buildReadOnlyState();
+  }
+
+  writeLocal(LS_KEY_ACTIVE_VOTING, { voters, gamesMap });
+
   if (isFirebaseReady()) {
     try {
+      await ensureFirebaseAuth();
+      const db = getFirestoreInstance()!;
+      const docRef = doc(db, COLLECTION_ACTIVE_VOTING, DOC_ACTIVE_VOTING);
+      await setDoc(
+        docRef,
+        { voters, gamesMap, lastUpdated: Timestamp.now() },
+        { merge: true }
+      );
+      console.log('[DataStore] Votación actual sincronizada con Firestore.');
+      return { status: 'synced', message: 'Votación actual sincronizada' };
+    } catch (err) {
+      console.warn('[DataStore] Error sincronizando votación actual:', err);
+      return { status: 'local', message: 'Votación actual guardada localmente' };
+    }
+  }
+
+  return { status: 'local', message: 'Votación actual guardada localmente' };
+}
+
+/**
+ * Carga el estado activo de la votación desde Firestore o localStorage.
+ */
+export async function loadActiveVotingState(): Promise<{ voters: Voter[]; gamesMap: Record<string, Game> } | null> {
+  if (isFirebaseReady()) {
+    try {
+      await ensureFirebaseAuth();
+      const db = getFirestoreInstance()!;
+      const docRef = doc(db, COLLECTION_ACTIVE_VOTING, DOC_ACTIVE_VOTING);
+      const snap = await getDoc(docRef);
+      if (snap.exists()) {
+        const data = snap.data() as ActiveVotingDocument;
+        if (Array.isArray(data.voters) && data.gamesMap && typeof data.gamesMap === 'object') {
+          writeLocal(LS_KEY_ACTIVE_VOTING, { voters: data.voters, gamesMap: data.gamesMap });
+          return { voters: data.voters, gamesMap: data.gamesMap };
+        }
+      }
+    } catch (err) {
+      console.warn('[DataStore] Error cargando votación actual de Firestore:', err);
+    }
+  }
+
+  const cached = readLocal<{ voters: Voter[]; gamesMap: Record<string, Game> } | null>(LS_KEY_ACTIVE_VOTING, null);
+  return cached;
+}
+
+/**
+ * Carga la lista de votantes. Prioriza la votación activa en Firestore, fallback a la colección de grupo y localStorage.
+ */
+export async function loadVoters(): Promise<Voter[]> {
+  const activeVoting = await loadActiveVotingState();
+  if (activeVoting?.voters) {
+    return activeVoting.voters;
+  }
+
+  if (isFirebaseReady()) {
+    try {
+      await ensureFirebaseAuth();
       const db = getFirestoreInstance()!;
       const docRef = doc(db, COLLECTION_GROUP, DOC_MIEMBROS);
       const snap = await getDoc(docRef);
@@ -134,7 +207,6 @@ export async function loadVoters(): Promise<Voter[]> {
         const data = snap.data() as GrupoDocument;
         if (Array.isArray(data.voters) && data.voters.length > 0) {
           console.log('[DataStore] Votantes cargados desde Firestore.');
-          // Actualizar caché local
           writeLocal(LS_KEY_VOTERS, data.voters);
           return data.voters;
         }
@@ -156,6 +228,7 @@ export async function saveGames(gamesMap: Record<string, Game>): Promise<SyncSta
 
   if (isFirebaseReady()) {
     try {
+      await ensureFirebaseAuth();
       const db = getFirestoreInstance()!;
       const docRef = doc(db, COLLECTION_GROUP, DOC_MIEMBROS);
       await setDoc(
@@ -176,11 +249,17 @@ export async function saveGames(gamesMap: Record<string, Game>): Promise<SyncSta
 }
 
 /**
- * Carga el mapa de juegos. Prioriza Firestore, fallback a localStorage.
+ * Carga el mapa de juegos. Prioriza la votación activa en Firestore, fallback a la colección de grupo y localStorage.
  */
 export async function loadGames(): Promise<Record<string, Game>> {
+  const activeVoting = await loadActiveVotingState();
+  if (activeVoting?.gamesMap) {
+    return activeVoting.gamesMap;
+  }
+
   if (isFirebaseReady()) {
     try {
+      await ensureFirebaseAuth();
       const db = getFirestoreInstance()!;
       const docRef = doc(db, COLLECTION_GROUP, DOC_MIEMBROS);
       const snap = await getDoc(docRef);
@@ -209,6 +288,7 @@ export async function addHistoryRecord(record: VotingHistoryRecord): Promise<Syn
 
   if (isFirebaseReady()) {
     try {
+      await ensureFirebaseAuth();
       const db = getFirestoreInstance()!;
       const colRef = collection(db, COLLECTION_HISTORY);
       await addDoc(colRef, {
@@ -233,11 +313,12 @@ export async function addHistoryRecord(record: VotingHistoryRecord): Promise<Syn
 }
 
 /**
- * Carga tod0 el historial de votaciones. Prioriza Firestore, fallback a localStorage.
+ * Carga todo el historial de votaciones. Prioriza Firestore, fallback a localStorage.
  */
 export async function loadHistory(): Promise<VotingHistoryRecord[]> {
   if (isFirebaseReady()) {
     try {
+      await ensureFirebaseAuth();
       const db = getFirestoreInstance()!;
       const colRef = collection(db, COLLECTION_HISTORY);
       const q = query(colRef, orderBy('savedAt', 'desc'));
@@ -269,6 +350,7 @@ export async function deleteHistoryRecord(recordId: string): Promise<SyncState> 
 
   if (isFirebaseReady()) {
     try {
+      await ensureFirebaseAuth();
       const db = getFirestoreInstance()!;
       const colRef = collection(db, COLLECTION_HISTORY);
       const snap = await getDocs(colRef);
@@ -282,7 +364,6 @@ export async function deleteHistoryRecord(recordId: string): Promise<SyncState> 
     }
   }
 
-  // Actualizar localStorage
   const history = readLocal<VotingHistoryRecord[]>(LS_KEY_HISTORY, []);
   const updated = history.filter((r) => r.id !== recordId);
   writeLocal(LS_KEY_HISTORY, updated);
@@ -299,6 +380,7 @@ export async function clearHistory(): Promise<SyncState> {
 
   if (isFirebaseReady()) {
     try {
+      await ensureFirebaseAuth();
       const db = getFirestoreInstance()!;
       const colRef = collection(db, COLLECTION_HISTORY);
       const snap = await getDocs(colRef);
@@ -503,9 +585,17 @@ export async function importBackup(
   // Si Firebase está configurado, sincronizar también allá
   if (isFirebaseReady()) {
     try {
+      await ensureFirebaseAuth();
       const db = getFirestoreInstance()!;
       const docRef = doc(db, COLLECTION_GROUP, DOC_MIEMBROS);
       await setDoc(docRef, {
+        voters: data.voters,
+        gamesMap: data.gamesMap,
+        lastUpdated: Timestamp.now(),
+      });
+
+      const activeDocRef = doc(db, COLLECTION_ACTIVE_VOTING, DOC_ACTIVE_VOTING);
+      await setDoc(activeDocRef, {
         voters: data.voters,
         gamesMap: data.gamesMap,
         lastUpdated: Timestamp.now(),
@@ -552,13 +642,18 @@ export async function resetAllData(): Promise<void> {
   removeLocal(LS_KEY_GAMES);
   removeLocal(LS_KEY_HISTORY);
   removeLocal(LS_KEY_API_KEY);
+  removeLocal(LS_KEY_ACTIVE_VOTING);
 
   if (isFirebaseReady()) {
     try {
+      await ensureFirebaseAuth();
       const db = getFirestoreInstance()!;
       // Limpiar documento de grupo
       const docRef = doc(db, COLLECTION_GROUP, DOC_MIEMBROS);
       await setDoc(docRef, { voters: [], gamesMap: {}, lastUpdated: Timestamp.now() });
+
+      const activeDocRef = doc(db, COLLECTION_ACTIVE_VOTING, DOC_ACTIVE_VOTING);
+      await setDoc(activeDocRef, { voters: [], gamesMap: {}, lastUpdated: Timestamp.now() });
 
       // Limpiar historial
       const colRef = collection(db, COLLECTION_HISTORY);

@@ -12,6 +12,7 @@ import { FaCog } from "react-icons/fa";
 import {
   saveVoters,
   saveGames,
+  saveActiveVotingState,
   addHistoryRecord,
   loadVoters,
   loadGames,
@@ -258,6 +259,16 @@ export const SteamVotingDashboard: React.FC = () => {
       debouncedSaveGames(gamesMap);
     }
   }, [gamesMap, isLoading, debouncedSaveGames]);
+
+  useEffect(() => {
+    if (!isLoading && canManageContent) {
+      const syncActiveVoting = async () => {
+        const result = await saveActiveVotingState(voters, gamesMap);
+        setSyncState(result);
+      };
+      void syncActiveVoting();
+    }
+  }, [voters, gamesMap, isLoading, canManageContent]);
 
   useEffect(() => {
     if (!isLoading) {

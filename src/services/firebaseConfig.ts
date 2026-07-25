@@ -1,5 +1,6 @@
 import { initializeApp, type FirebaseApp } from 'firebase/app';
 import { getFirestore, type Firestore } from 'firebase/firestore';
+import { getAuth, signInAnonymously, type Auth } from 'firebase/auth';
 
 /**
  * Configuración de Firebase Firestore.
@@ -25,6 +26,7 @@ const firebaseConfig = {
 
 let app: FirebaseApp | null = null;
 let db: Firestore | null = null;
+let auth: Auth | null = null;
 let isConfigured = false;
 
 /**
@@ -50,7 +52,10 @@ export function initFirebase(): { db: Firestore | null; isConfigured: boolean } 
   try {
     app = initializeApp(firebaseConfig);
     db = getFirestore(app);
+    auth = getAuth(app);
     isConfigured = true;
+
+    void ensureFirebaseAuth();
 
     // Opcional: conectar con emulador local para desarrollo
     // if (process.env.NODE_ENV === 'development') {
@@ -88,4 +93,23 @@ export function isFirebaseReady(): boolean {
     initFirebase();
   }
   return isConfigured && db !== null;
+}
+
+export async function ensureFirebaseAuth(): Promise<void> {
+  if (!app || !auth) {
+    initFirebase();
+    if (!app || !auth) {
+      return;
+    }
+  }
+
+  if (auth.currentUser) {
+    return;
+  }
+
+  try {
+    await signInAnonymously(auth);
+  } catch (err) {
+    console.warn('[Firebase] No se pudo autenticar de forma anónima:', err);
+  }
 }
