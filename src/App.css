@@ -3796,11 +3796,31 @@
 }
 
 /* ==================== INSTALL PROMPT BUTTON ==================== */
-.install-prompt-btn {
+.install-prompt-wrapper {
   position: fixed;
   top: 16px;
   right: 66px;
   z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.install-ios-hint {
+  background: rgba(20, 20, 40, 0.95);
+  border: 1px solid var(--neon-purple-bright);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--steam-text-bright);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 4px 20px rgba(157, 78, 221, 0.3);
+  animation: fadeInUp 0.3s ease-out both;
+  white-space: nowrap;
+}
+.install-prompt-btn {
   display: inline-flex;
   align-items: center;
   gap: 8px;
