@@ -313,7 +313,7 @@ export async function addHistoryRecord(record: VotingHistoryRecord): Promise<Syn
 }
 
 /**
- * Carga todo el historial de votaciones. Prioriza Firestore, fallback a localStorage.
+ * Carga completamente el historial de votaciones. Prioriza Firestore, fallback a localStorage.
  */
 export async function loadHistory(): Promise<VotingHistoryRecord[]> {
   if (isFirebaseReady()) {

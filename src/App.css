@@ -1230,6 +1230,7 @@
   color: rgba(255, 255, 255, 0.88);
   font-size: 12px;
   box-shadow: 0 8px 24px rgba(168, 85, 247, 0.2);
+  -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
 }
 
@@ -3807,8 +3808,8 @@
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
-  backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
   box-shadow: 0 4px 20px rgba(157, 78, 221, 0.3);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   animation: fadeInUp 0.6s ease-out 0.3s both;

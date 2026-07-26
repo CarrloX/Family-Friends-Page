@@ -6,7 +6,7 @@ interface HeaderProps {
   canManageContent?: boolean;
 }
 
-export const Header: React.FC<HeaderProps> = ({ canManageContent = false }) => {
+export const Header: React.FC<HeaderProps> = ({ onRequestAdminAccess, canManageContent = false }) => {
   const handleKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
@@ -27,6 +27,9 @@ export const Header: React.FC<HeaderProps> = ({ canManageContent = false }) => {
         className={`steam-title${canManageContent ? '' : ' admin-access-trigger'}`}
         onClick={(event) => {
           event.preventDefault();
+          if (!canManageContent && onRequestAdminAccess) {
+            onRequestAdminAccess();
+          }
         }}
         onKeyDown={handleKeyDown}
         title={canManageContent ? undefined : 'Solo disponible con Alt + Shift + A'}

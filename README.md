@@ -33,7 +33,7 @@ Aplicación web desarrollada con React, TypeScript y Vite para gestionar votacio
 pnpm install
 ```
 
-3. Crea un archivo `.env` en la raíz del proyecto con las variables necesarias.
+1. Crea un archivo `.env` en la raíz del proyecto con las variables necesarias.
 
 ## Variables de entorno
 
