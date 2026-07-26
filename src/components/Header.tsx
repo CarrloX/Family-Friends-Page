@@ -6,7 +6,7 @@ interface HeaderProps {
   canManageContent?: boolean;
 }
 
-export const Header: React.FC<HeaderProps> = ({ onRequestAdminAccess, canManageContent = false }) => {
+export const Header: React.FC<HeaderProps> = React.memo(({ onRequestAdminAccess, canManageContent = false }) => {
   const handleKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
@@ -45,4 +45,4 @@ export const Header: React.FC<HeaderProps> = ({ onRequestAdminAccess, canManageC
       <div className="header-divider"></div>
     </header>
   );
-};
+});

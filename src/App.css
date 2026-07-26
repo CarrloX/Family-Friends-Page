@@ -456,6 +456,11 @@
   -webkit-user-select: none;
   user-select: none;
   animation: fadeInScale 0.5s ease-out both;
+  /* GPU acceleration for card animations */
+  will-change: transform;
+  transform: translateZ(0);
+  /* Reduce layout recalculation */
+  contain: layout style paint;
 }
 
 .user-card:nth-child(1) { animation-delay: 0.1s; }
@@ -3845,4 +3850,616 @@
   .install-icon {
     font-size: 16px;
   }
+}
+
+/* ====================================================================
+   ==================== MOBILE PERFORMANCE OPTIMIZATIONS ====================
+   ==================================================================== */
+
+/* Disable heavy backdrop-filter blur on mobile, use solid backgrounds instead */
+@media (max-width: 768px) {
+  /* Replace backdrop-filter with solid semi-transparent backgrounds */
+  .read-only-banner {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    background: rgba(15, 15, 27, 0.96);
+  }
+
+  .hidden-gear-btn {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    background: rgba(15, 15, 27, 0.7);
+  }
+
+  .edit-mode-top-bar {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    background: rgba(15, 15, 27, 0.97);
+  }
+
+  .drag-handle-pill {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    background: rgba(15, 15, 27, 0.85);
+  }
+
+  .btn-action-secondary {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    background: rgba(23, 26, 33, 0.92);
+  }
+
+  .steam-search-dropdown {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    background: rgba(15, 15, 27, 0.99);
+  }
+
+  .modal-backdrop {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    background: rgba(0, 0, 0, 0.88);
+  }
+
+  .sync-indicator {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+
+  .install-prompt-btn {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+
+  /* Disable continuous glowPulse animations on mobile */
+  .steam-header-badge:hover {
+    animation: none !important;
+  }
+
+  .vote-item.favorite-item {
+    animation: slideInLeft 0.5s ease-out both !important;
+    box-shadow: 0 0 8px rgba(157, 78, 221, 0.2);
+  }
+
+  .stat-card.primary-stat {
+    animation: none !important;
+    box-shadow: 0 0 8px rgba(157, 78, 221, 0.2);
+  }
+
+  .winner-banner-glow {
+    animation: none !important;
+    filter: drop-shadow(0 0 15px rgba(157, 78, 221, 0.4));
+  }
+
+  .user-card.editing-mode {
+    animation: none !important;
+    box-shadow: 0 0 15px rgba(168, 85, 247, 0.2) !important;
+  }
+
+  .user-card.is-dragging {
+    animation: none !important;
+  }
+
+  .user-card.is-drag-over {
+    animation: none !important;
+  }
+
+  .edit-badge {
+    animation: none !important;
+  }
+
+  .winner-trophy-tag {
+    animation: slideInLeft 0.6s ease-out 0.8s both !important;
+  }
+
+  .toggle-choice-btn.btn-yes.active,
+  .toggle-choice-btn.btn-no.active {
+    animation: none !important;
+  }
+
+  .badge-icon {
+    animation: none !important;
+  }
+
+  .multiplier-value {
+    animation: none !important;
+  }
+
+  .favorite-badge {
+    animation: none !important;
+  }
+
+  .winner-tag {
+    animation: none !important;
+  }
+
+  .install-icon {
+    animation: none !important;
+  }
+
+  .live-dot {
+    animation: none !important;
+  }
+
+  /* Disable background animations on mobile */
+  .bg-gradient-overlay {
+    animation: none !important;
+  }
+
+  .bg-grid-lines {
+    animation: none !important;
+  }
+
+  .header-divider {
+    animation: none !important;
+    background-size: 100% 100%;
+  }
+
+  /* Reduce hover transform effects on mobile to avoid jank */
+  .user-card:hover {
+    transform: translateY(-2px) scale(1.01);
+  }
+
+  .vote-item:hover {
+    transform: translateX(4px);
+  }
+
+  .podium-card:hover {
+    transform: translateY(-2px) scale(1.01);
+  }
+
+  .stat-card:hover {
+    transform: translateY(-2px) scale(1.01);
+  }
+
+  .game-slot-card:hover {
+    transform: translateY(-2px) scale(1.01);
+  }
+
+  .btn-action-primary:hover {
+    transform: translateY(-2px) scale(1.03);
+  }
+
+  .btn-action-secondary:hover {
+    transform: translateY(-2px) scale(1.03);
+  }
+
+  .btn-history-glow:hover {
+    transform: translateY(-2px) scale(1.01);
+  }
+
+  .steam-title:hover {
+    transform: scale(1.02);
+  }
+
+  .winner-image-container:hover {
+    transform: scale(1.02);
+  }
+
+  .modal-winner-card:hover {
+    transform: scale(1.02);
+  }
+
+  .voter-payment-row:hover {
+    transform: translateX(5px) scale(1.01);
+  }
+
+  .user-card:hover .user-avatar {
+    transform: scale(1.05);
+  }
+
+  .vote-item:hover .game-thumb {
+    transform: scale(1.1);
+  }
+
+  .winner-image-container:hover .winner-image {
+    transform: scale(1.05);
+  }
+
+  .podium-card:hover .podium-thumb {
+    transform: scale(1.08);
+  }
+
+  .game-slot-card:hover .slot-cover-thumb {
+    transform: scale(1.08);
+  }
+
+  .modal-winner-card:hover .winner-modal-thumb {
+    transform: scale(1.05);
+  }
+
+  .voter-payment-row:hover .pay-user-avatar {
+    transform: scale(1.08);
+  }
+
+  .dropdown-item-row:hover .dropdown-item-thumb {
+    transform: scale(1.1);
+  }
+
+  .delete-user-preview:hover .delete-user-avatar {
+    transform: rotate(5deg) scale(1.05);
+  }
+
+  .user-card:hover .drag-handle-pill {
+    transform: rotate(180deg) scale(1.08);
+  }
+
+  .steam-icon:hover {
+    transform: rotate(180deg);
+  }
+
+  .modal-close-btn:hover {
+    transform: rotate(45deg) scale(1.05);
+  }
+
+  .delete-voter-btn:hover:not(:disabled) {
+    transform: scale(1.1) rotate(45deg);
+  }
+
+  .hidden-gear-btn:hover {
+    transform: rotate(30deg) scale(1.08);
+  }
+
+  .section-title:hover {
+    transform: translateX(3px);
+  }
+
+  .podium-heading:hover {
+    transform: translateX(3px);
+  }
+
+  .game-vote-edit-row:hover {
+    transform: translateX(3px);
+  }
+
+  .dropdown-item-row:hover {
+    transform: translateX(3px);
+  }
+
+  .winner-genre:hover {
+    letter-spacing: 1.5px;
+  }
+
+  .voters-payment-section h3:hover {
+    letter-spacing: 0.8px;
+  }
+
+  .winner-title:hover {
+    -webkit-text-fill-color: #ffffff;
+    filter: none;
+  }
+
+  .steam-header-badge:hover {
+    transform: translateY(-1px);
+  }
+
+  .voter-count-badge:hover {
+    transform: scale(1.05);
+  }
+
+  .section-title-wrapper:hover {
+    border-bottom-color: rgba(255, 255, 255, 0.08);
+  }
+
+  .podium-container:hover {
+    border-color: rgba(255, 255, 255, 0.08);
+    box-shadow: none;
+  }
+
+  .steam-footer:hover {
+    color: var(--steam-text-muted);
+  }
+
+  .winner-description:hover {
+    color: var(--steam-text-muted);
+  }
+
+  .modal-title-group h2:hover {
+    text-shadow: none;
+  }
+
+  .editor-header-title h3:hover {
+    text-shadow: none;
+  }
+
+  .edit-aura-info-box:hover .aura-balance-pill {
+    color: #38bdf8;
+    text-shadow: none;
+  }
+
+  .edit-aura-info-box:hover {
+    border-color: rgba(168, 85, 247, 0.3);
+    box-shadow: none;
+  }
+
+  .game-slot-card:hover .slot-badge {
+    transform: scale(1.05);
+    box-shadow: none;
+  }
+
+  .game-slot-card:hover .slot-current-preview {
+    background: rgba(255, 255, 255, 0.03);
+    border-color: rgba(255, 255, 255, 0.05);
+  }
+
+  .podium-card:hover .podium-rank {
+    transform: scale(1.05);
+    background: rgba(30, 41, 59, 0.85);
+    border-color: rgba(148, 163, 184, 0.4);
+  }
+
+  .podium-card:hover .podium-title {
+    color: #ffffff;
+  }
+
+  .podium-card:hover .podium-score {
+    transform: scale(1.02);
+  }
+
+  .podium-card:hover {
+    background: rgba(11, 14, 20, 0.5);
+    border-color: rgba(255, 255, 255, 0.06);
+    box-shadow: none;
+  }
+
+  .stat-card:hover .stat-value {
+    color: #ffffff;
+    text-shadow: none;
+    transform: scale(1.02);
+  }
+
+  .stat-card:hover {
+    border-color: rgba(255, 255, 255, 0.08);
+    box-shadow: none;
+  }
+
+  .vote-item:hover .game-title {
+    color: #ffffff;
+  }
+
+  .vote-item:hover .weighted-pts {
+    transform: scale(1.05);
+    text-shadow: none;
+  }
+
+  .vote-item:hover {
+    background: rgba(23, 26, 33, 0.7);
+    border-color: rgba(255, 255, 255, 0.05);
+    box-shadow: none;
+  }
+
+  .vote-item.muted-item:hover {
+    opacity: 0.45;
+    filter: grayscale(0.5);
+    transform: none;
+  }
+
+  .vote-item:hover .game-thumb-container {
+    transform: scale(1.05);
+    border-color: rgba(255, 255, 255, 0.1);
+    box-shadow: none;
+  }
+
+  .user-card:hover .user-name {
+    color: #ffffff;
+    text-shadow: none;
+  }
+
+  .user-card:hover {
+    border-color: rgba(157, 78, 221, 0.25);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+  }
+
+  .aura-badge:hover {
+    transform: scale(1.05);
+    filter: brightness(1.1);
+  }
+
+  .multiplier-bar:hover {
+    border-color: rgba(157, 78, 221, 0.3);
+    box-shadow: none;
+  }
+
+  .btn-reset-data:hover {
+    transform: translateY(-1px) scale(1.02);
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0.3);
+  }
+
+  .btn-reset-aura:hover {
+    transform: translateY(-1px) scale(1.02);
+    box-shadow: 0 0 15px rgba(16, 185, 129, 0.4);
+  }
+
+  .btn-save-edit:hover {
+    transform: translateY(-1px) scale(1.02);
+    box-shadow: 0 0 15px rgba(168, 85, 247, 0.4);
+  }
+
+  .btn-add-voter:hover:not(:disabled) {
+    transform: translateY(-1px) scale(1.03);
+    box-shadow: 0 0 15px rgba(16, 185, 129, 0.5);
+  }
+
+  .btn-modal-confirm-delete:hover {
+    transform: translateY(-1px) scale(1.02);
+    box-shadow: 0 0 15px rgba(239, 68, 68, 0.4);
+  }
+
+  .btn-modal-confirm:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 0 15px rgba(168, 85, 247, 0.5);
+  }
+
+  .steam-fetch-btn:hover:not(:disabled) {
+    box-shadow: 0 0 10px rgba(16, 185, 129, 0.4);
+    transform: translateY(-1px) scale(1.01);
+  }
+
+  .file-upload-btn:hover {
+    transform: translateY(-1px) scale(1.02);
+    box-shadow: 0 0 10px rgba(168, 85, 247, 0.3);
+  }
+
+  .apply-url-btn:hover {
+    transform: translateY(-1px) scale(1.02);
+    box-shadow: 0 0 8px rgba(59, 130, 246, 0.3);
+  }
+
+  .btn-apply-cover:hover {
+    transform: translateY(-1px) scale(1.02);
+    box-shadow: 0 0 8px rgba(59, 130, 246, 0.3);
+  }
+
+  .btn-export:hover,
+  .btn-import:hover {
+    transform: translateY(-1px);
+  }
+
+  .history-delete-btn:hover:not(:disabled) {
+    transform: scale(1.05);
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
+  }
+
+  .toggle-choice-btn:hover {
+    transform: scale(1.05);
+  }
+
+  .winner-trophy-tag:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 10px rgba(251, 191, 36, 0.3);
+  }
+
+  .install-prompt-btn:hover {
+    transform: translateY(-2px) scale(1.02);
+    box-shadow: 0 4px 15px rgba(157, 78, 221, 0.3);
+  }
+
+  .btn-history-glow:hover::before {
+    transform: translateX(-120%);
+  }
+
+  .btn-history-glow:hover {
+    transform: translateY(-2px) scale(1.01);
+    box-shadow: 0 0 12px rgba(168, 85, 247, 0.35);
+  }
+
+  .card-ambient-glow {
+    animation: none !important;
+    opacity: 0.5;
+  }
+
+  .user-card:hover .card-ambient-glow {
+    opacity: 0.5;
+  }
+
+  .steam-title {
+    animation: fadeInScale 0.5s ease-out 0.3s both;
+  }
+
+  .steam-header {
+    animation: fadeInUp 0.4s ease-out 0.1s both;
+  }
+
+  .steam-header-badge {
+    animation: none;
+  }
+
+  .steam-icon {
+    animation: none;
+  }
+
+  .steam-subtitle {
+    animation: fadeInUp 0.4s ease-out 0.7s both;
+  }
+
+  .voters-section {
+    animation: fadeInUp 0.4s ease-out 0.2s both;
+  }
+
+  .winner-section {
+    animation: fadeInUp 0.4s ease-out 0.4s both;
+  }
+
+  .winner-banner {
+    animation: fadeIn 0.3s ease-out 0.6s both;
+  }
+
+  .winner-content {
+    animation: fadeInUp 0.4s ease-out 1s both;
+  }
+
+  .winner-image-container {
+    animation: fadeInScale 0.5s ease-out 1.2s both;
+  }
+
+  .winner-badge-overlay {
+    animation: bounceIn 0.3s ease-out 1.5s both;
+  }
+
+  .winner-details {
+    animation: slideInRight 0.4s ease-out 1.3s both;
+  }
+
+  .winner-stats-grid {
+    animation: fadeInUp 0.4s ease-out 1.5s both;
+  }
+
+  .podium-container {
+    animation: fadeInUp 0.4s ease-out 1.7s both;
+  }
+
+  .podium-card:nth-child(1) {
+    animation: slideInLeft 0.3s ease-out 1.8s both;
+  }
+
+  .podium-card:nth-child(2) {
+    animation: slideInUp 0.3s ease-out 1.9s both;
+  }
+
+  .podium-card:nth-child(3) {
+    animation: slideInRight 0.3s ease-out 2s both;
+  }
+
+  .steam-footer {
+    animation: fadeIn 0.5s ease-out 2.2s both;
+  }
+
+  .top-action-navigation {
+    animation: fadeInUp 0.4s ease-out 0.3s both;
+  }
+
+  .btn-action-primary {
+    animation: fadeInScale 0.3s ease-out 0.5s both;
+  }
+
+  .btn-action-secondary {
+    animation: fadeInScale 0.3s ease-out 0.6s both;
+  }
+
+  .history-footer-action {
+    animation: fadeInUp 0.4s ease-out 0.8s both;
+  }
+
+  .btn-add-voter {
+    animation: fadeInScale 0.3s ease-out 0.8s both;
+  }
+
+  .steam-dashboard-container {
+    animation: fadeInUp 0.3s ease-out;
+  }
+
+  .user-card {
+    animation: fadeInScale 0.3s ease-out both;
+  }
+
+  .vote-item {
+    animation: slideInLeft 0.3s ease-out both;
+  }
+
+  .voter-payment-row:nth-child(1) { animation: slideInLeft 0.3s ease-out both; }
+  .voter-payment-row:nth-child(2) { animation: slideInLeft 0.3s ease-out 0.1s both; }
+  .voter-payment-row:nth-child(3) { animation: slideInLeft 0.3s ease-out 0.2s both; }
+  .voter-payment-row:nth-child(4) { animation: slideInLeft 0.3s ease-out 0.3s both; }
+  .voter-payment-row:nth-child(5) { animation: slideInLeft 0.3s ease-out 0.4s both; }
+  .voter-payment-row:nth-child(6) { animation: slideInLeft 0.3s ease-out 0.5s both; }
 }

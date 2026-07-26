@@ -13,7 +13,7 @@ interface FinishVotingModalProps {
   onClose: () => void;
 }
 
-export const FinishVotingModal: React.FC<FinishVotingModalProps> = ({
+export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
   allResults,
   gamesMap,
   voters,
@@ -135,7 +135,7 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = ({
               return (
                 <div key={voter.id} className={`voter-payment-row ${paid ? 'paid-yes' : 'paid-no'}`}>
                   <div className="voter-pay-user">
-                    <img src={voter.avatar} alt={voter.name} className="pay-user-avatar" />
+                    <img src={voter.avatar} alt={voter.name} className="pay-user-avatar" loading="lazy" />
                     <div className="pay-user-meta">
                       <span className="pay-user-name">{voter.name}</span>
                       <span className="pay-current-rank">
@@ -191,4 +191,4 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = ({
       </div>
     </div>
   );
-};
+});

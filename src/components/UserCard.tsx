@@ -22,7 +22,7 @@ interface UserCardProps {
   canDelete?: boolean;
 }
 
-export const UserCard: React.FC<UserCardProps> = ({
+export const UserCard: React.FC<UserCardProps> = React.memo(({
   voter,
   gamesMap = {} as Record<string, Game>,
   isEditMode = false,
@@ -200,7 +200,7 @@ export const UserCard: React.FC<UserCardProps> = ({
       {/* Header Info */}
       <div className="card-header">
         <div className="avatar-wrapper">
-          <img key={voter.avatar} src={voter.avatar} alt={voter.name} className="user-avatar" />
+          <img key={voter.avatar} src={voter.avatar} alt={voter.name} className="user-avatar" loading="lazy" />
         </div>
 
         <div className="user-meta">
@@ -343,6 +343,7 @@ export const UserCard: React.FC<UserCardProps> = ({
                   src={game?.coverImage}
                   alt={game?.title}
                   className="game-thumb"
+                  loading="lazy"
                   onError={(e) => {
                     const target = e.currentTarget;
                     if (!target.dataset.fallback) {
@@ -383,4 +384,4 @@ export const UserCard: React.FC<UserCardProps> = ({
       </div>
     </div>
   );
-};
+});

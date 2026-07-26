@@ -10,7 +10,7 @@ interface VotingHistoryModalProps {
   canManageContent?: boolean;
 }
 
-export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = ({
+export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = React.memo(({
   history,
   onClearHistory,
   onDeleteRecord,
@@ -311,4 +311,4 @@ export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = ({
       </div>
     </div>
   );
-};
+});

@@ -5,7 +5,7 @@ interface WinnerBannerProps {
   results: GameResult[];
 }
 
-export const WinnerBanner: React.FC<WinnerBannerProps> = ({ results }) => {
+export const WinnerBanner: React.FC<WinnerBannerProps> = React.memo(({ results }) => {
   const winner = results[0];
   const runnersUp = results.slice(1);
 
@@ -66,6 +66,7 @@ export const WinnerBanner: React.FC<WinnerBannerProps> = ({ results }) => {
                 src={winnerHdCover}
                 alt={winner.game.title}
                 className="winner-image"
+                loading="lazy"
                 onError={(e) => {
                   const target = e.currentTarget;
                   const currentFallback = Number.parseInt(target.dataset.fallbackLevel || '0', 10);
@@ -128,6 +129,7 @@ export const WinnerBanner: React.FC<WinnerBannerProps> = ({ results }) => {
                   src={result.game.coverImage}
                   alt={result.game.title}
                   className="podium-thumb"
+                  loading="lazy"
                   onError={(e) => {
                     const target = e.currentTarget;
                     if (!target.dataset.failed) {
@@ -153,4 +155,4 @@ export const WinnerBanner: React.FC<WinnerBannerProps> = ({ results }) => {
       </div>
     </section>
   );
-};
+});
