@@ -316,14 +316,6 @@ export const SteamVotingDashboard: React.FC = () => {
     setIsEditMode((prev) => !prev);
   };
 
-  const handleRequestAdminAccess = () => {
-    const unlocked = requestAdminUnlock();
-    setAdminAccess(getAdminAccessState());
-    if (unlocked) {
-      setIsEditMode(false);
-    }
-  };
-
   const handleConfirmFinishVoting = async (
     updatedVoters: Voter[],
     historyRecord: VotingHistoryRecord
@@ -714,10 +706,7 @@ export const SteamVotingDashboard: React.FC = () => {
 
       {/* Contenido principal */}
       <div className="dashboard-content">
-        <Header
-          onRequestAdminAccess={handleRequestAdminAccess}
-          canManageContent={canManageContent}
-        />
+        <Header />
 
         {canManageContent && isEditMode && (
           <GameSearchEditor gamesMap={gamesMap} onUpdateGame={handleUpdateGame} />
