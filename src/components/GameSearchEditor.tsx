@@ -157,6 +157,7 @@ const SingleGameSlotEditor: React.FC<SingleGameSlotEditorProps> = ({
           src={game?.coverImage}
           alt={game?.title}
           className="slot-cover-thumb"
+          loading="lazy"
           onError={(e) => {
             const target = e.currentTarget;
             if (!target.dataset.failed) {
@@ -200,7 +201,7 @@ const SingleGameSlotEditor: React.FC<SingleGameSlotEditorProps> = ({
                 className="dropdown-item-row"
                 onClick={() => handleSelectSteamGame(item)}
               >
-                <img src={item.tiny_image} alt={item.name} className="dropdown-item-thumb" />
+                <img src={item.tiny_image} alt={item.name} className="dropdown-item-thumb" loading="lazy" />
                 <div className="dropdown-item-info">
                   <span className="dropdown-item-title">{item.name}</span>
                   <span className="dropdown-item-meta">

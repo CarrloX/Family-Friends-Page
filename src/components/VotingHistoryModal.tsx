@@ -1,6 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import type { VotingHistoryRecord } from '../types/voting';
 import { DeleteHistoryRecordConfirmModal } from './DeleteHistoryRecordConfirmModal';
+import { HistoryListItem } from './HistoryListItem';
+import { CompetitorCard } from './CompetitorCard';
+import { VoterSnapshotRow } from './VoterSnapshotRow';
+
+const ITEMS_PER_PAGE = 5;
 
 interface VotingHistoryModalProps {
   history: VotingHistoryRecord[];
@@ -20,6 +25,41 @@ export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = React.memo(
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(
     history.length > 0 ? history[0].id : null
   );
+  const [currentPage, setCurrentPage] = useState(1);
+  const [isMobile, setIsMobile] = useState(false);
+  const [mobileShowDetails, setMobileShowDetails] = useState(false);
+
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(history.length / ITEMS_PER_PAGE)), [history.length]);
+
+  const paginatedHistory = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    return history.slice(start, start + ITEMS_PER_PAGE);
+  }, [history, currentPage]);
+
+  const handlePageChange = useCallback((page: number) => {
+    setCurrentPage(page);
+  }, []);
+
+  const handleSelectRecord = useCallback((id: string) => {
+    setSelectedRecordId(id);
+    setMobileShowDetails(true);
+  }, []);
+
+  // Reset current page if it exceeds total pages after history changes
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
+  // Detect mobile to show full list without pagination on small screens
+  useEffect(() => {
+    const mql = window.matchMedia('(max-width: 768px)');
+    const handler = (e: MediaQueryListEvent | MediaQueryList) => setIsMobile(e.matches);
+    setIsMobile(mql.matches);
+    mql.addEventListener('change', handler);
+    return () => mql.removeEventListener('change', handler);
+  }, []);
 
   const selectedRecord = history.find((h) => h.id === selectedRecordId) || history[0];
   const [recordToDelete, setRecordToDelete] = useState<VotingHistoryRecord | null>(null);
@@ -47,60 +87,51 @@ export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = React.memo(
         ) : (
           <div className="history-content-layout">
             {/* LEFT SIDEBAR: LIST OF PAST VOTINGS */}
-            <div className="history-sidebar">
-              <span className="sidebar-heading">REGISTROS GUARDADOS ({history.length})</span>
-              <div className="history-items-list">
-                {history.map((rec) => {
-                  const isSelected = rec.id === selectedRecordId;
-                  return (
-                    <div key={rec.id} className="history-list-item-wrapper">
-                      <button
-                        type="button"
-                        className={`history-list-item ${isSelected ? 'selected' : ''}`}
-                        onClick={() => setSelectedRecordId(rec.id)}
-                      >
-                        <img
-                          src={rec.winningGame?.coverImage}
-                          alt={rec.winningGame?.title}
-                          className="history-item-thumb"
-                          onError={(e) => {
-                            const target = e.currentTarget;
-                            if (!target.dataset.failed) {
-                              target.dataset.failed = 'true';
-                              if (rec.winningGame?.tinyCoverImage) {
-                                target.src = rec.winningGame.tinyCoverImage;
-                              } else if (rec.winningGame?.appId) {
-                                target.src = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${rec.winningGame.appId}/capsule_sm_120.jpg`;
-                              }
-                            }
-                          }}
-                        />
-                        <div className="history-item-info">
-                          <span className="history-item-winner">🏆 {rec.winningGame?.title}</span>
-                          <span className="history-item-date">{rec.date}</span>
-                        </div>
-                      </button>
-                      {canManageContent && (
-                        <button
-                          type="button"
-                          className="history-delete-btn"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setRecordToDelete(rec);
-                          }}
-                          title="Eliminar este registro"
-                        >
-                          🗑️
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
+            {(!isMobile || !mobileShowDetails) && (
+              <div className="history-sidebar">
+                <span className="sidebar-heading">REGISTROS GUARDADOS ({history.length})</span>
+                <div className="history-items-list">
+                  {(isMobile ? history : paginatedHistory).map((rec) => (
+                    <HistoryListItem
+                      key={rec.id}
+                      rec={rec}
+                      isSelected={rec.id === selectedRecordId}
+                      canManageContent={canManageContent}
+                      onSelect={handleSelectRecord}
+                      onRequestDelete={setRecordToDelete}
+                    />
+                  ))}
+                </div>
+                {!isMobile && totalPages > 1 && (
+                  <div className="history-pagination">
+                    <button
+                      type="button"
+                      className="pagination-btn"
+                      disabled={currentPage <= 1}
+                      onClick={() => handlePageChange(currentPage - 1)}
+                      aria-label="Página anterior"
+                    >
+                      ◀ Anterior
+                    </button>
+                    <span className="pagination-info">
+                      {currentPage} / {totalPages}
+                    </span>
+                    <button
+                      type="button"
+                      className="pagination-btn"
+                      disabled={currentPage >= totalPages}
+                      onClick={() => handlePageChange(currentPage + 1)}
+                      aria-label="Página siguiente"
+                    >
+                      Siguiente ▶
+                    </button>
+                  </div>
+                )}
               </div>
-            </div>
+            )}
 
             {/* RIGHT DETAILS PANEL: DETAILED BREAKDOWN OF SELECTED RECORD */}
-            {selectedRecord && (
+            {selectedRecord && (!isMobile || mobileShowDetails) && (
               <div className="history-details-panel">
                 <div className="history-record-header">
                   <div className="winner-details-badge">
@@ -108,22 +139,35 @@ export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = React.memo(
                     <h3>{selectedRecord.winningGame?.title}</h3>
                     <span className="record-date-tag">🗓️ {selectedRecord.date}</span>
                   </div>
-                  <img
-                    src={selectedRecord.winningGame?.coverImage}
-                    alt={selectedRecord.winningGame?.title}
-                    className="history-details-banner"
-                    onError={(e) => {
-                      const target = e.currentTarget;
-                      if (!target.dataset.failed) {
-                        target.dataset.failed = 'true';
-                        if (selectedRecord.winningGame?.tinyCoverImage) {
-                          target.src = selectedRecord.winningGame.tinyCoverImage;
-                        } else if (selectedRecord.winningGame?.appId) {
-                          target.src = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${selectedRecord.winningGame.appId}/capsule_sm_120.jpg`;
+                  {isMobile && (
+                    <button
+                      type="button"
+                      className="mobile-back-btn"
+                      onClick={() => setMobileShowDetails(false)}
+                      aria-label="Volver a la lista"
+                    >
+                      ◀ Volver
+                    </button>
+                  )}
+                  {!isMobile && (
+                    <img
+                      src={selectedRecord.winningGame?.coverImage}
+                      alt={selectedRecord.winningGame?.title}
+                      className="history-details-banner"
+                      loading="lazy"
+                      onError={(e) => {
+                        const target = e.currentTarget;
+                        if (!target.dataset.failed) {
+                          target.dataset.failed = 'true';
+                          if (selectedRecord.winningGame?.tinyCoverImage) {
+                            target.src = selectedRecord.winningGame.tinyCoverImage;
+                          } else if (selectedRecord.winningGame?.appId) {
+                            target.src = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${selectedRecord.winningGame.appId}/capsule_sm_120.jpg`;
+                          }
                         }
-                      }
-                    }}
-                  />
+                      }}
+                    />
+                  )}
                 </div>
 
                 {/* PODIUM RESULTS */}
@@ -134,35 +178,13 @@ export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = React.memo(
                       // Support both GameResult[] and Game[] shapes
                       const game = 'game' in item ? item.game : item;
                       const pts = 'weightedPoints' in item ? item.weightedPoints : null;
-                      let medal: string;
-                      if (idx === 0) medal = '🥇';
-                      else if (idx === 1) medal = '🥈';
-                      else if (idx === 2) medal = '🥉';
-                      else medal = `${idx + 1}º`;
                       return (
-                        <div key={game.id} className={`competitor-card ${idx === 0 ? 'winner-competitor' : ''}`}>
-                          <img
-                            src={game.coverImage}
-                            alt={game.title}
-                            className="competitor-thumb"
-                            onError={(e) => {
-                              const target = e.currentTarget;
-                              if (!target.dataset.failed) {
-                                target.dataset.failed = 'true';
-                                if (game?.tinyCoverImage) {
-                                  target.src = game.tinyCoverImage;
-                                } else if (game?.appId) {
-                                  target.src = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${game.appId}/capsule_sm_120.jpg`;
-                                }
-                              }
-                            }}
-                          />
-                          <div className="competitor-info">
-                            <span className="competitor-medal">{medal}</span>
-                            <span className="competitor-title">{game.title}</span>
-                            {pts !== null && <span className="competitor-pts">{pts} pts</span>}
-                          </div>
-                        </div>
+                        <CompetitorCard
+                          key={game.id}
+                          game={game}
+                          pts={pts}
+                          idx={idx}
+                        />
                       );
                     })}
                   </div>
@@ -182,32 +204,10 @@ export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = React.memo(
                     </thead>
                     <tbody>
                       {selectedRecord.votersSnapshots.map((snap) => (
-                        <tr key={snap.voterId} className={snap.paidQuota ? 'row-yes' : 'row-no'}>
-                          <td>
-                            <div className="voter-cell">
-                              <img src={snap.avatar} alt={snap.name} className="table-avatar" />
-                              <span className="table-name">{snap.name}</span>
-                            </div>
-                          </td>
-                          <td>
-                            {snap.paidQuota ? (
-                              <span className="status-badge-paid yes">🟢 SÍ (Aportó)</span>
-                            ) : (
-                              <span className="status-badge-paid no">🔴 NO (Rechazó)</span>
-                            )}
-                          </td>
-                          <td>
-                            <span className="balance-change font-mono">
-                              {snap.previousBalance >= 0 ? `+${snap.previousBalance}` : snap.previousBalance} ➜{' '}
-                              <strong>{snap.newBalance >= 0 ? `+${snap.newBalance}` : snap.newBalance} Cuotas</strong>
-                            </span>
-                          </td>
-                          <td>
-                            <span className="table-rank-tag">
-                              {snap.newRank} ({snap.newMultiplier}x)
-                            </span>
-                          </td>
-                        </tr>
+                        <VoterSnapshotRow
+                          key={snap.voterId}
+                          snap={snap}
+                        />
                       ))}
                     </tbody>
                   </table>

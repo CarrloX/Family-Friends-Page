@@ -153,9 +153,11 @@ export const SteamVotingDashboard: React.FC = () => {
 
   const [syncState, setSyncState] = useState<SyncState>({ status: 'idle', message: '' });
 
-  const votersDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const gamesDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const importFileInputRef = useRef<HTMLInputElement | null>(null);
+   const votersDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+   const gamesDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+   const activeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+   const apiKeyDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+   const importFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const canManageContent = adminAccess.canManageContent;
   const isReadOnlyMode = adminAccess.isReadOnly;
@@ -261,6 +263,25 @@ export const SteamVotingDashboard: React.FC = () => {
     }, DEBOUNCE_MS);
   }, []);
 
+  const debouncedSaveActiveVoting = useCallback((votersToSave: Voter[], gamesToSave: Record<string, Game>) => {
+    if (activeDebounceRef.current) {
+      clearTimeout(activeDebounceRef.current);
+    }
+    activeDebounceRef.current = setTimeout(async () => {
+      const result = await saveActiveVotingState(votersToSave, gamesToSave);
+      setSyncState(result);
+    }, DEBOUNCE_MS);
+  }, []);
+
+  const debouncedSaveApiKey = useCallback((apiKey: string) => {
+    if (apiKeyDebounceRef.current) {
+      clearTimeout(apiKeyDebounceRef.current);
+    }
+    apiKeyDebounceRef.current = setTimeout(() => {
+      saveApiKey(apiKey);
+    }, DEBOUNCE_MS);
+  }, []);
+
   useEffect(() => {
     if (!isLoading) {
       debouncedSaveVoters(voters);
@@ -275,36 +296,32 @@ export const SteamVotingDashboard: React.FC = () => {
 
   useEffect(() => {
     if (!isLoading && canManageContent) {
-      const syncActiveVoting = async () => {
-        const result = await saveActiveVotingState(voters, gamesMap);
-        setSyncState(result);
-      };
-      void syncActiveVoting();
+      debouncedSaveActiveVoting(voters, gamesMap);
     }
-  }, [voters, gamesMap, isLoading, canManageContent]);
+  }, [voters, gamesMap, isLoading, canManageContent, debouncedSaveActiveVoting]);
 
   useEffect(() => {
     if (!isLoading) {
-      saveApiKey(steamApiKey);
+      debouncedSaveApiKey(steamApiKey);
     }
-  }, [steamApiKey, isLoading]);
+  }, [steamApiKey, isLoading, debouncedSaveApiKey]);
 
   // ─── Calcular resultados ─────────────────────────────────
   const results = useMemo(() => calculateResults(voters, gamesMap), [voters, gamesMap]);
 
   // ─── Handlers ─────────────────────────────────────────────
-  const handleUpdateVoter = (updatedVoter: Voter) => {
+  const handleUpdateVoter = useCallback((updatedVoter: Voter) => {
     setVoters((prev) => prev.map((v) => (v.id === updatedVoter.id ? updatedVoter : v)));
-  };
+  }, []);
 
-  const handleUpdateGame = (gameId: string, updatedGame: Game) => {
+  const handleUpdateGame = useCallback((gameId: string, updatedGame: Game) => {
     setGamesMap((prev) => ({
       ...prev,
       [gameId]: updatedGame,
     }));
-  };
+  }, []);
 
-  const handleToggleEditMode = () => {
+  const handleToggleEditMode = useCallback(() => {
     if (!canManageContent) {
       const unlocked = requestAdminUnlock();
       setAdminAccess(getAdminAccessState());
@@ -314,9 +331,9 @@ export const SteamVotingDashboard: React.FC = () => {
     }
 
     setIsEditMode((prev) => !prev);
-  };
+  }, [canManageContent]);
 
-  const handleConfirmFinishVoting = async (
+  const handleConfirmFinishVoting = useCallback(async (
     updatedVoters: Voter[],
     historyRecord: VotingHistoryRecord
   ) => {
@@ -327,7 +344,7 @@ export const SteamVotingDashboard: React.FC = () => {
     setSyncState({ status: 'saving', message: 'Guardando...' });
     const result = await addHistoryRecord(historyRecord);
     setSyncState(result);
-  };
+  }, []);
 
   /**
    * Revierte los cambios de Aura acumulados de múltiples votaciones,
@@ -343,7 +360,7 @@ export const SteamVotingDashboard: React.FC = () => {
     [setVoters]
   );
 
-  const handleClearHistory = async () => {
+  const handleClearHistory = useCallback(async () => {
     if (history.length > 0) {
       revertVotersAura(history);
     }
@@ -352,9 +369,9 @@ export const SteamVotingDashboard: React.FC = () => {
     setSyncState({ status: 'saving', message: 'Limpiando...' });
     const result = await clearHistoryStore();
     setSyncState(result);
-  };
+  }, [history, revertVotersAura]);
 
-  const handleDeleteHistoryRecord = async (recordId: string) => {
+  const handleDeleteHistoryRecord = useCallback(async (recordId: string) => {
     setSyncState({ status: 'saving', message: 'Eliminando registro...' });
     const recordToDelete = history.find((r) => r.id === recordId);
     const result = await deleteHistoryRecord(recordId);
@@ -374,7 +391,7 @@ export const SteamVotingDashboard: React.FC = () => {
           : prev
       );
     }, 3000);
-  };
+  }, [history]);
 
   const handleResetData = async () => {
     if (window.confirm('¿Deseas restablecer los datos originales de todos los integrantes y juegos?')) {

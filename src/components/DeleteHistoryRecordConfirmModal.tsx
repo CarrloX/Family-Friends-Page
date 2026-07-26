@@ -44,6 +44,7 @@ export const DeleteHistoryRecordConfirmModal: React.FC<DeleteHistoryRecordConfir
               src={record.winningGame?.coverImage}
               alt={record.winningGame?.title}
               className="delete-user-avatar"
+              loading="lazy"
               onError={(e) => {
                 const target = e.currentTarget;
                 if (!target.dataset.failed) {

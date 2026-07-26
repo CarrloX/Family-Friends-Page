@@ -44,6 +44,7 @@ export const DeleteUserConfirmModal: React.FC<DeleteUserConfirmModalProps> = ({
               src={voter.avatar}
               alt={voter.name}
               className="delete-user-avatar"
+              loading="lazy"
             />
             <div className="delete-user-info">
               <span className="delete-user-name">{voter.name}</span>

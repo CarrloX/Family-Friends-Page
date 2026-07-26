@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import type { Voter, GameResult, Game, VotingHistoryRecord, VoterSnapshotInHistory } from '../types/voting';
 import { calculateAuraStatus } from '../types/voting';
+import { VoterPaymentRow } from './VoterPaymentRow';
 
 interface FinishVotingModalProps {
   allResults: GameResult[];
@@ -30,12 +31,12 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
     return initial;
   });
 
-  const handleTogglePayment = (voterId: string, paid: boolean) => {
+  const handleTogglePayment = useCallback((voterId: string, paid: boolean) => {
     setQuotaPayments((prev) => ({
       ...prev,
       [voterId]: paid,
     }));
-  };
+  }, []);
 
   const handleConfirm = () => {
     const snapshots: VoterSnapshotInHistory[] = [];
@@ -102,6 +103,7 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
             src={winningResult.game?.coverImage}
             alt={winningResult.game?.title}
             className="winner-modal-thumb"
+            loading="lazy"
             onError={(e) => {
               const target = e.currentTarget;
               if (!target.dataset.failed) {
@@ -128,52 +130,13 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
           <div className="voters-payment-grid">
             {voters.map((voter) => {
               const paid = quotaPayments[voter.id] ?? true;
-              const currentBal = voter.auraQuotaBalance ?? 0;
-              const preview = calculateAuraStatus(currentBal, paid, voter.auraRank);
-              const isRedemption = (voter.auraRank === 'Congelado' || currentBal <= -5) && paid;
-
               return (
-                <div key={voter.id} className={`voter-payment-row ${paid ? 'paid-yes' : 'paid-no'}`}>
-                  <div className="voter-pay-user">
-                    <img src={voter.avatar} alt={voter.name} className="pay-user-avatar" loading="lazy" />
-                    <div className="pay-user-meta">
-                      <span className="pay-user-name">{voter.name}</span>
-                      <span className="pay-current-rank">
-                        Rango Actual: {voter.auraRank} ({currentBal >= 0 ? `+${currentBal}` : currentBal} Cuotas)
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* SÍ / NO TOGGLE BUTTONS */}
-                  <div className="toggle-btn-group">
-                    <button
-                      type="button"
-                      className={`toggle-choice-btn btn-yes ${paid ? 'active' : ''}`}
-                      onClick={() => handleTogglePayment(voter.id, true)}
-                    >
-                      ✓ SÍ (+1)
-                    </button>
-                    <button
-                      type="button"
-                      className={`toggle-choice-btn btn-no ${!paid ? 'active' : ''}`}
-                      onClick={() => handleTogglePayment(voter.id, false)}
-                    >
-                      ✕ NO (-1)
-                    </button>
-                  </div>
-
-                  {/* PREVIEW OF NEW AURA STATUS */}
-                  <div className="new-aura-preview">
-                    <span className="preview-label">Nuevo Saldo:</span>
-                    <span className="preview-balance">
-                      {preview.newBalance >= 0 ? `+${preview.newBalance}` : preview.newBalance} Cuotas
-                    </span>
-                    <span className="preview-rank-tag">{preview.newRank} ({preview.newMultiplier}x)</span>
-                    {isRedemption && (
-                      <span className="redemption-badge">🌟 REDENCIÓN DIRECTA</span>
-                    )}
-                  </div>
-                </div>
+                <VoterPaymentRow
+                  key={voter.id}
+                  voter={voter}
+                  paid={paid}
+                  onTogglePayment={handleTogglePayment}
+                />
               );
             })}
           </div>

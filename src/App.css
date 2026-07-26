@@ -36,6 +36,7 @@
   pointer-events: none;
   z-index: 0;
   animation: gridFloat 20s linear infinite;
+  will-change: transform;
 }
 
 .dashboard-content {
@@ -197,6 +198,7 @@
   gap: 12px;
   padding-top: 12px;
   animation: fadeInUp 0.8s ease-out 0.1s both;
+  will-change: transform;
 }
 
 .steam-header-badge {
@@ -255,6 +257,7 @@
   border: none;
   padding: 0;
   background-color: transparent;
+  will-change: transform;
 }
 
 .steam-title:hover {
@@ -272,6 +275,7 @@
   filter: drop-shadow(0 0 10px var(--neon-purple-bright));
   animation: rotateIn 1s ease-out 0.5s both;
   transition: transform 0.4s ease;
+  will-change: transform;
 }
 
 .steam-icon:hover {
@@ -284,6 +288,7 @@
   font-weight: 500;
   max-width: 90%;
   animation: fadeInUp 0.8s ease-out 0.7s both;
+  will-change: transform;
 }
 
 .header-divider {
@@ -493,6 +498,7 @@
   z-index: 0;
   opacity: 0.9;
   transition: opacity 0.4s ease;
+  will-change: transform;
 }
 
 .user-card:hover .card-ambient-glow {
@@ -667,6 +673,8 @@
   border: 1px solid rgba(255, 255, 255, 0.05);
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   animation: slideInLeft 0.5s ease-out both;
+  will-change: transform;
+  contain: layout style paint;
 }
 
 .vote-item:nth-child(1) { animation-delay: 0.1s; }
@@ -772,6 +780,7 @@
   border: 1.5px solid var(--neon-purple-bright);
   box-shadow: 0 0 12px rgba(157, 78, 221, 0.25);
   animation: glowPulse 3s ease-in-out infinite, slideInLeft 0.5s ease-out both;
+  contain: layout style paint;
 }
 
 .favorite-badge {
@@ -827,6 +836,7 @@
   gap: 28px;
   margin-top: 10px;
   animation: fadeInUp 0.8s ease-out 0.4s both;
+  will-change: transform;
 }
 
 .winner-banner-glow {
@@ -839,6 +849,7 @@
   will-change: filter;
   -webkit-user-select: none;
   user-select: none;
+  contain: layout style paint;
 }
 
 .winner-banner {
@@ -853,8 +864,9 @@
   animation: fadeIn 0.6s ease-out 0.6s both;
   -webkit-user-select: none;
   user-select: none;
+  will-change: transform;
+  contain: layout style paint;
 }
-
 
 .winner-trophy-tag {
   display: inline-flex;
@@ -883,6 +895,7 @@
   gap: 30px;
   align-items: center;
   animation: fadeInUp 0.8s ease-out 1s both;
+  will-change: transform;
 }
 
 @media (max-width: 900px) {
@@ -907,6 +920,7 @@
   justify-content: center;
   transition: all 0.4s ease;
   animation: fadeInScale 1s ease-out 1.2s both;
+  will-change: transform;
 }
 
 .winner-image-container:hover {
@@ -946,6 +960,7 @@
   gap: 12px;
   flex: 1;
   animation: slideInRight 0.8s ease-out 1.3s both;
+  will-change: transform;
 }
 
 .winner-genre {
@@ -998,6 +1013,7 @@
   gap: 14px;
   margin-top: 8px;
   animation: fadeInUp 0.8s ease-out 1.5s both;
+  will-change: transform;
 }
 
 @media (max-width: 600px) {
@@ -1016,6 +1032,8 @@
   gap: 4px;
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
+  will-change: transform;
+  contain: layout style paint;
 }
 
 .stat-card:hover {
@@ -1073,6 +1091,7 @@
   padding: 20px;
   animation: fadeInUp 0.8s ease-out 1.7s both;
   transition: all 0.3s ease;
+  contain: layout style paint;
 }
 
 .podium-container:hover {
@@ -1114,6 +1133,8 @@
   border-radius: 12px;
   padding: 10px 14px;
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform;
+  contain: layout style paint;
 }
 
 .podium-card:nth-child(1) {
@@ -1775,6 +1796,8 @@
   position: relative;
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   animation: fadeInScale 0.5s ease-out both;
+  will-change: transform;
+  contain: layout style paint;
 }
 
 .game-slot-card:nth-child(1) { animation-delay: 0.1s; }
@@ -2497,6 +2520,8 @@
   padding: 12px 18px;
   border-radius: 14px;
   transition: all 0.3s ease;
+  will-change: transform;
+  contain: layout style paint;
 }
 
 .modal-winner-card:hover {
@@ -2587,6 +2612,8 @@
   border-radius: 12px;
   padding: 12px 16px;
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform;
+  contain: layout style paint;
 }
 
 .voter-payment-row:nth-child(1) { animation: slideInLeft 0.5s ease-out both; }
@@ -2783,6 +2810,24 @@
   .history-content-layout {
     grid-template-columns: 1fr;
   }
+
+  .history-sidebar {
+    border-right: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding-right: 0;
+    padding-bottom: 12px;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .history-items-list {
+    max-height: none;
+    overflow-y: visible;
+  }
+
+  .history-pagination {
+    display: none !important;
+  }
 }
 
 .history-sidebar {
@@ -2810,6 +2855,7 @@
   overflow-y: auto;
   overflow-x: hidden;
   min-width: 0;
+  will-change: scroll-position;
 }
 
 .history-item-thumb {
@@ -2838,6 +2884,63 @@
 .history-item-date {
   font-size: 10px;
   color: rgba(255, 255, 255, 0.5);
+}
+
+.history-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.pagination-btn {
+  background: rgba(30, 27, 75, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.pagination-btn:hover:not(:disabled) {
+  background: rgba(88, 28, 135, 0.9);
+  border-color: rgba(168, 85, 247, 0.5);
+  box-shadow: 0 0 12px rgba(168, 85, 247, 0.4);
+}
+
+.pagination-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.pagination-info {
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.8);
+  min-width: 48px;
+  text-align: center;
+}
+
+.mobile-back-btn {
+  background: rgba(30, 27, 75, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.mobile-back-btn:hover {
+  background: rgba(88, 28, 135, 0.9);
+  border-color: rgba(168, 85, 247, 0.5);
 }
 
 .history-details-panel {
@@ -2905,6 +3008,7 @@
   border-radius: 6px;
   border: 1px solid rgba(255, 255, 255, 0.05);
   transition: border-color 0.2s;
+  contain: layout style paint;
 }
 
 .competitor-card.winner-competitor {
@@ -3052,6 +3156,7 @@
   cursor: pointer;
   transition: all 0.2s;
   text-align: left;
+  contain: layout style paint;
 }
 
 .history-list-item:hover {
@@ -3443,7 +3548,7 @@
   }
 
   .history-items-list {
-    max-height: 200px;
+    max-height: none;
   }
 
   .history-record-header {
@@ -3814,8 +3919,8 @@
   padding: 10px 14px;
   font-size: 13px;
   color: var(--steam-text-bright);
-  backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
   box-shadow: 0 4px 20px rgba(157, 78, 221, 0.3);
   animation: fadeInUp 0.3s ease-out both;
   white-space: nowrap;
@@ -3909,22 +4014,23 @@
     background: rgba(23, 26, 33, 0.92);
   }
 
-  .steam-search-dropdown {
-    -webkit-backdrop-filter: none !important;
-    backdrop-filter: none !important;
-    background: rgba(15, 15, 27, 0.99);
-  }
-
-  .modal-backdrop {
-    -webkit-backdrop-filter: none !important;
-    backdrop-filter: none !important;
-    background: rgba(0, 0, 0, 0.88);
-  }
-
-  .sync-indicator {
-    -webkit-backdrop-filter: none !important;
-    backdrop-filter: none !important;
-  }
+.steam-search-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 100;
+  max-height: 240px;
+  overflow-y: auto;
+  background: rgba(15, 15, 27, 0.98);
+  border: 1px solid #a855f7;
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.9);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  animation: fadeInScale 0.3s ease-out;
+  will-change: scroll-position;
+}
 
   .install-prompt-btn {
     -webkit-backdrop-filter: none !important;
