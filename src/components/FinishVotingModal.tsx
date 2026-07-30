@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from 'react';
+import { motion } from 'framer-motion';
 import type { Voter, GameResult, Game, VotingHistoryRecord, VoterSnapshotInHistory } from '../types/voting';
 import { calculateAuraStatus } from '../types/voting';
 import { VoterPaymentRow } from './VoterPaymentRow';
@@ -85,16 +86,34 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
   };
 
   return (
-    <div className="modal-backdrop">
-      <div className="finish-modal-container">
+    <motion.div
+      className="modal-backdrop"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+    >
+      <motion.div
+        className="finish-modal-container"
+        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.9, y: 20 }}
+        transition={{ type: 'spring', stiffness: 380, damping: 26 }}
+      >
         <div className="modal-header">
           <div className="modal-title-group">
             <h2>🏆 FINALIZAR VOTACIÓN Y ASIGNAR CUOTAS</h2>
             <p>Registra quiénes pagaron la cuota del juego ganador para actualizar el sistema de Aura.</p>
           </div>
-          <button type="button" className="modal-close-btn" onClick={onClose}>
+          <motion.button
+            type="button"
+            className="modal-close-btn"
+            onClick={onClose}
+            whileHover={{ scale: 1.15 }}
+            whileTap={{ scale: 0.9 }}
+          >
             ✕
-          </button>
+          </motion.button>
         </div>
 
         {/* WINNING GAME PREVIEW */}
@@ -144,14 +163,26 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
 
         {/* MODAL ACTIONS */}
         <div className="modal-footer-actions">
-          <button type="button" className="btn-modal-cancel" onClick={onClose}>
+          <motion.button
+            type="button"
+            className="btn-modal-cancel"
+            onClick={onClose}
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+          >
             Cancelar
-          </button>
-          <button type="button" className="btn-modal-confirm" onClick={handleConfirm}>
+          </motion.button>
+          <motion.button
+            type="button"
+            className="btn-modal-confirm"
+            onClick={handleConfirm}
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+          >
             ✓ Confirmar y Guardar Votación
-          </button>
+          </motion.button>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 });

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { motion } from 'framer-motion';
 import type { Game } from '../types/voting';
 import { searchSteamStore, fetchSteamGameDetails, type SteamSearchResultItem } from '../services/steamStoreApi';
 
@@ -195,11 +196,13 @@ const SingleGameSlotEditor: React.FC<SingleGameSlotEditorProps> = ({
         {showDropdown && searchResults.length > 0 && (
           <div className="steam-search-dropdown">
             {searchResults.map((item) => (
-              <button
+              <motion.button
                 key={item.id}
                 type="button"
                 className="dropdown-item-row"
                 onClick={() => handleSelectSteamGame(item)}
+                whileHover={{ scale: 1.01, backgroundColor: 'rgba(102, 192, 244, 0.15)' }}
+                whileTap={{ scale: 0.98 }}
               >
                 <img src={item.tiny_image} alt={item.name} className="dropdown-item-thumb" loading="lazy" />
                 <div className="dropdown-item-info">
@@ -208,7 +211,7 @@ const SingleGameSlotEditor: React.FC<SingleGameSlotEditorProps> = ({
                     AppID: {item.id} • {item.price_formatted}
                   </span>
                 </div>
-              </button>
+              </motion.button>
             ))}
           </div>
         )}
@@ -250,13 +253,24 @@ const SingleGameSlotEditor: React.FC<SingleGameSlotEditorProps> = ({
               value={customCoverUrl}
               onChange={(e) => setCustomCoverUrl(e.target.value)}
             />
-            <button type="button" className="btn-apply-cover" onClick={handleApplyCustomCover}>
+            <motion.button 
+              type="button" 
+              className="btn-apply-cover" 
+              onClick={handleApplyCustomCover}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+            >
               Ok
-            </button>
-            <label className="file-cover-btn" title="Subir imagen local">
+            </motion.button>
+            <motion.label 
+              className="file-cover-btn" 
+              title="Subir imagen local"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+            >
               <span>📁</span>
               <input type="file" accept="image/*" onChange={handleFileUpload} />
-            </label>
+            </motion.label>
           </div>
         </div>
       </div>

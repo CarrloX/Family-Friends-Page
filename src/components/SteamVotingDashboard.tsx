@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Header } from './Header';
 import { UserCard } from './UserCard';
 import { WinnerBanner } from './WinnerBanner';
@@ -608,15 +609,17 @@ export const SteamVotingDashboard: React.FC = () => {
       <InstallPrompt />
 
       {canManageContent && (
-        <button
+        <motion.button
           type="button"
           className={`hidden-gear-btn ${isEditMode ? 'active' : ''}`}
           onClick={handleToggleEditMode}
           title={isEditMode ? 'Desactivar Modo Edición' : 'Activar Modo Edición (Oculto)'}
           aria-label="Modo Edición"
+          whileHover={{ scale: 1.1, rotate: 15 }}
+          whileTap={{ scale: 0.9 }}
         >
           <FaCog size={20} />
-        </button>
+        </motion.button>
       )}
 
       {showReadOnlyBanner && isReadOnlyMode && (
@@ -628,106 +631,143 @@ export const SteamVotingDashboard: React.FC = () => {
       {/* Botones de acción principales */}
       <div className="top-action-navigation">
         {canManageContent && (
-          <button
+          <motion.button
             type="button"
             className="btn-action-primary btn-finish-voting"
             onClick={() => setShowFinishModal(true)}
+            whileHover={{ scale: 1.04, y: -2 }}
+            whileTap={{ scale: 0.95 }}
           >
             🏆 Finalizar Votación
-          </button>
+          </motion.button>
         )}
       </div>
 
       {/* Barra de edición */}
-      {canManageContent && isEditMode && (
-        <div className="edit-mode-top-bar">
-          <div className="edit-bar-left">
-            <span className="edit-badge">⚙️ MODO EDICIÓN ACTIVO</span>
-            <span className="edit-help-text">
-              Buscá juegos en Steam, edita perfiles y arrastrá tarjetas. Autoguardado activo.
-            </span>
-          </div>
-
-          <div className="edit-bar-controls">
-            <button
-              type="button"
-              className="btn-add-voter"
-              onClick={handleAddVoter}
-              disabled={voters.length >= MAX_VOTERS}
-              title={voters.length >= MAX_VOTERS ? `Máximo de ${MAX_VOTERS} integrantes alcanzado (límite Steam Families)` : 'Añadir nuevo integrante'}
-            >
-              ➕ Añadir Integrante ({voters.length}/{MAX_VOTERS})
-            </button>
-
-            <div className="api-key-input-container">
-              <label htmlFor="steam-api-key-input">Steam Web API Key (opcional):</label>
-              <input
-                id="steam-api-key-input"
-                type="password"
-                placeholder="Clave API de Steam..."
-                value={steamApiKey}
-                onChange={(e) => setSteamApiKey(e.target.value)}
-                className="api-key-input"
-              />
+      <AnimatePresence>
+        {canManageContent && isEditMode && (
+          <motion.div
+            key="edit-mode-bar"
+            className="edit-mode-top-bar"
+            initial={{ opacity: 0, y: -20, height: 0 }}
+            animate={{ opacity: 1, y: 0, height: 'auto' }}
+            exit={{ opacity: 0, y: -20, height: 0 }}
+            transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+          >
+            <div className="edit-bar-left">
+              <span className="edit-badge">⚙️ MODO EDICIÓN ACTIVO</span>
+              <span className="edit-help-text">
+                Buscá juegos en Steam, edita perfiles y arrastrá tarjetas. Autoguardado activo.
+              </span>
             </div>
 
-            <div className="backup-btn-group">
-              <button
+            <div className="edit-bar-controls">
+              <motion.button
                 type="button"
-                className="btn-backup btn-export"
-                onClick={handleExportBackup}
-                title="Descargar backup completo en JSON"
+                className="btn-add-voter"
+                onClick={handleAddVoter}
+                disabled={voters.length >= MAX_VOTERS}
+                title={voters.length >= MAX_VOTERS ? `Máximo de ${MAX_VOTERS} integrantes alcanzado (límite Steam Families)` : 'Añadir nuevo integrante'}
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
               >
-                📥 Exportar Backup
-              </button>
-              <button
+                ➕ Añadir Integrante ({voters.length}/{MAX_VOTERS})
+              </motion.button>
+
+              <div className="api-key-input-container">
+                <label htmlFor="steam-api-key-input">Steam Web API Key (opcional):</label>
+                <input
+                  id="steam-api-key-input"
+                  type="password"
+                  placeholder="Clave API de Steam..."
+                  value={steamApiKey}
+                  onChange={(e) => setSteamApiKey(e.target.value)}
+                  className="api-key-input"
+                />
+              </div>
+
+              <div className="backup-btn-group">
+                <motion.button
+                  type="button"
+                  className="btn-backup btn-export"
+                  onClick={handleExportBackup}
+                  title="Descargar backup completo en JSON"
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.97 }}
+                >
+                  📥 Exportar Backup
+                </motion.button>
+                <motion.button
+                  type="button"
+                  className="btn-backup btn-import"
+                  onClick={handleImportClick}
+                  title="Restaurar datos desde un archivo JSON"
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.97 }}
+                >
+                  📤 Importar Backup
+                </motion.button>
+                <input
+                  ref={importFileInputRef}
+                  type="file"
+                  accept=".json"
+                  onChange={handleImportFileChange}
+                  style={{ display: 'none' }}
+                />
+              </div>
+
+              <motion.button
                 type="button"
-                className="btn-backup btn-import"
-                onClick={handleImportClick}
-                title="Restaurar datos desde un archivo JSON"
+                className="btn-reset-data"
+                onClick={handleResetData}
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
               >
-                📤 Importar Backup
-              </button>
-              <input
-                ref={importFileInputRef}
-                type="file"
-                accept=".json"
-                onChange={handleImportFileChange}
-                style={{ display: 'none' }}
-              />
+                Restablecer
+              </motion.button>
+
+              <motion.button
+                type="button"
+                className="btn-reset-aura"
+                onClick={() => setShowResetAuraConfirm(true)}
+                title="Restablece el Aura de todos los integrantes a Socio Regular (0 Cuotas, 1.0x)"
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
+              >
+                🔄 Restablecer Aura
+              </motion.button>
+
+              <motion.button
+                type="button"
+                className="btn-save-edit"
+                onClick={() => setIsEditMode(false)}
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
+              >
+                ✓ Guardar / Listo
+              </motion.button>
             </div>
-
-            <button type="button" className="btn-reset-data" onClick={handleResetData}>
-              Restablecer
-            </button>
-
-            <button
-              type="button"
-              className="btn-reset-aura"
-              onClick={() => setShowResetAuraConfirm(true)}
-              title="Restablece el Aura de todos los integrantes a Socio Regular (0 Cuotas, 1.0x)"
-            >
-              🔄 Restablecer Aura
-            </button>
-
-            <button
-              type="button"
-              className="btn-save-edit"
-              onClick={() => setIsEditMode(false)}
-            >
-              ✓ Guardar / Listo
-            </button>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Contenido principal */}
       <div className="dashboard-content">
         <Header />
 
-        {canManageContent && isEditMode && (
-          <GameSearchEditor gamesMap={gamesMap} onUpdateGame={handleUpdateGame} />
-        )}
+        <AnimatePresence>
+          {canManageContent && isEditMode && (
+            <motion.div
+              key="game-search-editor-view"
+              initial={{ opacity: 0, y: -15, height: 0 }}
+              animate={{ opacity: 1, y: 0, height: 'auto' }}
+              exit={{ opacity: 0, y: -15, height: 0 }}
+              transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+            >
+              <GameSearchEditor gamesMap={gamesMap} onUpdateGame={handleUpdateGame} />
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <section className="voters-section">
           <div className="section-title-wrapper">
@@ -740,38 +780,42 @@ export const SteamVotingDashboard: React.FC = () => {
           </div>
 
           <div className="user-cards-grid">
-            {voters.map((voter, index) => (
-              <UserCard
-                key={voter.id}
-                voter={voter}
-                gamesMap={gamesMap}
-                isEditMode={isEditMode}
-                apiKey={steamApiKey}
-                onUpdateVoter={handleUpdateVoter}
-                draggable={true}
-                onDragStart={(e) => handleDragStart(e, index)}
-                onDragOver={(e) => handleDragOver(e, index)}
-                onDrop={(e) => handleDrop(e, index)}
-                onDragEnd={handleDragEnd}
-                isDragging={draggedIndex === index}
-                isDragOver={dragOverIndex === index}
-                onRequestDelete={handleRequestDeleteVoter}
-                canDelete={voters.length > MIN_VOTERS}
-              />
-            ))}
+            <AnimatePresence mode="popLayout">
+              {voters.map((voter, index) => (
+                <UserCard
+                  key={voter.id}
+                  voter={voter}
+                  gamesMap={gamesMap}
+                  isEditMode={isEditMode}
+                  apiKey={steamApiKey}
+                  onUpdateVoter={handleUpdateVoter}
+                  draggable={true}
+                  onDragStart={(e) => handleDragStart(e, index)}
+                  onDragOver={(e) => handleDragOver(e, index)}
+                  onDrop={(e) => handleDrop(e, index)}
+                  onDragEnd={handleDragEnd}
+                  isDragging={draggedIndex === index}
+                  isDragOver={dragOverIndex === index}
+                  onRequestDelete={handleRequestDeleteVoter}
+                  canDelete={voters.length > MIN_VOTERS}
+                />
+              ))}
+            </AnimatePresence>
           </div>
         </section>
 
         <WinnerBanner results={results} />
 
         <div className="history-footer-action">
-          <button
+          <motion.button
             type="button"
             className="btn-history-glow"
             onClick={() => setShowHistoryModal(true)}
+            whileHover={{ scale: 1.04, y: -2 }}
+            whileTap={{ scale: 0.96 }}
           >
             📜 Ver historial
-          </button>
+          </motion.button>
         </div>
 
         <footer className="steam-footer">
@@ -780,40 +824,46 @@ export const SteamVotingDashboard: React.FC = () => {
       </div>
 
       {/* Modales */}
-      {showFinishModal && results.length > 0 && (
-        <FinishVotingModal
-          allResults={results}
-          gamesMap={gamesMap}
-          voters={voters}
-          onConfirmFinish={handleConfirmFinishVoting}
-          onClose={() => setShowFinishModal(false)}
-        />
-      )}
+      <AnimatePresence>
+        {showFinishModal && results.length > 0 && (
+          <FinishVotingModal
+            key="finish-modal"
+            allResults={results}
+            gamesMap={gamesMap}
+            voters={voters}
+            onConfirmFinish={handleConfirmFinishVoting}
+            onClose={() => setShowFinishModal(false)}
+          />
+        )}
 
-      {showHistoryModal && (
-        <VotingHistoryModal
-          history={history}
-          onClearHistory={handleClearHistory}
-          onDeleteRecord={handleDeleteHistoryRecord}
-          onClose={() => setShowHistoryModal(false)}
-          canManageContent={canManageContent}
-        />
-      )}
+        {showHistoryModal && (
+          <VotingHistoryModal
+            key="history-modal"
+            history={history}
+            onClearHistory={handleClearHistory}
+            onDeleteRecord={handleDeleteHistoryRecord}
+            onClose={() => setShowHistoryModal(false)}
+            canManageContent={canManageContent}
+          />
+        )}
 
-      {voterToDelete && (
-        <DeleteUserConfirmModal
-          voter={voterToDelete}
-          onCancel={handleCancelDeleteVoter}
-          onConfirm={handleConfirmDeleteVoter}
-        />
-      )}
+        {voterToDelete && (
+          <DeleteUserConfirmModal
+            key={`delete-user-${voterToDelete.id}`}
+            voter={voterToDelete}
+            onCancel={handleCancelDeleteVoter}
+            onConfirm={handleConfirmDeleteVoter}
+          />
+        )}
 
-      {showResetAuraConfirm && (
-        <ResetAuraConfirmModal
-          onConfirm={handleResetAllAura}
-          onCancel={() => setShowResetAuraConfirm(false)}
-        />
-      )}
+        {showResetAuraConfirm && (
+          <ResetAuraConfirmModal
+            key="reset-aura-modal"
+            onConfirm={handleResetAllAura}
+            onCancel={() => setShowResetAuraConfirm(false)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 };

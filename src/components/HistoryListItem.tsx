@@ -1,4 +1,5 @@
 import React from 'react';
+import { motion } from 'framer-motion';
 import type { VotingHistoryRecord } from '../types/voting';
 
 interface HistoryListItemProps {
@@ -17,11 +18,21 @@ export const HistoryListItem: React.FC<HistoryListItemProps> = React.memo(({
   onRequestDelete,
 }) => {
   return (
-    <div key={rec.id} className="history-list-item-wrapper">
-      <button
+    <motion.div
+      layout
+      layoutId={`history-item-${rec.id}`}
+      className="history-list-item-wrapper"
+      initial={{ opacity: 0, x: -15, scale: 0.97 }}
+      animate={{ opacity: 1, x: 0, scale: 1 }}
+      exit={{ opacity: 0, x: -15, scale: 0.95 }}
+      transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+    >
+      <motion.button
         type="button"
         className={`history-list-item ${isSelected ? 'selected' : ''}`}
         onClick={() => onSelect(rec.id)}
+        whileHover={{ scale: 1.01 }}
+        whileTap={{ scale: 0.98 }}
       >
         <img
           src={rec.winningGame?.coverImage}
@@ -43,9 +54,9 @@ export const HistoryListItem: React.FC<HistoryListItemProps> = React.memo(({
           <span className="history-item-winner">🏆 {rec.winningGame?.title}</span>
           <span className="history-item-date">{rec.date}</span>
         </div>
-      </button>
+      </motion.button>
       {canManageContent && (
-        <button
+        <motion.button
           type="button"
           className="history-delete-btn"
           onClick={(e) => {
@@ -53,10 +64,12 @@ export const HistoryListItem: React.FC<HistoryListItemProps> = React.memo(({
             onRequestDelete(rec);
           }}
           title="Eliminar este registro"
+          whileHover={{ scale: 1.15 }}
+          whileTap={{ scale: 0.85 }}
         >
           🗑️
-        </button>
+        </motion.button>
       )}
-    </div>
+    </motion.div>
   );
 });

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { motion } from 'framer-motion';
 import type { Voter, AuraRank, Game } from '../types/voting';
 import { fetchSteamProfile, isValidSteamId64 } from '../services/steamApi';
 import { FaTimes } from "react-icons/fa";
@@ -154,15 +155,22 @@ export const UserCard: React.FC<UserCardProps> = React.memo(({
   };
 
   return (
-    <div
+    <motion.div
+      layout
+      layoutId={`user-card-${voter.id}`}
       className={`user-card rank-${voter.auraRank.toLowerCase()} ${isEditMode ? 'editing-mode' : ''} ${
         isDragging ? 'is-dragging' : ''
       } ${isDragOver ? 'is-drag-over' : ''}`}
       draggable={draggable}
-      onDragStart={onDragStart}
+      onDragStart={onDragStart as any}
       onDragOver={onDragOver}
       onDrop={onDrop}
-      onDragEnd={onDragEnd}
+      onDragEnd={onDragEnd as any}
+      initial={{ opacity: 0, y: 20, scale: 0.95 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.2 } }}
+      transition={{ type: 'spring', stiffness: 350, damping: 25 }}
+      whileHover={!isDragging ? { y: -4, transition: { duration: 0.2 } } : undefined}
     >
       {/* Glow highlight top corner */}
       <div className="card-ambient-glow"></div>
@@ -333,6 +341,6 @@ export const UserCard: React.FC<UserCardProps> = React.memo(({
           );
         })}
       </div>
-    </div>
+    </motion.div>
   );
 });

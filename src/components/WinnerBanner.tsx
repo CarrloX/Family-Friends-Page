@@ -1,4 +1,5 @@
 import React from 'react';
+import { motion } from 'framer-motion';
 import type { GameResult } from '../types/voting';
 
 interface WinnerBannerProps {
@@ -47,13 +48,15 @@ export const WinnerBanner: React.FC<WinnerBannerProps> = React.memo(({ results }
   if (winner.game.coverImage) winnerCoverFallbacks.push(winner.game.coverImage);
   if (winner.game.tinyCoverImage) winnerCoverFallbacks.push(winner.game.tinyCoverImage);
 
-  console.log(`[WinnerBanner] Portada HD del ganador: ${winnerHdCover}`);
-  console.log(`[WinnerBanner] Fallbacks disponibles:`, winnerCoverFallbacks);
-
   return (
     <section className="winner-section">
       {/* Featured Winner Card */}
-      <div className="winner-banner-glow">
+      <motion.div
+        className="winner-banner-glow"
+        initial={{ opacity: 0, y: 15 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+      >
         <div className="winner-banner">
           <div className="winner-trophy-tag">
             <span className="trophy-icon">🏆</span>
@@ -72,7 +75,6 @@ export const WinnerBanner: React.FC<WinnerBannerProps> = React.memo(({ results }
                   const currentFallback = Number.parseInt(target.dataset.fallbackLevel || '0', 10);
                   if (currentFallback < winnerCoverFallbacks.length) {
                     const nextUrl = winnerCoverFallbacks[currentFallback];
-                    console.log(`[WinnerBanner] Fallback #${currentFallback + 1} para portada HD: ${nextUrl}`);
                     target.dataset.fallbackLevel = String(currentFallback + 1);
                     target.src = nextUrl;
                   }
@@ -87,25 +89,37 @@ export const WinnerBanner: React.FC<WinnerBannerProps> = React.memo(({ results }
               <p className="winner-description">{winner.game.description}</p>
 
               <div className="winner-stats-grid">
-                <div className="stat-card primary-stat">
+                <motion.div
+                  className="stat-card primary-stat"
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.97 }}
+                >
                   <span className="stat-label">TOTAL PUNTOS PONDERADOS</span>
                   <span className="stat-value">{winner.weightedPoints} <small>PTS</small></span>
-                </div>
+                </motion.div>
 
-                <div className="stat-card">
+                <motion.div
+                  className="stat-card"
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.97 }}
+                >
                   <span className="stat-label">VOTOS DE FAVORITO (3 PTS)</span>
                   <span className="stat-value">{winner.firstPlaceVotes} <small>/ 5 integrantes</small></span>
-                </div>
+                </motion.div>
 
-                <div className="stat-card">
+                <motion.div
+                  className="stat-card"
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.97 }}
+                >
                   <span className="stat-label">PUNTOS BRUTOS</span>
                   <span className="stat-value">{winner.rawPoints} <small>PTS</small></span>
-                </div>
+                </motion.div>
               </div>
             </div>
           </div>
         </div>
-      </div>
+      </motion.div>
 
       {/* Podium / Runner ups */}
       <div className="podium-container">
@@ -123,7 +137,14 @@ export const WinnerBanner: React.FC<WinnerBannerProps> = React.memo(({ results }
             }
 
             return (
-              <div key={result.game.id} className={`podium-card position-${rankPosition}`}>
+              <motion.div
+                key={result.game.id}
+                layout
+                className={`podium-card position-${rankPosition}`}
+                whileHover={{ scale: 1.02, y: -3 }}
+                whileTap={{ scale: 0.97 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+              >
                 <div className="podium-rank">{rankLabel}</div>
                 <img
                   src={result.game.coverImage}
@@ -148,7 +169,7 @@ export const WinnerBanner: React.FC<WinnerBannerProps> = React.memo(({ results }
                     <strong>{result.weightedPoints}</strong> pts ponderados ({result.rawPoints} pts base)
                   </span>
                 </div>
-              </div>
+              </motion.div>
             );
           })}
         </div>

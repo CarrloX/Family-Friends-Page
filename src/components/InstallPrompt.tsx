@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -79,20 +80,29 @@ export const InstallPrompt = () => {
 
   return (
     <div className="install-prompt-wrapper">
-      <button
+      <motion.button
         type="button"
         className="install-prompt-btn"
         onClick={handleInstallClick}
         title="Instalar aplicación"
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
       >
         <span className="install-icon">📲</span>
         <span className="install-text">Instalar App</span>
-      </button>
-      {showIosHint && (
-        <div className="install-ios-hint">
-          Tocá <strong>Compartir</strong> (☐↑) y luego <strong>"Agregar a inicio"</strong>
-        </div>
-      )}
+      </motion.button>
+      <AnimatePresence>
+        {showIosHint && (
+          <motion.div
+            className="install-ios-hint"
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+          >
+            Tocá <strong>Compartir</strong> (☐↑) y luego <strong>"Agregar a inicio"</strong>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

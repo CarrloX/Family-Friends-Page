@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import type { VotingHistoryRecord } from '../types/voting';
 import { DeleteHistoryRecordConfirmModal } from './DeleteHistoryRecordConfirmModal';
 import { HistoryListItem } from './HistoryListItem';
@@ -61,21 +62,43 @@ export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = React.memo(
     return () => mql.removeEventListener('change', handler);
   }, []);
 
-  const selectedRecord = history.find((h) => h.id === selectedRecordId) || history[0];
+  const selectedRecord = useMemo(() => {
+    if (!selectedRecordId) return history[0] || null;
+    return history.find((r) => r.id === selectedRecordId) || history[0] || null;
+  }, [history, selectedRecordId]);
+  
   const [recordToDelete, setRecordToDelete] = useState<VotingHistoryRecord | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   return (
-    <div className="modal-backdrop">
-      <div className="history-modal-container">
+    <motion.div
+      className="modal-backdrop"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+    >
+      <motion.div
+        className="history-modal-container"
+        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 20 }}
+        transition={{ type: 'spring', stiffness: 360, damping: 25 }}
+      >
         <div className="modal-header">
           <div className="modal-title-group">
             <h2>📜 HISTORIAL DE VOTACIONES PASADAS</h2>
             <p>Consulta las votaciones finalizadas, el registro de cuotas pagadas y la evolución del Aura.</p>
           </div>
-          <button type="button" className="modal-close-btn" onClick={onClose}>
+          <motion.button
+            type="button"
+            className="modal-close-btn"
+            onClick={onClose}
+            whileHover={{ scale: 1.15 }}
+            whileTap={{ scale: 0.9 }}
+          >
             ✕
-          </button>
+          </motion.button>
         </div>
 
         {history.length === 0 ? (
@@ -91,16 +114,18 @@ export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = React.memo(
               <div className="history-sidebar">
                 <span className="sidebar-heading">REGISTROS GUARDADOS ({history.length})</span>
                 <div className="history-items-list">
-                  {(isMobile ? history : paginatedHistory).map((rec) => (
-                    <HistoryListItem
-                      key={rec.id}
-                      rec={rec}
-                      isSelected={rec.id === selectedRecordId}
-                      canManageContent={canManageContent}
-                      onSelect={handleSelectRecord}
-                      onRequestDelete={setRecordToDelete}
-                    />
-                  ))}
+                  <AnimatePresence mode="popLayout">
+                    {(isMobile ? history : paginatedHistory).map((rec) => (
+                      <HistoryListItem
+                        key={rec.id}
+                        rec={rec}
+                        isSelected={rec.id === selectedRecordId}
+                        canManageContent={canManageContent}
+                        onSelect={handleSelectRecord}
+                        onRequestDelete={setRecordToDelete}
+                      />
+                    ))}
+                  </AnimatePresence>
                 </div>
                 {!isMobile && totalPages > 1 && (
                   <div className="history-pagination">
@@ -298,17 +323,19 @@ export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = React.memo(
         )}
 
         {/* DELETE CONFIRM MODAL */}
-        {recordToDelete && (
-          <DeleteHistoryRecordConfirmModal
-            record={recordToDelete}
-            onCancel={() => setRecordToDelete(null)}
-            onConfirm={() => {
-              onDeleteRecord(recordToDelete.id);
-              setRecordToDelete(null);
-            }}
-          />
-        )}
-      </div>
-    </div>
+        <AnimatePresence>
+          {recordToDelete && (
+            <DeleteHistoryRecordConfirmModal
+              record={recordToDelete}
+              onCancel={() => setRecordToDelete(null)}
+              onConfirm={() => {
+                onDeleteRecord(recordToDelete.id);
+                setRecordToDelete(null);
+              }}
+            />
+          )}
+        </AnimatePresence>
+      </motion.div>
+    </motion.div>
   );
 });

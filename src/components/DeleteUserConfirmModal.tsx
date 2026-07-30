@@ -1,4 +1,5 @@
 import React from 'react';
+import { motion } from 'framer-motion';
 import type { Voter } from '../types/voting';
 
 interface DeleteUserConfirmModalProps {
@@ -13,29 +14,41 @@ export const DeleteUserConfirmModal: React.FC<DeleteUserConfirmModalProps> = ({
   onConfirm,
 }) => {
   return (
-    <div className="modal-backdrop">
+    <motion.div
+      className="modal-backdrop"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+    >
       <button
         type="button"
         className="modal-backdrop-close"
         onClick={onCancel}
         aria-label="Cerrar modal"
       />
-      <div
+      <motion.div
         className="delete-confirm-modal-container"
+        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.9, y: 20 }}
+        transition={{ type: 'spring', stiffness: 380, damping: 26 }}
       >
         <div className="modal-header">
           <div className="modal-title-group">
             <h2>⚠️ Eliminar Integrante</h2>
             <p>Esta acción no se puede deshacer fácilmente.</p>
           </div>
-          <button
+          <motion.button
             type="button"
             className="modal-close-btn"
             onClick={onCancel}
             aria-label="Cerrar"
+            whileHover={{ scale: 1.15 }}
+            whileTap={{ scale: 0.9 }}
           >
             ✕
-          </button>
+          </motion.button>
         </div>
 
         <div className="delete-warning-content">
@@ -67,22 +80,26 @@ export const DeleteUserConfirmModal: React.FC<DeleteUserConfirmModalProps> = ({
         </div>
 
         <div className="modal-footer-actions delete-modal-actions">
-          <button
+          <motion.button
             type="button"
             className="btn-modal-cancel"
             onClick={onCancel}
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
           >
             Cancelar
-          </button>
-          <button
+          </motion.button>
+          <motion.button
             type="button"
             className="btn-modal-confirm-delete"
             onClick={onConfirm}
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
           >
             Confirmar Eliminación
-          </button>
+          </motion.button>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 };

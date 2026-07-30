@@ -1,4 +1,5 @@
 import React from 'react';
+import { motion } from 'framer-motion';
 import type { Voter } from '../types/voting';
 import { calculateAuraStatus } from '../types/voting';
 
@@ -18,7 +19,12 @@ export const VoterPaymentRow: React.FC<VoterPaymentRowProps> = React.memo(({
   const isRedemption = (voter.auraRank === 'Congelado' || currentBal <= -5) && paid;
 
   return (
-    <div key={voter.id} className={`voter-payment-row ${paid ? 'paid-yes' : 'paid-no'}`}>
+    <motion.div
+      key={voter.id}
+      className={`voter-payment-row ${paid ? 'paid-yes' : 'paid-no'}`}
+      whileHover={{ scale: 1.01 }}
+      transition={{ duration: 0.2 }}
+    >
       <div className="voter-pay-user">
         <img src={voter.avatar} alt={voter.name} className="pay-user-avatar" loading="lazy" />
         <div className="pay-user-meta">
@@ -31,20 +37,24 @@ export const VoterPaymentRow: React.FC<VoterPaymentRowProps> = React.memo(({
 
       {/* SÍ / NO TOGGLE BUTTONS */}
       <div className="toggle-btn-group">
-        <button
+        <motion.button
           type="button"
           className={`toggle-choice-btn btn-yes ${paid ? 'active' : ''}`}
           onClick={() => onTogglePayment(voter.id, true)}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
         >
           ✓ SÍ (+1)
-        </button>
-        <button
+        </motion.button>
+        <motion.button
           type="button"
           className={`toggle-choice-btn btn-no ${!paid ? 'active' : ''}`}
           onClick={() => onTogglePayment(voter.id, false)}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
         >
           ✕ NO (-1)
-        </button>
+        </motion.button>
       </div>
 
       {/* PREVIEW OF NEW AURA STATUS */}
@@ -58,6 +68,6 @@ export const VoterPaymentRow: React.FC<VoterPaymentRowProps> = React.memo(({
           <span className="redemption-badge">🌟 REDENCIÓN DIRECTA</span>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 });

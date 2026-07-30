@@ -1,4 +1,5 @@
 import React from 'react';
+import { motion } from 'framer-motion';
 import type { GameVote, Game } from '../types/voting';
 
 interface VoteItemProps {
@@ -28,7 +29,13 @@ export const VoteItem: React.FC<VoteItemProps> = React.memo(({
   if (is0Pts) voteItemClass += ' muted-item';
 
   return (
-    <div key={vote.gameId} className={voteItemClass}>
+    <motion.div
+      key={vote.gameId}
+      className={voteItemClass}
+      whileHover={{ scale: 1.02, x: 2 }}
+      whileTap={{ scale: 0.98 }}
+      transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+    >
       <div className="game-thumb-container">
         <img
           key={game?.id || vote.gameId}
@@ -70,6 +77,6 @@ export const VoteItem: React.FC<VoteItemProps> = React.memo(({
           {is0Pts && <span className="zero-pts-badge">0 Puntos</span>}
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 });
