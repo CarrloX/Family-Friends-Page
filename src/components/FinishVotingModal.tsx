@@ -87,19 +87,23 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
 
   return (
     <motion.div
-      className="modal-backdrop"
+      className="modal-backdrop bottom-sheet-backdrop"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      transition={{ duration: 0.2 }}
+      transition={{ duration: 0.25 }}
+      onClick={onClose}
     >
       <motion.div
-        className="finish-modal-container"
-        initial={{ opacity: 0, scale: 0.9, y: 20 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.9, y: 20 }}
-        transition={{ type: 'spring', stiffness: 380, damping: 26 }}
+        className="finish-modal-container bottom-sheet-panel"
+        initial={{ y: '100%', opacity: 0, scale: 0.95 }}
+        animate={{ y: 0, opacity: 1, scale: 1 }}
+        exit={{ y: '100%', opacity: 0, scale: 0.95 }}
+        transition={{ type: 'spring', stiffness: 320, damping: 30 }}
+        onClick={(e) => e.stopPropagation()}
       >
+        {/* Handle visual superior estilo bottom sheet */}
+        <div className="bottom-sheet-handle" aria-hidden="true"></div>
         <div className="modal-header">
           <div className="modal-title-group">
             <h2>🏆 FINALIZAR VOTACIÓN Y ASIGNAR CUOTAS</h2>

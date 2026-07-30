@@ -31,6 +31,14 @@ export function getAdminPin(): string {
   return configuredPin || 'FAMILY2026';
 }
 
+/**
+ * Valida si un PIN ingresado coincide con el PIN de administrador configurado.
+ * Función pura (sin UI) para separar la validación de la presentación.
+ */
+export function validateAdminPin(enteredPin: string): boolean {
+  return enteredPin.trim() === getAdminPin();
+}
+
 export function getAdminAccessState(options?: {
   hostname?: string;
   search?: string;
@@ -89,4 +97,24 @@ export function requestAdminUnlock(options?: {
 
 export function clearAdminSession(storage?: Pick<Storage, 'removeItem'> | null): void {
   (storage ?? getSessionStorage())?.removeItem(ADMIN_SESSION_KEY);
+}
+
+/**
+ * Desbloquea la sesión de administrador usando un PIN ya validado por la UI.
+ * A diferencia de requestAdminUnlock, esta función NO muestra window.prompt/alert:
+ * asume que la validación del PIN se realizó en la capa de presentación (AdminPinModal).
+ * Retorna true si el PIN es correcto y la sesión quedó desbloqueada.
+ */
+export function unlockWithPin(
+  enteredPin: string,
+  options?: {
+    storage?: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> | null;
+  }
+): boolean {
+  const storage = options?.storage ?? getSessionStorage();
+  if (!validateAdminPin(enteredPin)) {
+    return false;
+  }
+  storage?.setItem(ADMIN_SESSION_KEY, 'true');
+  return true;
 }

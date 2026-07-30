@@ -2445,6 +2445,168 @@
   z-index: 0;
 }
 
+/* ==================== BOTTOM SHEET MODAL ANIMATIONS ==================== */
+/* Estilo móvil: los modales se despliegan desde abajo con escalado,
+   con un backdrop interactivo (clic cierra el modal) y un handle visual. */
+
+.bottom-sheet-backdrop {
+  cursor: pointer;
+}
+
+.bottom-sheet-panel {
+  /* En móvil: anclado abajo, border-radius solo arriba */
+  /* En desktop: centrado con animación desde abajo */
+  position: relative;
+  z-index: 1;
+  cursor: default;
+}
+
+/* Handle visual superior estilo bottom sheet móvil */
+.bottom-sheet-handle {
+  display: none; /* Solo visible en móvil */
+  width: 40px;
+  height: 4px;
+  background: rgba(168, 85, 247, 0.5);
+  border-radius: 2px;
+  margin: 0 auto 12px;
+  flex-shrink: 0;
+}
+
+/* En móvil: el panel se ancla al borde inferior */
+@media (max-width: 768px) {
+  .bottom-sheet-handle {
+    display: block;
+  }
+
+  .bottom-sheet-panel {
+    position: fixed !important;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    max-width: 100% !important;
+    max-height: 90vh;
+    border-radius: 20px 20px 0 0 !important;
+    border-bottom: none !important;
+    margin: 0 !important;
+    /* Animación de entrada desde abajo */
+    animation: bottomSheetSlideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* Asegurar que el contenido sea scrollable */
+  .bottom-sheet-panel.finish-modal-container,
+  .bottom-sheet-panel.history-modal-container {
+    overflow-y: auto;
+  }
+}
+
+@keyframes bottomSheetSlideUp {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* ==================== ADMIN PIN MODAL ==================== */
+.admin-pin-modal-container {
+  background: linear-gradient(180deg, rgba(23, 26, 33, 0.98) 0%, rgba(15, 15, 27, 0.98) 100%);
+  border: 2px solid var(--neon-purple-bright);
+  box-shadow: 0 0 50px rgba(168, 85, 247, 0.5), 0 -10px 40px rgba(168, 85, 247, 0.3);
+  border-radius: 20px;
+  width: 100%;
+  max-width: 440px;
+  padding: 28px;
+  color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  position: relative;
+  z-index: 1;
+}
+
+@media (max-width: 768px) {
+  .admin-pin-modal-container {
+    max-width: 100% !important;
+    border-radius: 20px 20px 0 0 !important;
+    border-bottom: none !important;
+    padding: 24px 20px 32px;
+  }
+}
+
+.admin-pin-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.admin-pin-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.admin-pin-icon {
+  position: absolute;
+  left: 14px;
+  color: var(--neon-purple-bright);
+  font-size: 16px;
+  pointer-events: none;
+  filter: drop-shadow(0 0 6px rgba(168, 85, 247, 0.5));
+}
+
+.admin-pin-input {
+  width: 100%;
+  background: rgba(15, 15, 27, 0.9);
+  border: 1.5px solid rgba(168, 85, 247, 0.4);
+  border-radius: 10px;
+  padding: 14px 14px 14px 42px;
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  outline: none;
+  transition: all 0.3s ease;
+}
+
+.admin-pin-input:focus {
+  border-color: var(--neon-purple-bright);
+  box-shadow: 0 0 20px rgba(168, 85, 247, 0.5);
+  transform: scale(1.01);
+}
+
+.admin-pin-input::placeholder {
+  color: rgba(255, 255, 255, 0.3);
+  letter-spacing: 0.5px;
+  font-weight: 400;
+}
+
+/* Animación shake para PIN incorrecto */
+.admin-pin-input.shake-error {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 15px rgba(239, 68, 68, 0.5) !important;
+  animation: shake 0.4s ease-in-out;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-8px); }
+  40%, 80% { transform: translateX(8px); }
+}
+
+.admin-pin-error {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: #fca5a5;
+  font-weight: 600;
+  text-align: center;
+}
+
 .finish-modal-container, .history-modal-container {
   background: linear-gradient(180deg, rgba(23, 26, 33, 0.98) 0%, rgba(15, 15, 27, 0.98) 100%);
   border: 2px solid #a855f7;
@@ -3898,6 +4060,235 @@
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+/* ==================== SKELETON LOADERS ==================== */
+/* Bloques de contenido parpadeante con estilo oscuro y neón,
+   animación shimmer que recorre el bloque con un gradiente púrpura/cyan. */
+
+@keyframes skeletonShimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton {
+  position: relative;
+  display: block;
+  background: linear-gradient(
+    100deg,
+    rgba(27, 40, 56, 0.7) 30%,
+    rgba(42, 71, 94, 0.9) 50%,
+    rgba(27, 40, 56, 0.7) 70%
+  );
+  background-size: 200% 100%;
+  border-radius: 8px;
+  animation: skeletonShimmer 1.6s ease-in-out infinite;
+  /* Tono neón sutil en el borde */
+  border: 1px solid rgba(157, 78, 221, 0.12);
+  overflow: hidden;
+}
+
+/* Brillo neón que se desplaza sobre el skeleton */
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 30%,
+    rgba(168, 85, 247, 0.18) 50%,
+    transparent 70%
+  );
+  background-size: 200% 100%;
+  animation: skeletonShimmer 1.6s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* ─── Header Skeleton ─── */
+.skeleton-header {
+  /* Mantiene el layout del header real */
+}
+
+.skeleton-badge {
+  width: 220px;
+  height: 28px;
+  border-radius: 20px;
+}
+
+.skeleton-title {
+  width: 420px;
+  max-width: 90%;
+  height: 44px;
+  border-radius: 10px;
+}
+
+.skeleton-subtitle {
+  width: 340px;
+  max-width: 80%;
+  height: 18px;
+  border-radius: 6px;
+}
+
+.skeleton-divider {
+  width: 140px;
+  height: 3px;
+  border-radius: 2px;
+  margin-top: 8px;
+}
+
+/* ─── Voters Section Skeleton ─── */
+.skeleton-section-title {
+  width: 320px;
+  height: 24px;
+  border-radius: 6px;
+}
+
+.skeleton-section-badge {
+  width: 140px;
+  height: 22px;
+  border-radius: 12px;
+}
+
+/* ─── User Card Skeleton ─── */
+.skeleton-card {
+  cursor: default;
+  animation: fadeInScale 0.5s ease-out both;
+  /* Sin hover ni drag en skeleton */
+  pointer-events: none;
+}
+
+.skeleton-card:nth-child(1) { animation-delay: 0.05s; }
+.skeleton-card:nth-child(2) { animation-delay: 0.1s; }
+.skeleton-card:nth-child(3) { animation-delay: 0.15s; }
+.skeleton-card:nth-child(4) { animation-delay: 0.2s; }
+
+.skeleton-avatar {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 2px solid rgba(157, 78, 221, 0.25);
+  box-shadow: 0 0 10px rgba(157, 78, 221, 0.15);
+}
+
+.skeleton-name {
+  width: 120px;
+  height: 16px;
+  border-radius: 6px;
+}
+
+.skeleton-aura-badge {
+  width: 90px;
+  height: 14px;
+  border-radius: 10px;
+  margin-top: 4px;
+}
+
+.skeleton-multiplier-bar {
+  width: 100%;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px dashed rgba(157, 78, 221, 0.2);
+}
+
+.skeleton-vote-item {
+  width: 100%;
+  height: 46px;
+  border-radius: 10px;
+  background: rgba(23, 26, 33, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* ─── Winner Banner Skeleton ─── */
+.skeleton-trophy-tag {
+  width: 240px;
+  height: 30px;
+  border-radius: 20px;
+  align-self: flex-start;
+}
+
+.skeleton-winner-image {
+  width: 360px;
+  max-width: 100%;
+  aspect-ratio: 616 / 353;
+  flex-shrink: 0;
+  border-radius: 14px;
+  border: 2px solid rgba(157, 78, 221, 0.3);
+  box-shadow: 0 0 20px rgba(157, 78, 221, 0.2);
+}
+
+.skeleton-winner-genre {
+  width: 140px;
+  height: 16px;
+  border-radius: 6px;
+}
+
+.skeleton-winner-title {
+  width: 280px;
+  height: 36px;
+  border-radius: 8px;
+}
+
+.skeleton-winner-description {
+  width: 100%;
+  max-width: 420px;
+  height: 42px;
+  border-radius: 6px;
+}
+
+.skeleton-stat-card {
+  width: 100%;
+  height: 70px;
+  border-radius: 12px;
+  border: 1px solid var(--neon-purple-bright);
+  background: linear-gradient(135deg, rgba(157, 78, 221, 0.12) 0%, rgba(27, 40, 56, 0.8) 100%);
+}
+
+/* ─── Footer Skeleton ─── */
+.skeleton-footer-text {
+  width: 320px;
+  height: 14px;
+  margin: 0 auto;
+  border-radius: 6px;
+}
+
+/* Responsive: ajustar skeleton en móvil */
+@media (max-width: 600px) {
+  .skeleton-title {
+    width: 280px;
+    height: 36px;
+  }
+  .skeleton-subtitle {
+    width: 240px;
+  }
+  .skeleton-section-title {
+    width: 200px;
+  }
+  .skeleton-winner-image {
+    width: 100%;
+  }
+  .skeleton-winner-title {
+    width: 200px;
+    height: 28px;
+  }
+}
+
+/* Respeta prefers-reduced-motion: desactiva shimmer */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton,
+  .skeleton::after {
+    animation: none;
+  }
+  .skeleton {
+    background: rgba(27, 40, 56, 0.8);
+  }
+  .skeleton::after {
+    background: none;
+  }
 }
 
 /* ==================== INSTALL PROMPT BUTTON ==================== */

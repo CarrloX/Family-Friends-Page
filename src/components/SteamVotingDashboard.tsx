@@ -8,6 +8,8 @@ import { InstallPrompt } from './InstallPrompt';
 import { FinishVotingModal } from './FinishVotingModal';
 import { VotingHistoryModal } from './VotingHistoryModal';
 import { DeleteUserConfirmModal } from './DeleteUserConfirmModal';
+import { DashboardSkeleton } from './DashboardSkeleton';
+import { AdminPinModal } from './AdminPinModal';
 import { calculateResults } from '../data/votingData';
 import type { Voter, Game, VotingHistoryRecord, AuraRank } from '../types/voting';
 import { FaCog } from "react-icons/fa";
@@ -29,7 +31,7 @@ import {
   importBackup,
   type SyncState,
 } from '../services/dataStore';
-import { getAdminAccessState, requestAdminUnlock } from '../services/accessControl';
+import { getAdminAccessState, requestAdminUnlock, unlockWithPin } from '../services/accessControl';
 
 const MIN_VOTERS = 2;
 const MAX_VOTERS = 6;
@@ -92,14 +94,24 @@ const ResetAuraConfirmModal: React.FC<{
   onCancel: () => void;
 }> = ({ onConfirm, onCancel }) => {
   return (
-    <div className="modal-backdrop">
-      <button
-        type="button"
-        className="modal-backdrop-close"
-        onClick={onCancel}
-        aria-label="Cerrar modal"
-      />
-      <div className="delete-confirm-modal-container">
+    <motion.div
+      className="modal-backdrop bottom-sheet-backdrop"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.25 }}
+      onClick={onCancel}
+    >
+      <motion.div
+        className="delete-confirm-modal-container bottom-sheet-panel"
+        initial={{ y: '100%', opacity: 0, scale: 0.95 }}
+        animate={{ y: 0, opacity: 1, scale: 1 }}
+        exit={{ y: '100%', opacity: 0, scale: 0.95 }}
+        transition={{ type: 'spring', stiffness: 320, damping: 30 }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Handle visual superior estilo bottom sheet */}
+        <div className="bottom-sheet-handle" aria-hidden="true"></div>
         <div className="modal-header">
           <div className="modal-title-group">
             <h2>⚠️ Restablecer Aura</h2>
@@ -129,8 +141,8 @@ const ResetAuraConfirmModal: React.FC<{
           <button type="button" className="btn-modal-cancel" onClick={onCancel}>Cancelar</button>
           <button type="button" className="btn-modal-confirm-delete" onClick={onConfirm}>Confirmar Restablecimiento</button>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 };
 
@@ -151,6 +163,7 @@ export const SteamVotingDashboard: React.FC = () => {
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [showReadOnlyBanner, setShowReadOnlyBanner] = useState<boolean>(false);
+  const [showPinModal, setShowPinModal] = useState<boolean>(false);
 
   const [syncState, setSyncState] = useState<SyncState>({ status: 'idle', message: '' });
 
@@ -159,6 +172,8 @@ export const SteamVotingDashboard: React.FC = () => {
    const activeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
    const apiKeyDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
    const importFileInputRef = useRef<HTMLInputElement | null>(null);
+   // Ref para resolver la Promise del modal de PIN
+   const pinModalResolveRef = useRef<((value: boolean) => void) | null>(null);
 
   const canManageContent = adminAccess.canManageContent;
   const isReadOnlyMode = adminAccess.isReadOnly;
@@ -224,22 +239,6 @@ export const SteamVotingDashboard: React.FC = () => {
       setIsEditMode(false);
     }
   }, [canManageContent]);
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.shiftKey && event.altKey && event.key.toLowerCase() === 'a') {
-        event.preventDefault();
-        const unlocked = requestAdminUnlock();
-        setAdminAccess(getAdminAccessState());
-        if (unlocked) {
-          setIsEditMode(false);
-        }
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
 
   // ─── Sincronización con debounce ─────────────────────────
   const debouncedSaveVoters = useCallback((votersToSave: Voter[]) => {
@@ -322,17 +321,78 @@ export const SteamVotingDashboard: React.FC = () => {
     }));
   }, []);
 
+  // ─── Desbloqueo de admin vía modal BottomSheet (reemplaza window.prompt) ───
+  const requestAdminUnlockViaModal = useCallback((): Promise<boolean> => {
+    const state = getAdminAccessState();
+    // Si ya tiene acceso (local o sesión previa), no necesita PIN
+    if (state.canManageContent) {
+      return Promise.resolve(true);
+    }
+    // Si es entorno local, desbloquea sin PIN
+    if (state.isLocalEnvironment) {
+      setAdminAccess(getAdminAccessState());
+      return Promise.resolve(true);
+    }
+    // En producción: abre el modal de PIN y espera la resolución
+    return new Promise<boolean>((resolve) => {
+      pinModalResolveRef.current = resolve;
+      setShowPinModal(true);
+    });
+  }, []);
+
+  // Handler cuando el usuario envía el PIN en el modal
+  const handlePinSubmit = useCallback((enteredPin: string): boolean => {
+    const isValid = unlockWithPin(enteredPin);
+    if (isValid) {
+      setAdminAccess(getAdminAccessState());
+      setShowPinModal(false);
+      pinModalResolveRef.current?.(true);
+      pinModalResolveRef.current = null;
+    }
+    // Si no es válido, retorna false para que el modal muestre el error
+    return isValid;
+  }, []);
+
+  // Handler cuando el usuario cancela el modal de PIN
+  const handlePinCancel = useCallback(() => {
+    setShowPinModal(false);
+    pinModalResolveRef.current?.(false);
+    pinModalResolveRef.current = null;
+  }, []);
+
+  // Atajo de teclado Shift + Alt + A para desbloqueo de admin
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.shiftKey && event.altKey && event.key.toLowerCase() === 'a') {
+        event.preventDefault();
+        // Desbloqueo asíncrono vía modal BottomSheet (reemplaza window.prompt)
+        requestAdminUnlockViaModal().then((unlocked) => {
+          setAdminAccess(getAdminAccessState());
+          if (unlocked) {
+            setIsEditMode(false);
+          }
+        });
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [requestAdminUnlockViaModal]);
+
   const handleToggleEditMode = useCallback(() => {
     if (!canManageContent) {
-      const unlocked = requestAdminUnlock();
-      setAdminAccess(getAdminAccessState());
-      if (!unlocked) {
-        return;
-      }
+      // Desbloqueo asíncrono vía modal BottomSheet
+      requestAdminUnlockViaModal().then((unlocked) => {
+        setAdminAccess(getAdminAccessState());
+        if (unlocked) {
+          setIsEditMode((prev) => !prev);
+        }
+      });
+      return;
     }
 
     setIsEditMode((prev) => !prev);
-  }, [canManageContent]);
+  }, [canManageContent, requestAdminUnlockViaModal]);
 
   const handleConfirmFinishVoting = useCallback(async (
     updatedVoters: Voter[],
@@ -585,17 +645,10 @@ export const SteamVotingDashboard: React.FC = () => {
   };
 
   // ─── Loading state ────────────────────────────────────────
+  // Skeleton loaders animados que imitan la estructura del dashboard
+  // mientras se realiza la lectura inicial de Firestore.
   if (isLoading) {
-    return (
-      <div className="steam-dashboard-container">
-        <div className="bg-gradient-overlay"></div>
-        <div className="bg-grid-lines"></div>
-        <div className="loading-container">
-          <div className="loading-spinner"></div>
-          <p className="loading-text">Cargando datos...</p>
-        </div>
-      </div>
-    );
+    return <DashboardSkeleton />;
   }
 
   // ─── Render principal ─────────────────────────────────────
@@ -861,6 +914,17 @@ export const SteamVotingDashboard: React.FC = () => {
             key="reset-aura-modal"
             onConfirm={handleResetAllAura}
             onCancel={() => setShowResetAuraConfirm(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Modal de PIN de administrador (BottomSheet animado) */}
+      <AnimatePresence>
+        {showPinModal && (
+          <AdminPinModal
+            key="admin-pin-modal"
+            onCancel={handlePinCancel}
+            onSuccess={handlePinSubmit}
           />
         )}
       </AnimatePresence>
