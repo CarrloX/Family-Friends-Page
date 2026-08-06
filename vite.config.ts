@@ -9,7 +9,7 @@ export default defineConfig({
     react(),
     babel({ presets: [reactCompilerPreset()] }),
     VitePWA({
-      registerType: 'autoUpdate',
+      registerType: 'prompt',
       includeAssets: ['favicon.svg', 'icons.svg', 'icons/icon.png'],
       manifest: {
         name: 'Steam Family - Votación de Juegos',
@@ -41,16 +41,33 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,woff2}'],
+        globPatterns: ['**/*.{html,js,css,ico,png,svg,woff2}'],
+        cleanupOutdatedCaches: true,
+        skipWaiting: true,
+        clientsClaim: true,
         runtimeCaching: [
+          {
+            urlPattern: /\.(?:js|css|woff2?|ttf|otf|eot)$/i,
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'app-assets-cache',
+              expiration: {
+                maxEntries: 50,
+                maxAgeSeconds: 30 * 24 * 60 * 60, // 30 días
+              },
+              cacheableResponse: {
+                statuses: [0, 200],
+              },
+            },
+          },
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
             handler: 'CacheFirst',
             options: {
-              cacheName: 'google-fonts-cache',
+              cacheName: 'google-fonts-stylesheets-cache',
               expiration: {
                 maxEntries: 10,
-                maxAgeSeconds: 60 * 60 * 24 * 365,
+                maxAgeSeconds: 365 * 24 * 60 * 60, // 1 año
               },
               cacheableResponse: {
                 statuses: [0, 200],
@@ -61,10 +78,10 @@ export default defineConfig({
             urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
             handler: 'CacheFirst',
             options: {
-              cacheName: 'gstatic-fonts-cache',
+              cacheName: 'google-fonts-webfonts-cache',
               expiration: {
-                maxEntries: 10,
-                maxAgeSeconds: 60 * 60 * 24 * 365,
+                maxEntries: 30,
+                maxAgeSeconds: 365 * 24 * 60 * 60, // 1 año
               },
               cacheableResponse: {
                 statuses: [0, 200],
@@ -72,13 +89,17 @@ export default defineConfig({
             },
           },
           {
-            urlPattern: /^https:\/\/.*\.firebaseio\.com\/.*/i,
-            handler: 'NetworkFirst',
+            urlPattern: /^https:\/\/(?:.*\.firebaseio\.com|firestore\.googleapis\.com|identitytoolkit\.googleapis\.com|securetoken\.googleapis\.com)\/.*/i,
+            handler: 'NetworkOnly',
+          },
+          {
+            urlPattern: /^https:\/\/(?:.*\.steamstatic\.com|images\.unsplash\.com)\/.*/i,
+            handler: 'CacheFirst',
             options: {
-              cacheName: 'firebase-cache',
+              cacheName: 'steam-and-external-images-cache',
               expiration: {
                 maxEntries: 50,
-                maxAgeSeconds: 60 * 60 * 24,
+                maxAgeSeconds: 30 * 24 * 60 * 60, // 30 días
               },
               cacheableResponse: {
                 statuses: [0, 200],
@@ -86,13 +107,13 @@ export default defineConfig({
             },
           },
           {
-            urlPattern: /^https:\/\/firestore\.googleapis\.com\/.*/i,
-            handler: 'NetworkFirst',
+            urlPattern: /\/(?:favicon\.svg|icons\.svg|icons\/.*)$/i,
+            handler: 'CacheFirst',
             options: {
-              cacheName: 'firestore-cache',
+              cacheName: 'local-images-icons-cache',
               expiration: {
-                maxEntries: 100,
-                maxAgeSeconds: 60 * 60 * 24,
+                maxEntries: 50,
+                maxAgeSeconds: 30 * 24 * 60 * 60, // 30 días
               },
               cacheableResponse: {
                 statuses: [0, 200],

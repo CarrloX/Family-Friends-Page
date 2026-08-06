@@ -223,6 +223,28 @@
   animation: glowPulse 2s ease-in-out infinite;
 }
 
+.offline-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(23, 26, 33, 0.85);
+  border: 1px solid #ef4444;
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.4);
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: #ef4444;
+  transition: all 0.3s ease;
+  animation: fadeInUp 0.4s ease-out;
+}
+
+.offline-badge:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.6);
+}
+
 .live-dot {
   width: 8px;
   height: 8px;
@@ -232,9 +254,28 @@
   animation: pulse-dot 1.8s infinite;
 }
 
+.offline-dot {
+  width: 8px;
+  height: 8px;
+  background-color: #ef4444;
+  border-radius: 50%;
+  box-shadow: 0 0 8px #ef4444;
+  animation: pulse-offline-dot 1.8s infinite;
+}
+
+.offline-icon {
+  font-size: 14px;
+}
+
 @keyframes pulse-dot {
   0% { transform: scale(0.95); opacity: 0.8; }
   50% { transform: scale(1.2); opacity: 1; box-shadow: 0 0 12px #22c55e; }
+  100% { transform: scale(0.95); opacity: 0.8; }
+}
+
+@keyframes pulse-offline-dot {
+  0% { transform: scale(0.95); opacity: 0.8; }
+  50% { transform: scale(1.2); opacity: 1; box-shadow: 0 0 12px #ef4444; }
   100% { transform: scale(0.95); opacity: 0.8; }
 }
 
@@ -5099,4 +5140,60 @@ background: #3b0764;
   .voter-payment-row:nth-child(4) { animation: slideInLeft 0.3s ease-out 0.3s both; }
   .voter-payment-row:nth-child(5) { animation: slideInLeft 0.3s ease-out 0.4s both; }
   .voter-payment-row:nth-child(6) { animation: slideInLeft 0.3s ease-out 0.5s both; }
+}
+
+/* Tostada de actualización de la App PWA */
+.update-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: rgba(23, 26, 33, 0.95);
+  border: 1px solid var(--neon-purple-bright);
+  box-shadow: 0 8px 32px rgba(157, 78, 221, 0.3), 0 0 15px var(--neon-purple-glow);
+  padding: 14px 20px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  z-index: 9999;
+  backdrop-filter: blur(8px);
+}
+
+.update-toast-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.update-toast-icon {
+  font-size: 18px;
+}
+
+.update-toast-text {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--steam-text-bright);
+}
+
+.update-toast-btn {
+  background: linear-gradient(135deg, var(--neon-purple-bright) 0%, var(--bg-purple-solid) 100%);
+  color: #fff;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 0 10px rgba(157, 78, 221, 0.4);
+}
+
+.update-toast-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 0 15px rgba(157, 78, 221, 0.6);
+  filter: brightness(1.1);
+}
+
+.update-toast-btn:active {
+  transform: translateY(0);
 }
