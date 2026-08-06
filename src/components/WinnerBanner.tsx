@@ -1,14 +1,18 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import type { GameResult } from '../types/voting';
+import { getMaxVotePoints } from '../types/voting';
 
 interface WinnerBannerProps {
   results: GameResult[];
+  votersCount?: number;
 }
 
-export const WinnerBanner: React.FC<WinnerBannerProps> = React.memo(({ results }) => {
+export const WinnerBanner: React.FC<WinnerBannerProps> = React.memo(({ results, votersCount = 0 }) => {
   const winner = results[0];
   const runnersUp = results.slice(1);
+  const maxPoints = getMaxVotePoints(results.length);
+  const totalVoters = votersCount;
 
   if (!winner?.game) {
     return (
@@ -103,8 +107,8 @@ export const WinnerBanner: React.FC<WinnerBannerProps> = React.memo(({ results }
                   whileHover={{ scale: 1.03 }}
                   whileTap={{ scale: 0.97 }}
                 >
-                  <span className="stat-label">VOTOS DE FAVORITO (3 PTS)</span>
-                  <span className="stat-value">{winner.firstPlaceVotes} <small>/ 5 integrantes</small></span>
+                  <span className="stat-label">VOTOS DE FAVORITO ({maxPoints} PTS)</span>
+                  <span className="stat-value">{winner.firstPlaceVotes} <small>/ {totalVoters} integrantes</small></span>
                 </motion.div>
 
                 <motion.div
@@ -133,7 +137,7 @@ export const WinnerBanner: React.FC<WinnerBannerProps> = React.memo(({ results }
             } else if (rankPosition === 3) {
               rankLabel = '3º LUGAR 🥉';
             } else {
-              rankLabel = '4º LUGAR';
+              rankLabel = `${rankPosition}º LUGAR`;
             }
 
             return (

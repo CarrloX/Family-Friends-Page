@@ -78,6 +78,7 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
       }),
       winningGame: winningResult.game,
       gamesMap: { ...gamesMap },
+      games: Object.values(gamesMap),
       votersSnapshots: snapshots,
       resultsSnapshot: allResults,
     };

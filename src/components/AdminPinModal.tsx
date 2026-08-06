@@ -37,7 +37,7 @@ export const AdminPinModal: React.FC<AdminPinModalProps> = ({ onCancel, onSucces
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onCancel]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: React.SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!pin.trim()) {
       setError('Ingresa el PIN de administrador.');

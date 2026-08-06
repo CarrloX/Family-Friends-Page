@@ -22,7 +22,7 @@ export interface Game {
 
 export interface GameVote {
   gameId: string;
-  points: 3 | 2 | 1 | 0;
+  points: number; // 0 = sin voto; el máximo depende de la cantidad de juegos (proporcional)
 }
 
 export interface Voter {
@@ -62,8 +62,34 @@ export interface VotingHistoryRecord {
   date: string;
   winningGame: Game;
   gamesMap: Record<string, Game>;
+  /** Array dinámico de juegos propuestos en orden de la votación */
+  games?: Game[];
   votersSnapshots: VoterSnapshotInHistory[];
   resultsSnapshot: GameResult[];
+}
+
+/**
+ * Calcula la cantidad máxima de puntos que un votante puede asignar a un juego.
+ * Con N juegos propuestos, el 1.er lugar recibe (N-1) puntos, el 2.º (N-2), etc.
+ * Ejemplo: 6 juegos → máx 5 puntos; 3 juegos → máx 2 puntos.
+ * El 0 siempre está disponible para indicar "sin voto".
+ */
+export function getMaxVotePoints(gameCount: number): number {
+  return Math.max(1, gameCount - 1);
+}
+
+/**
+ * Genera las opciones de puntos disponibles para un votante según la cantidad de juegos.
+ * Devuelve un array de mayor a menor: [N-1, N-2, ..., 2, 1, 0]
+ */
+export function getVotePointOptions(gameCount: number): number[] {
+  const max = getMaxVotePoints(gameCount);
+  const options: number[] = [];
+  for (let p = max; p >= 1; p--) {
+    options.push(p);
+  }
+  options.push(0);
+  return options;
 }
 
 /**

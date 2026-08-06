@@ -12,6 +12,7 @@ import { DashboardSkeleton } from './DashboardSkeleton';
 import { AdminPinModal } from './AdminPinModal';
 import { calculateResults } from '../data/votingData';
 import type { Voter, Game, VotingHistoryRecord, AuraRank } from '../types/voting';
+import { getMaxVotePoints } from '../types/voting';
 import { FaCog } from "react-icons/fa";
 import {
   saveVoters,
@@ -35,6 +36,8 @@ import { getAdminAccessState, requestAdminUnlock, unlockWithPin } from '../servi
 
 const MIN_VOTERS = 2;
 const MAX_VOTERS = 6;
+const MIN_GAMES = 2;
+const MAX_GAMES = 6;
 const DEBOUNCE_MS = 800;
 
 // ─── Helpers para reducir anidación ────────────────────────
@@ -180,13 +183,16 @@ export const SteamVotingDashboard: React.FC = () => {
 
   useEffect(() => {
     if (!isReadOnlyMode) {
-      setShowReadOnlyBanner(false);
       return;
     }
 
-    setShowReadOnlyBanner(true);
-    const timer = window.setTimeout(() => setShowReadOnlyBanner(false), 3000);
-    return () => window.clearTimeout(timer);
+    // Mostrar el banner de solo lectura con un pequeño delay y ocultarlo tras 3s
+    const showTimer = window.setTimeout(() => setShowReadOnlyBanner(true), 0);
+    const hideTimer = window.setTimeout(() => setShowReadOnlyBanner(false), 3000);
+    return () => {
+      window.clearTimeout(showTimer);
+      window.clearTimeout(hideTimer);
+    };
   }, [isReadOnlyMode]);
 
   // ─── Carga inicial de datos ───────────────────────────────
@@ -309,6 +315,40 @@ export const SteamVotingDashboard: React.FC = () => {
   // ─── Calcular resultados ─────────────────────────────────
   const results = useMemo(() => calculateResults(voters, gamesMap), [voters, gamesMap]);
 
+  // ─── Reconciliar votos de los integrantes con gamesMap (autocorregir desalineaciones/IDs huérfanos) ───
+  useEffect(() => {
+    const gameIds = Object.keys(gamesMap);
+    if (gameIds.length === 0) return;
+
+    const validGameIds = new Set(gameIds);
+
+    setVoters((prevVoters) => {
+      let changed = false;
+      const updatedVoters = prevVoters.map((voter) => {
+        // Filtrar votos correspondientes a IDs inexistentes en gamesMap
+        const validVotes = voter.votes.filter((v) => validGameIds.has(v.gameId));
+
+        // Detectar juegos de gamesMap que falten en los votos del integrante
+        const existingGameIds = new Set(validVotes.map((v) => v.gameId));
+        const missingGameIds = gameIds.filter((id) => !existingGameIds.has(id));
+
+        if (validVotes.length !== voter.votes.length || missingGameIds.length > 0) {
+          changed = true;
+          return {
+            ...voter,
+            votes: [
+              ...validVotes,
+              ...missingGameIds.map((id) => ({ gameId: id, points: 0 })),
+            ],
+          };
+        }
+        return voter;
+      });
+
+      return changed ? updatedVoters : prevVoters;
+    });
+  }, [gamesMap]);
+
   // ─── Handlers ─────────────────────────────────────────────
   const handleUpdateVoter = useCallback((updatedVoter: Voter) => {
     setVoters((prev) => prev.map((v) => (v.id === updatedVoter.id ? updatedVoter : v)));
@@ -320,6 +360,62 @@ export const SteamVotingDashboard: React.FC = () => {
       [gameId]: updatedGame,
     }));
   }, []);
+
+  const handleAddGame = useCallback(() => {
+    const currentCount = Object.keys(gamesMap).length;
+    if (currentCount >= MAX_GAMES) return;
+
+    const randomBytes = new Uint8Array(6);
+    crypto.getRandomValues(randomBytes);
+    const randomSuffix = Array.from(randomBytes).map((b) => b.toString(16).padStart(2, '0')).join('');
+    const newGameId = `game_${Date.now()}_${randomSuffix}`;
+
+    const newGame: Game = {
+      id: newGameId,
+      title: `Nuevo Juego ${currentCount + 1}`,
+      genre: 'Por definir',
+      coverImage: 'https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/730/capsule_sm_120.jpg',
+      description: 'Buscá un juego en Steam o editá los campos manualmente.',
+    };
+
+    setGamesMap((prev) => ({ ...prev, [newGameId]: newGame }));
+
+    setVoters((prevVoters) =>
+      prevVoters.map((voter) => ({
+        ...voter,
+        votes: [...voter.votes, { gameId: newGameId, points: 0 }],
+      }))
+    );
+  }, [gamesMap]);
+
+  const handleDeleteGame = useCallback((gameId: string) => {
+    setGamesMap((prev) => {
+      const currentCount = Object.keys(prev).length;
+      if (currentCount <= MIN_GAMES) return prev;
+
+      const next = { ...prev };
+      delete next[gameId];
+      return next;
+    });
+
+    // Nuevo máximo de puntos después de eliminar el juego
+    const newGameCount = Object.keys(gamesMap).length - 1;
+    const newMaxPoints = getMaxVotePoints(newGameCount);
+
+    // Quitar el voto del juego eliminado y ajustar (clamping) los puntos
+    // de los votos restantes al nuevo máximo proporcional.
+    setVoters((prevVoters) =>
+      prevVoters.map((voter) => ({
+        ...voter,
+        votes: voter.votes
+          .filter((v) => v.gameId !== gameId)
+          .map((v) => ({
+            ...v,
+            points: Math.min(v.points, newMaxPoints),
+          })),
+      }))
+    );
+  }, [gamesMap]);
 
   // ─── Desbloqueo de admin vía modal BottomSheet (reemplaza window.prompt) ───
   const requestAdminUnlockViaModal = useCallback((): Promise<boolean> => {
@@ -526,7 +622,7 @@ export const SteamVotingDashboard: React.FC = () => {
       multiplier: 1.0,
       votes: Object.keys(gamesMap).map((gameId) => ({
         gameId,
-        points: 0 as const,
+        points: 0,
       })),
     };
     setVoters((prev) => [...prev, newVoter]);
@@ -817,7 +913,14 @@ export const SteamVotingDashboard: React.FC = () => {
               exit={{ opacity: 0, y: -15, height: 0 }}
               transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
             >
-              <GameSearchEditor gamesMap={gamesMap} onUpdateGame={handleUpdateGame} />
+              <GameSearchEditor
+                gamesMap={gamesMap}
+                onUpdateGame={handleUpdateGame}
+                onAddGame={handleAddGame}
+                onDeleteGame={handleDeleteGame}
+                minGames={MIN_GAMES}
+                maxGames={MAX_GAMES}
+              />
             </motion.div>
           )}
         </AnimatePresence>
@@ -857,7 +960,7 @@ export const SteamVotingDashboard: React.FC = () => {
           </div>
         </section>
 
-        <WinnerBanner results={results} />
+        <WinnerBanner results={results} votersCount={voters.length} />
 
         <div className="history-footer-action">
           <motion.button

@@ -6,26 +6,28 @@ interface VoteItemProps {
   vote: GameVote;
   game: Game | undefined;
   multiplier: number;
+  maxPoints?: number;
 }
 
 export const VoteItem: React.FC<VoteItemProps> = React.memo(({
   vote,
   game,
   multiplier,
+  maxPoints = 3,
 }) => {
   if (!game) return null;
 
-  const is3Pts = vote.points === 3;
-  const is2Pts = vote.points === 2;
-  const is1Pt = vote.points === 1;
+  const isMaxPts = vote.points === maxPoints;
+  const isMidPts = vote.points > 1 && vote.points < maxPoints;
+  const isLowPts = vote.points === 1;
   const is0Pts = vote.points === 0;
 
   const weightedScore = (vote.points * multiplier).toFixed(2);
 
   let voteItemClass = 'vote-item';
-  if (is3Pts) voteItemClass += ' favorite-item';
-  if (is2Pts) voteItemClass += ' medium-item';
-  if (is1Pt) voteItemClass += ' low-item';
+  if (isMaxPts) voteItemClass += ' favorite-item';
+  if (isMidPts) voteItemClass += ' medium-item';
+  if (isLowPts) voteItemClass += ' low-item';
   if (is0Pts) voteItemClass += ' muted-item';
 
   return (
@@ -63,7 +65,7 @@ export const VoteItem: React.FC<VoteItemProps> = React.memo(({
       <div className="vote-game-info">
         <div className="game-title-row">
           <span className="game-title">{game.title}</span>
-          {is3Pts && <span className="favorite-badge">⭐ FAVORITO</span>}
+          {isMaxPts && <span className="favorite-badge">⭐ FAVORITO</span>}
         </div>
         <div className="vote-points-row">
           <span className="base-pts">

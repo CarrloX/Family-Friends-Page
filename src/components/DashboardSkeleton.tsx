@@ -8,8 +8,8 @@ import React from 'react';
  * Usa el estilo oscuro y neón de la app con animación shimmer.
  */
 export const DashboardSkeleton: React.FC = () => {
-  // Número de tarjetas skeleton a mostrar (representa un grupo típico de 4 integrantes)
-  const skeletonCards = Array.from({ length: 4 });
+  // Identificadores estáticos únicos para las tarjetas skeleton para evitar usar índices de array como key
+  const skeletonCards = ['card-skeleton-1', 'card-skeleton-2', 'card-skeleton-3', 'card-skeleton-4'];
 
   return (
     <div className="steam-dashboard-container">
@@ -33,8 +33,8 @@ export const DashboardSkeleton: React.FC = () => {
           </div>
 
           <div className="user-cards-grid">
-            {skeletonCards.map((_, idx) => (
-              <div key={idx} className="user-card skeleton-card">
+            {skeletonCards.map((cardKey) => (
+              <div key={cardKey} className="user-card skeleton-card">
                 {/* Card header: avatar + name + aura */}
                 <div className="card-header">
                   <div className="skeleton skeleton-avatar"></div>

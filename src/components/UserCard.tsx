@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import type { Voter, AuraRank, Game } from '../types/voting';
+import { getVotePointOptions } from '../types/voting';
 import { fetchSteamProfile, isValidSteamId64 } from '../services/steamApi';
 import { FaTimes } from "react-icons/fa";
 import { VoteItem } from './VoteItem';
@@ -140,12 +141,12 @@ export const UserCard: React.FC<UserCardProps> = React.memo(({
     }
   };
 
-  // Game Points Handler
+  // Game Points Handler (proporcional a la cantidad de juegos)
   const handlePointsChange = (gameId: string, newPoints: number) => {
     if (!onUpdateVoter) return;
 
     const updatedVotes = voter.votes.map((v) =>
-      v.gameId === gameId ? { ...v, points: newPoints as 3 | 2 | 1 | 0 } : v
+      v.gameId === gameId ? { ...v, points: newPoints } : v
     );
 
     onUpdateVoter({
@@ -153,6 +154,18 @@ export const UserCard: React.FC<UserCardProps> = React.memo(({
       votes: updatedVotes,
     });
   };
+
+  const gameCount = Object.keys(gamesMap).length;
+  const pointOptions = getVotePointOptions(gameCount);
+  const maxPoints = pointOptions[0] ?? 0;
+
+  // Sanitizar puntos existentes: si un voto tiene un valor mayor al máximo actual
+  // (por ejemplo, tras eliminar juegos), se muestra 0 para evitar selects fuera de rango.
+  const sanitizedVotes = voter.votes.map((v) => ({
+    ...v,
+    points: v.points > maxPoints ? 0 : v.points,
+  }));
+  const displayVotes = sanitizedVotes;
 
   return (
     <motion.div
@@ -304,7 +317,7 @@ export const UserCard: React.FC<UserCardProps> = React.memo(({
           <div className="edit-field-group">
             <span className="edit-label">🎮 Asignación de Puntos por Juego:</span>
             <div className="game-votes-editor">
-              {voter.votes.map((vote) => {
+              {displayVotes.map((vote) => {
                 const game = gamesMap[vote.gameId];
                 return (
                   <div key={vote.gameId} className="game-vote-edit-row">
@@ -314,10 +327,19 @@ export const UserCard: React.FC<UserCardProps> = React.memo(({
                       value={vote.points}
                       onChange={(e) => handlePointsChange(vote.gameId, Number(e.target.value))}
                     >
-                      <option value={3}>⭐ 3 Pts (Favorito)</option>
-                      <option value={2}>🔷 2 Pts</option>
-                      <option value={1}>🔸 1 Pt</option>
-                      <option value={0}>⚪ 0 Pts</option>
+                      {pointOptions.map((pts) => {
+                        let label = `🔸 ${pts} Pts`;
+                        if (pts === maxPoints) {
+                          label = `⭐ ${pts} Pts (Favorito)`;
+                        } else if (pts === 0) {
+                          label = '⚪ 0 Pts';
+                        }
+                        return (
+                          <option key={pts} value={pts}>
+                            {label}
+                          </option>
+                        );
+                      })}
                     </select>
                   </div>
                 );
@@ -337,6 +359,7 @@ export const UserCard: React.FC<UserCardProps> = React.memo(({
               vote={vote}
               game={game}
               multiplier={voter.multiplier}
+              maxPoints={maxPoints}
             />
           );
         })}

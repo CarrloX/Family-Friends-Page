@@ -88,12 +88,16 @@ const DOC_ACTIVE_VOTING = 'estado';
 interface GrupoDocument {
   voters: Voter[];
   gamesMap: Record<string, Game>;
+  /** Array dinámico de juegos propuestos en orden */
+  games?: Game[];
   lastUpdated: Timestamp;
 }
 
 interface ActiveVotingDocument {
   voters: Voter[];
   gamesMap: Record<string, Game>;
+  /** Array dinámico de juegos propuestos en orden */
+  games?: Game[];
   lastUpdated: Timestamp;
 }
 
@@ -139,7 +143,10 @@ export async function saveActiveVotingState(voters: Voter[], gamesMap: Record<st
     return buildReadOnlyState();
   }
 
-  writeLocal(LS_KEY_ACTIVE_VOTING, { voters, gamesMap });
+  // Array dinámico de juegos derivado del mapa (preserva el orden)
+  const games = Object.values(gamesMap);
+
+  writeLocal(LS_KEY_ACTIVE_VOTING, { voters, gamesMap, games });
 
   if (isFirebaseReady()) {
     try {
@@ -148,7 +155,7 @@ export async function saveActiveVotingState(voters: Voter[], gamesMap: Record<st
       const docRef = doc(db, COLLECTION_ACTIVE_VOTING, DOC_ACTIVE_VOTING);
       await setDoc(
         docRef,
-        { voters, gamesMap, lastUpdated: Timestamp.now() },
+        { voters, gamesMap, games, lastUpdated: Timestamp.now() },
         { merge: true }
       );
       console.log('[DataStore] Votación actual sincronizada con Firestore.');
@@ -165,7 +172,7 @@ export async function saveActiveVotingState(voters: Voter[], gamesMap: Record<st
 /**
  * Carga el estado activo de la votación desde Firestore o localStorage.
  */
-export async function loadActiveVotingState(): Promise<{ voters: Voter[]; gamesMap: Record<string, Game> } | null> {
+export async function loadActiveVotingState(): Promise<{ voters: Voter[]; gamesMap: Record<string, Game>; games?: Game[] } | null> {
   if (isFirebaseReady()) {
     try {
       await ensureFirebaseAuth();
@@ -175,8 +182,9 @@ export async function loadActiveVotingState(): Promise<{ voters: Voter[]; gamesM
       if (snap.exists()) {
         const data = snap.data() as ActiveVotingDocument;
         if (Array.isArray(data.voters) && data.gamesMap && typeof data.gamesMap === 'object') {
-          writeLocal(LS_KEY_ACTIVE_VOTING, { voters: data.voters, gamesMap: data.gamesMap });
-          return { voters: data.voters, gamesMap: data.gamesMap };
+          const games = Array.isArray(data.games) && data.games.length > 0 ? data.games : Object.values(data.gamesMap);
+          writeLocal(LS_KEY_ACTIVE_VOTING, { voters: data.voters, gamesMap: data.gamesMap, games });
+          return { voters: data.voters, gamesMap: data.gamesMap, games };
         }
       }
     } catch (err) {
@@ -184,7 +192,7 @@ export async function loadActiveVotingState(): Promise<{ voters: Voter[]; gamesM
     }
   }
 
-  const cached = readLocal<{ voters: Voter[]; gamesMap: Record<string, Game> } | null>(LS_KEY_ACTIVE_VOTING, null);
+  const cached = readLocal<{ voters: Voter[]; gamesMap: Record<string, Game>; games?: Game[] } | null>(LS_KEY_ACTIVE_VOTING, null);
   return cached;
 }
 
@@ -226,6 +234,9 @@ export async function saveGames(gamesMap: Record<string, Game>): Promise<SyncSta
     return buildReadOnlyState();
   }
 
+  // Array dinámico de juegos derivado del mapa
+  const games = Object.values(gamesMap);
+
   if (isFirebaseReady()) {
     try {
       await ensureFirebaseAuth();
@@ -233,7 +244,7 @@ export async function saveGames(gamesMap: Record<string, Game>): Promise<SyncSta
       const docRef = doc(db, COLLECTION_GROUP, DOC_MIEMBROS);
       await setDoc(
         docRef,
-        { gamesMap, lastUpdated: Timestamp.now() },
+        { gamesMap, games, lastUpdated: Timestamp.now() },
         { merge: true }
       );
       console.log('[DataStore] Juegos sincronizados con Firestore.');
@@ -269,6 +280,14 @@ export async function loadGames(): Promise<Record<string, Game>> {
           console.log('[DataStore] Juegos cargados desde Firestore.');
           writeLocal(LS_KEY_GAMES, data.gamesMap);
           return data.gamesMap;
+        }
+        // Fallback: si solo existe el array `games`, reconstruir el mapa
+        if (Array.isArray(data.games)) {
+          const rebuiltMap: Record<string, Game> = {};
+          data.games.forEach((g) => { rebuiltMap[g.id] = g; });
+          console.log('[DataStore] Juegos reconstruidos desde array dinámico.');
+          writeLocal(LS_KEY_GAMES, rebuiltMap);
+          return rebuiltMap;
         }
       }
     } catch (err) {
@@ -424,6 +443,8 @@ export interface BackupData {
   exportedAt: string;
   voters: Voter[];
   gamesMap: Record<string, Game>;
+  /** Array dinámico de juegos propuestos en orden */
+  games?: Game[];
   history: VotingHistoryRecord[];
   steamApiKey: string;
 }
@@ -458,11 +479,13 @@ function isValidBackup(data: unknown): data is BackupData {
  */
 export function exportBackup(): void {
   try {
+    const gamesMap = readLocal<Record<string, Game>>(LS_KEY_GAMES, {});
     const data: BackupData = {
       version: BACKUP_VERSION,
       exportedAt: new Date().toISOString(),
       voters: readLocal<Voter[]>(LS_KEY_VOTERS, []),
-      gamesMap: readLocal<Record<string, Game>>(LS_KEY_GAMES, {}),
+      gamesMap,
+      games: Object.values(gamesMap),
       history: readLocal<VotingHistoryRecord[]>(LS_KEY_HISTORY, []),
       steamApiKey: readLocal<string>(LS_KEY_API_KEY, ''),
     };
@@ -501,6 +524,7 @@ export function createBackupData(
     exportedAt: new Date().toISOString(),
     voters,
     gamesMap,
+    games: Object.values(gamesMap),
     history,
     steamApiKey,
   };
@@ -591,6 +615,7 @@ export async function importBackup(
       await setDoc(docRef, {
         voters: data.voters,
         gamesMap: data.gamesMap,
+        games: data.games ?? Object.values(data.gamesMap),
         lastUpdated: Timestamp.now(),
       });
 
@@ -598,6 +623,7 @@ export async function importBackup(
       await setDoc(activeDocRef, {
         voters: data.voters,
         gamesMap: data.gamesMap,
+        games: data.games ?? Object.values(data.gamesMap),
         lastUpdated: Timestamp.now(),
       });
 

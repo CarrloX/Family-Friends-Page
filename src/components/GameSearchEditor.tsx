@@ -6,16 +6,33 @@ import { searchSteamStore, fetchSteamGameDetails, type SteamSearchResultItem } f
 interface GameSearchEditorProps {
   gamesMap: Record<string, Game>;
   onUpdateGame: (gameId: string, newGame: Game) => void;
+  onAddGame: () => void;
+  onDeleteGame: (gameId: string) => void;
+  minGames: number;
+  maxGames: number;
 }
 
-export const GameSearchEditor: React.FC<GameSearchEditorProps> = ({ gamesMap, onUpdateGame }) => {
+export const GameSearchEditor: React.FC<GameSearchEditorProps> = ({
+  gamesMap,
+  onUpdateGame,
+  onAddGame,
+  onDeleteGame,
+  minGames,
+  maxGames,
+}) => {
   const gameIds = Object.keys(gamesMap);
+  const gameCount = gameIds.length;
+  const canAdd = gameCount < maxGames;
+  const canDelete = gameCount > minGames;
 
   return (
     <div className="game-search-editor-container">
       <div className="editor-header-title">
-        <h3>🎮 BÚSQUEDA Y EDICIÓN DE LOS 4 JUEGOS DE LA VOTACIÓN</h3>
-        <p>Buscá cualquier juego en la Tienda de Steam para autocompletar su portada, nombre y descripción oficial.</p>
+        <h3>🎮 BÚSQUEDA Y EDICIÓN DE LOS {gameCount} JUEGOS DE LA VOTACIÓN</h3>
+        <p>
+          Buscá cualquier juego en la Tienda de Steam para autocompletar su portada, nombre y descripción oficial.
+          Podés tener entre {minGames} y {maxGames} juegos propuestos.
+        </p>
       </div>
 
       <div className="game-slots-grid">
@@ -26,8 +43,40 @@ export const GameSearchEditor: React.FC<GameSearchEditorProps> = ({ gamesMap, on
             gameId={gameId}
             game={gamesMap[gameId]}
             onUpdateGame={onUpdateGame}
+            onDeleteGame={onDeleteGame}
+            canDelete={canDelete}
+            minGames={minGames}
           />
         ))}
+
+        {canAdd ? (
+          <motion.button
+            type="button"
+            className="btn-add-game-slot"
+            onClick={onAddGame}
+            whileHover={{ scale: 1.03, y: -3 }}
+            whileTap={{ scale: 0.97 }}
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+          >
+            <span className="add-game-icon">➕</span>
+            <span className="add-game-text">Agregar Juego</span>
+            <span className="add-game-count">{gameCount}/{maxGames}</span>
+          </motion.button>
+        ) : (
+          <motion.div
+            className="game-slot-limit-card"
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+          >
+            <span className="limit-icon">🚫</span>
+            <span className="limit-text">Máximo alcanzado</span>
+            <span className="limit-subtext">Ya tenés {maxGames} juegos propuestos. Eliminá uno para agregar otro.</span>
+            <span className="limit-count">{gameCount}/{maxGames}</span>
+          </motion.div>
+        )}
       </div>
     </div>
   );
@@ -38,6 +87,9 @@ interface SingleGameSlotEditorProps {
   gameId: string;
   game: Game;
   onUpdateGame: (gameId: string, newGame: Game) => void;
+  onDeleteGame: (gameId: string) => void;
+  canDelete: boolean;
+  minGames: number;
 }
 
 const SingleGameSlotEditor: React.FC<SingleGameSlotEditorProps> = ({
@@ -45,6 +97,9 @@ const SingleGameSlotEditor: React.FC<SingleGameSlotEditorProps> = ({
   gameId,
   game,
   onUpdateGame,
+  onDeleteGame,
+  canDelete,
+  minGames,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<SteamSearchResultItem[]>([]);
@@ -151,7 +206,32 @@ const SingleGameSlotEditor: React.FC<SingleGameSlotEditorProps> = ({
 
   return (
     <div className="game-slot-card">
-      <div className="slot-badge">Juego #{slotIndex}</div>
+      <div className="slot-badge-row">
+        <div className="slot-badge">Juego #{slotIndex}</div>
+        {canDelete ? (
+          <motion.button
+            type="button"
+            className="btn-delete-game-slot"
+            onClick={() => onDeleteGame(gameId)}
+            title="Quitar este juego de la votación"
+            aria-label={`Eliminar juego ${game?.title || slotIndex}`}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.92 }}
+          >
+            🗑️ Eliminar Juego
+          </motion.button>
+        ) : (
+          <motion.button
+            type="button"
+            className="btn-delete-game-slot disabled"
+            disabled
+            title={`Deben quedar al menos ${minGames} juegos. Agregá un juego antes de eliminar.`}
+            aria-label={`No se puede eliminar: mínimo ${minGames} juegos requeridos`}
+          >
+            🔒 Mínimo {minGames}
+          </motion.button>
+        )}
+      </div>
 
       <div className="slot-current-preview">
         <img

@@ -1,4 +1,5 @@
 import type { Game, Voter, GameResult } from '../types/voting';
+import { getMaxVotePoints } from '../types/voting';
 
 export function calculateResults(
   votersList: Voter[],
@@ -10,12 +11,16 @@ export function calculateResults(
     scoreMap[gameId] = { raw: 0, weighted: 0, firsts: 0 };
   });
 
+  // El máximo de puntos es proporcional a la cantidad de juegos propuestos.
+  // Con N juegos, el favorito recibe N puntos.
+  const maxPoints = getMaxVotePoints(Object.keys(gamesMap).length);
+
   votersList.forEach((voter) => {
     voter.votes.forEach((vote) => {
       if (scoreMap[vote.gameId]) {
         scoreMap[vote.gameId].raw += vote.points;
         scoreMap[vote.gameId].weighted += vote.points * voter.multiplier;
-        if (vote.points === 3) {
+        if (vote.points === maxPoints) {
           scoreMap[vote.gameId].firsts += 1;
         }
       }

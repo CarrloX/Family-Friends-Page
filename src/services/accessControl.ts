@@ -1,6 +1,9 @@
 const ADMIN_SESSION_KEY = 'family_friends_admin_session_v1';
 const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1', '0.0.0.0']);
 
+export type AdminStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> | null;
+
+
 function getHostname(): string {
   if (typeof window === 'undefined') {
     return '';
@@ -42,7 +45,7 @@ export function validateAdminPin(enteredPin: string): boolean {
 export function getAdminAccessState(options?: {
   hostname?: string;
   search?: string;
-  storage?: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> | null;
+  storage?: AdminStorage;
 }) {
   const hostname = options?.hostname ?? getHostname();
   const search = options?.search ?? getSearch();
@@ -63,7 +66,7 @@ export function getAdminAccessState(options?: {
 export function requestAdminUnlock(options?: {
   hostname?: string;
   search?: string;
-  storage?: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> | null;
+  storage?: AdminStorage;
 }): boolean {
   const state = getAdminAccessState(options);
   const storage = options?.storage ?? getSessionStorage();
@@ -108,7 +111,7 @@ export function clearAdminSession(storage?: Pick<Storage, 'removeItem'> | null):
 export function unlockWithPin(
   enteredPin: string,
   options?: {
-    storage?: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> | null;
+    storage?: AdminStorage;
   }
 ): boolean {
   const storage = options?.storage ?? getSessionStorage();
