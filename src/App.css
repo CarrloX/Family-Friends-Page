@@ -1836,9 +1836,9 @@
 }
 
 .btn-delete-game-slot {
-  background: rgba(239, 68, 68, 0.15);
-  border: 1px solid rgba(239, 68, 68, 0.5);
-  color: #fca5a5;
+  background: #991b1b;
+  border: 1px solid #ef4444;
+  color: #ffffff;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1854,7 +1854,7 @@
 }
 
 .btn-delete-game-slot:hover {
-  background: rgba(239, 68, 68, 0.35);
+  background: #dc2626;
   border-color: #ef4444;
   color: #ffffff;
   box-shadow: 0 0 15px rgba(239, 68, 68, 0.6);
@@ -1876,8 +1876,8 @@
 }
 
 .game-slot-limit-card {
-  background: rgba(239, 68, 68, 0.05);
-  border: 2px dashed rgba(239, 68, 68, 0.35);
+background: #450a0a;
+  border: 2px dashed #ef4444;
   border-radius: 12px;
   padding: 20px 14px;
   display: flex;
@@ -1885,7 +1885,7 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  color: #fca5a5;
+  color: #ffffff;
   min-height: 180px;
   animation: fadeInScale 0.5s ease-out both;
   text-align: center;
@@ -1915,15 +1915,15 @@
 .limit-count {
   font-size: 11px;
   font-weight: 700;
-  color: #fca5a5;
-  background: rgba(239, 68, 68, 0.15);
+  color: #ffffff;
+  background: #991b1b;
   padding: 2px 10px;
   border-radius: 12px;
 }
 
 .btn-add-game-slot {
-  background: rgba(168, 85, 247, 0.08);
-  border: 2px dashed rgba(168, 85, 247, 0.45);
+background: #3b0764;
+  border: 2px dashed #a855f7;
   border-radius: 12px;
   padding: 20px 14px;
   display: flex;
@@ -1932,7 +1932,7 @@
   justify-content: center;
   gap: 8px;
   cursor: pointer;
-  color: #c084fc;
+  color: #ffffff;
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   min-height: 180px;
   animation: fadeInScale 0.5s ease-out both;
@@ -2735,12 +2735,12 @@
 }
 
 .admin-pin-error {
-  background: rgba(239, 68, 68, 0.15);
-  border: 1px solid rgba(239, 68, 68, 0.4);
+  background: #991b1b;
+  border: 1px solid #ef4444;
   border-radius: 8px;
   padding: 10px 14px;
   font-size: 13px;
-  color: #fca5a5;
+  color: #ffffff;
   font-weight: 600;
   text-align: center;
 }
@@ -4246,10 +4246,7 @@
   pointer-events: none;
 }
 
-/* ─── Header Skeleton ─── */
-.skeleton-header {
-  /* Mantiene el layout del header real */
-}
+/* .skeleton-header: mantiene el layout del header real */
 
 .skeleton-badge {
   width: 220px;
@@ -4541,6 +4538,7 @@
     -webkit-backdrop-filter: none !important;
     backdrop-filter: none !important;
     background: rgba(23, 26, 33, 0.92);
+    animation: fadeInScale 0.3s ease-out 0.6s both;
   }
 
 .steam-search-dropdown {
@@ -4569,6 +4567,7 @@
   /* Disable continuous glowPulse animations on mobile */
   .steam-header-badge:hover {
     animation: none !important;
+    transform: translateY(-1px);
   }
 
   .vote-item.favorite-item {
@@ -4653,18 +4652,28 @@
   /* Reduce hover transform effects on mobile to avoid jank */
   .user-card:hover {
     transform: translateY(-2px) scale(1.01);
+    border-color: rgba(157, 78, 221, 0.25);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
   }
 
   .vote-item:hover {
     transform: translateX(4px);
+    background: rgba(23, 26, 33, 0.7);
+    border-color: rgba(255, 255, 255, 0.05);
+    box-shadow: none;
   }
 
   .podium-card:hover {
     transform: translateY(-2px) scale(1.01);
+    background: rgba(11, 14, 20, 0.5);
+    border-color: rgba(255, 255, 255, 0.06);
+    box-shadow: none;
   }
 
   .stat-card:hover {
     transform: translateY(-2px) scale(1.01);
+    border-color: rgba(255, 255, 255, 0.08);
+    box-shadow: none;
   }
 
   .game-slot-card:hover {
@@ -4681,6 +4690,7 @@
 
   .btn-history-glow:hover {
     transform: translateY(-2px) scale(1.01);
+    box-shadow: 0 0 12px rgba(168, 85, 247, 0.35);
   }
 
   .steam-title:hover {
@@ -4784,9 +4794,6 @@
     filter: none;
   }
 
-  .steam-header-badge:hover {
-    transform: translateY(-1px);
-  }
 
   .voter-count-badge:hover {
     transform: scale(1.05);
@@ -4851,11 +4858,6 @@
     transform: scale(1.02);
   }
 
-  .podium-card:hover {
-    background: rgba(11, 14, 20, 0.5);
-    border-color: rgba(255, 255, 255, 0.06);
-    box-shadow: none;
-  }
 
   .stat-card:hover .stat-value {
     color: #ffffff;
@@ -4863,10 +4865,6 @@
     transform: scale(1.02);
   }
 
-  .stat-card:hover {
-    border-color: rgba(255, 255, 255, 0.08);
-    box-shadow: none;
-  }
 
   .vote-item:hover .game-title {
     color: #ffffff;
@@ -4877,11 +4875,6 @@
     text-shadow: none;
   }
 
-  .vote-item:hover {
-    background: rgba(23, 26, 33, 0.7);
-    border-color: rgba(255, 255, 255, 0.05);
-    box-shadow: none;
-  }
 
   .vote-item.muted-item:hover {
     opacity: 0.45;
@@ -4900,10 +4893,6 @@
     text-shadow: none;
   }
 
-  .user-card:hover {
-    border-color: rgba(157, 78, 221, 0.25);
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
-  }
 
   .aura-badge:hover {
     transform: scale(1.05);
@@ -4993,10 +4982,6 @@
     transform: translateX(-120%);
   }
 
-  .btn-history-glow:hover {
-    transform: translateY(-2px) scale(1.01);
-    box-shadow: 0 0 12px rgba(168, 85, 247, 0.35);
-  }
 
   .card-ambient-glow {
     animation: none !important;
@@ -5087,9 +5072,6 @@
     animation: fadeInScale 0.3s ease-out 0.5s both;
   }
 
-  .btn-action-secondary {
-    animation: fadeInScale 0.3s ease-out 0.6s both;
-  }
 
   .history-footer-action {
     animation: fadeInUp 0.4s ease-out 0.8s both;
