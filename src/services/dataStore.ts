@@ -505,7 +505,7 @@ export function exportBackup(): void {
     console.log(`[DataStore] Backup exportado: ${BACKUP_FILENAME}`);
   } catch (err) {
     console.error('[DataStore] Error al exportar backup:', err);
-    throw new Error('No se pudo exportar el backup.');
+    throw new Error('No se pudo exportar el backup.', { cause: err });
   }
 }
 
@@ -550,7 +550,7 @@ export function downloadBackup(backup: BackupData): void {
     console.log('[DataStore] Backup descargado desde datos en memoria.');
   } catch (err) {
     console.error('[DataStore] Error al descargar backup:', err);
-    throw new Error('No se pudo descargar el backup.');
+    throw new Error('No se pudo descargar el backup.', { cause: err });
   }
 }
 
@@ -572,7 +572,7 @@ export async function readBackupFile(file: File): Promise<BackupData> {
       throw err;
     }
 
-    throw new Error('No se pudo leer el archivo. Asegúrate de que sea un JSON válido.');
+    throw new Error('No se pudo leer el archivo. Asegúrate de que sea un JSON válido.', { cause: err });
   }
 }
 

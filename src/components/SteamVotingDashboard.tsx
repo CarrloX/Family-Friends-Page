@@ -149,6 +149,30 @@ const ResetAuraConfirmModal: React.FC<{
   );
 };
 
+// ─── Funciones auxiliares puras ───────────────────────────
+function reconcileVoterVotes(voters: Voter[], gameIds: string[]): { changed: boolean; updatedVoters: Voter[] } {
+  const validGameIds = new Set(gameIds);
+  let changed = false;
+  const updatedVoters = voters.map((voter) => {
+    const validVotes = voter.votes.filter((v) => validGameIds.has(v.gameId));
+    const existingGameIds = new Set(validVotes.map((v) => v.gameId));
+    const missingGameIds = gameIds.filter((id) => !existingGameIds.has(id));
+
+    if (validVotes.length !== voter.votes.length || missingGameIds.length > 0) {
+      changed = true;
+      return {
+        ...voter,
+        votes: [
+          ...validVotes,
+          ...missingGameIds.map((id) => ({ gameId: id, points: 0 })),
+        ],
+      };
+    }
+    return voter;
+  });
+  return { changed, updatedVoters };
+}
+
 // ─── Componente principal ─────────────────────────────────
 export const SteamVotingDashboard: React.FC = () => {
   const [voters, setVoters] = useState<Voter[]>([]);
@@ -230,28 +254,33 @@ export const SteamVotingDashboard: React.FC = () => {
   useEffect(() => {
     const state = getAdminAccessState();
     if (state.isLocalEnvironment || state.requestedAdmin) {
-      const unlocked = requestAdminUnlock();
-      setAdminAccess(getAdminAccessState());
-      if (!unlocked) {
-        setIsEditMode(false);
-      }
-    } else {
-      setAdminAccess(state);
+      const timer = setTimeout(() => {
+        const unlocked = requestAdminUnlock();
+        setAdminAccess(getAdminAccessState());
+        if (!unlocked) {
+          setIsEditMode(false);
+        }
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, []);
 
   useEffect(() => {
-    if (!canManageContent) {
-      setIsEditMode(false);
+    if (!canManageContent && isEditMode) {
+      Promise.resolve().then(() => {
+        setIsEditMode(false);
+      });
     }
-  }, [canManageContent]);
+  }, [canManageContent, isEditMode]);
 
   // ─── Sincronización con debounce ─────────────────────────
   const debouncedSaveVoters = useCallback((votersToSave: Voter[]) => {
     if (votersDebounceRef.current) {
       clearTimeout(votersDebounceRef.current);
     }
-    setSyncState({ status: 'saving', message: 'Guardando...' });
+    Promise.resolve().then(() => {
+      setSyncState({ status: 'saving', message: 'Guardando...' });
+    });
     votersDebounceRef.current = setTimeout(async () => {
       const result = await saveVoters(votersToSave);
       setSyncState(result);
@@ -262,7 +291,9 @@ export const SteamVotingDashboard: React.FC = () => {
     if (gamesDebounceRef.current) {
       clearTimeout(gamesDebounceRef.current);
     }
-    setSyncState({ status: 'saving', message: 'Guardando...' });
+    Promise.resolve().then(() => {
+      setSyncState({ status: 'saving', message: 'Guardando...' });
+    });
     gamesDebounceRef.current = setTimeout(async () => {
       const result = await saveGames(gamesToSave);
       setSyncState(result);
@@ -318,36 +349,16 @@ export const SteamVotingDashboard: React.FC = () => {
   // ─── Reconciliar votos de los integrantes con gamesMap (autocorregir desalineaciones/IDs huérfanos) ───
   useEffect(() => {
     const gameIds = Object.keys(gamesMap);
-    if (gameIds.length === 0) return;
+    if (gameIds.length === 0 || voters.length === 0) return;
 
-    const validGameIds = new Set(gameIds);
+    const { changed, updatedVoters } = reconcileVoterVotes(voters, gameIds);
 
-    setVoters((prevVoters) => {
-      let changed = false;
-      const updatedVoters = prevVoters.map((voter) => {
-        // Filtrar votos correspondientes a IDs inexistentes en gamesMap
-        const validVotes = voter.votes.filter((v) => validGameIds.has(v.gameId));
-
-        // Detectar juegos de gamesMap que falten en los votos del integrante
-        const existingGameIds = new Set(validVotes.map((v) => v.gameId));
-        const missingGameIds = gameIds.filter((id) => !existingGameIds.has(id));
-
-        if (validVotes.length !== voter.votes.length || missingGameIds.length > 0) {
-          changed = true;
-          return {
-            ...voter,
-            votes: [
-              ...validVotes,
-              ...missingGameIds.map((id) => ({ gameId: id, points: 0 })),
-            ],
-          };
-        }
-        return voter;
+    if (changed) {
+      Promise.resolve().then(() => {
+        setVoters(updatedVoters);
       });
-
-      return changed ? updatedVoters : prevVoters;
-    });
-  }, [gamesMap]);
+    }
+  }, [gamesMap, voters]);
 
   // ─── Handlers ─────────────────────────────────────────────
   const handleUpdateVoter = useCallback((updatedVoter: Voter) => {
@@ -708,7 +719,7 @@ export const SteamVotingDashboard: React.FC = () => {
     if (isLoading) return null;
 
     const { status, message } = syncState;
-    let icon = '';
+    let icon: string;
     let className = 'sync-indicator';
 
     switch (status) {

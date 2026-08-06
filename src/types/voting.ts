@@ -110,7 +110,7 @@ export function calculateAuraStatus(
   newRank: AuraRank;
   newMultiplier: number;
 } {
-  let newBalance = currentBalance + (paidQuota ? 1 : -1);
+  const newBalance = currentBalance + (paidQuota ? 1 : -1);
 
   // Direct Redemption Rule
   if ((previousRank === 'Congelado' || currentBalance <= -5) && paidQuota) {
@@ -122,7 +122,7 @@ export function calculateAuraStatus(
   }
 
   let newRank: AuraRank;
-  let newMultiplier = 1.0;
+  let newMultiplier: number;
 
   if (newBalance >= 3) {
     newRank = 'Socio VIP';

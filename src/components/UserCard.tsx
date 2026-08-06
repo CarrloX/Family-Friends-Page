@@ -175,10 +175,10 @@ export const UserCard: React.FC<UserCardProps> = React.memo(({
         isDragging ? 'is-dragging' : ''
       } ${isDragOver ? 'is-drag-over' : ''}`}
       draggable={draggable}
-      onDragStart={onDragStart as any}
+      onDragStart={onDragStart as (event: unknown, info: unknown) => void}
       onDragOver={onDragOver}
       onDrop={onDrop}
-      onDragEnd={onDragEnd as any}
+      onDragEnd={onDragEnd as (event: unknown, info: unknown) => void}
       initial={{ opacity: 0, y: 20, scale: 0.95 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.2 } }}

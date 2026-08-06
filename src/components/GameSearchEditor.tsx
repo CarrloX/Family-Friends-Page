@@ -108,15 +108,22 @@ const SingleGameSlotEditor: React.FC<SingleGameSlotEditorProps> = ({
   const [customCoverUrl, setCustomCoverUrl] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
 
+  const handleSearchTermChange = (value: string) => {
+    setSearchTerm(value);
+    if (!value.trim() || value.trim().length < 2) {
+      setSearchResults([]);
+      setIsSearching(false);
+    } else {
+      setIsSearching(true);
+    }
+  };
+
   // Debounced Steam Store API search
   useEffect(() => {
     if (!searchTerm.trim() || searchTerm.trim().length < 2) {
-      setSearchResults([]);
-      setIsSearching(false);
       return;
     }
 
-    setIsSearching(true);
     const timer = setTimeout(async () => {
       const results = await searchSteamStore(searchTerm);
       setSearchResults(results);
@@ -152,6 +159,8 @@ const SingleGameSlotEditor: React.FC<SingleGameSlotEditorProps> = ({
 
     onUpdateGame(gameId, baseGame);
     setSearchTerm('');
+    setSearchResults([]);
+    setIsSearching(false);
     setShowDropdown(false);
 
     // Fetch official short description from Steam AppDetails API
@@ -266,7 +275,7 @@ const SingleGameSlotEditor: React.FC<SingleGameSlotEditorProps> = ({
             className="slot-search-input"
             placeholder="Escribe para buscar (ej: Helldivers, Elden, Rust)..."
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => handleSearchTermChange(e.target.value)}
             onFocus={() => searchResults.length > 0 && setShowDropdown(true)}
           />
           {isSearching && <span className="search-spinner">⏳</span>}
