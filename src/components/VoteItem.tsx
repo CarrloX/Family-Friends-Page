@@ -1,5 +1,5 @@
 import React from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import type { GameVote, Game } from '../types/voting';
 
 interface VoteItemProps {
@@ -7,6 +7,7 @@ interface VoteItemProps {
   game: Game | undefined;
   multiplier: number;
   maxPoints?: number;
+  isAutoZero?: boolean;
 }
 
 export const VoteItem: React.FC<VoteItemProps> = React.memo(({
@@ -14,6 +15,7 @@ export const VoteItem: React.FC<VoteItemProps> = React.memo(({
   game,
   multiplier,
   maxPoints = 3,
+  isAutoZero = false,
 }) => {
   if (!game) return null;
 
@@ -29,6 +31,34 @@ export const VoteItem: React.FC<VoteItemProps> = React.memo(({
   if (isMidPts) voteItemClass += ' medium-item';
   if (isLowPts) voteItemClass += ' low-item';
   if (is0Pts) voteItemClass += ' muted-item';
+  if (isAutoZero) voteItemClass += ' auto-zero-item';
+
+  const renderPointsLabel = () => {
+    if (isAutoZero) {
+      return (
+        <AnimatePresence key="auto-zero">
+          <motion.span
+            className="auto-zero-badge"
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            transition={{ type: 'spring', stiffness: 500, damping: 25 }}
+            title="Autocompletado automáticamente con 0 puntos al asignar todos los puestos superiores"
+          >
+            ✨ Auto 0 Pts
+          </motion.span>
+        </AnimatePresence>
+      );
+    }
+    if (is0Pts) {
+      return <span className="zero-pts-badge">0 Puntos</span>;
+    }
+    return (
+      <span className="base-pts">
+        {vote.points} {vote.points === 1 ? 'punto' : 'puntos'}
+      </span>
+    );
+  };
 
   return (
     <motion.div
@@ -37,6 +67,7 @@ export const VoteItem: React.FC<VoteItemProps> = React.memo(({
       whileHover={{ scale: 1.02, x: 2 }}
       whileTap={{ scale: 0.98 }}
       transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+      layout
     >
       <div className="game-thumb-container">
         <img
@@ -67,18 +98,19 @@ export const VoteItem: React.FC<VoteItemProps> = React.memo(({
           <span className="game-title">{game.title}</span>
           {isMaxPts && <span className="favorite-badge">⭐ FAVORITO</span>}
         </div>
+
         <div className="vote-points-row">
-          <span className="base-pts">
-            {vote.points} {vote.points === 1 ? 'punto' : 'puntos'}
-          </span>
+          {renderPointsLabel()}
+
+
           {!is0Pts && (
             <span className="weighted-pts">
               ➜ <strong>{weightedScore}</strong> pts
             </span>
           )}
-          {is0Pts && <span className="zero-pts-badge">0 Puntos</span>}
         </div>
       </div>
     </motion.div>
   );
 });
+

@@ -93,6 +93,99 @@ export function getVotePointOptions(gameCount: number): number[] {
 }
 
 /**
+ * Obtiene el conjunto de puntos positivos asignados a los juegos en la tarjeta de un usuario.
+ * Opcionalmente ignora un gameId especificado.
+ */
+export function getUsedPositivePoints(
+  votes: GameVote[],
+  maxPoints: number,
+  ignoreGameId?: string
+): Set<number> {
+  const used = new Set<number>();
+  votes.forEach((v) => {
+    if (v.gameId !== ignoreGameId && v.points > 0 && v.points <= maxPoints) {
+      used.add(v.points);
+    }
+  });
+  return used;
+}
+
+/**
+ * Evalúa si todas las puntuaciones positivas requeridas (de 1 a N-1) están asignadas en la tarjeta.
+ */
+export function areAllPositivePointsAssigned(
+  votes: GameVote[],
+  gameCount: number
+): boolean {
+  if (gameCount < 2) return false;
+  const maxPoints = getMaxVotePoints(gameCount);
+  const usedPoints = getUsedPositivePoints(votes, maxPoints);
+  for (let p = maxPoints; p >= 1; p--) {
+    if (!usedPoints.has(p)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Determina cuál es el juego que quedó autocompletado con 0 puntos cuando todas las puntuaciones
+ * positivas de la escala han sido asignadas. Retorna null si no se cumple el autocompletado.
+ */
+export function getAutoZeroGameId(
+  votes: GameVote[],
+  gameCount: number
+): string | null {
+  if (!areAllPositivePointsAssigned(votes, gameCount)) {
+    return null;
+  }
+  const unassignedVotes = votes.filter((v) => v.points === 0);
+  if (unassignedVotes.length === 1) {
+    return unassignedVotes[0].gameId;
+  }
+  return null;
+}
+
+/**
+ * Procesa el cambio de puntos de un juego en la tarjeta de un votante.
+ * Aplica Regla 1 (puntuación única / desasignar duplicados positivos)
+ * y Regla 2 (autocompletado automático a 0 puntos para el último puesto restante).
+ */
+export function updateVoterVotes(
+  votes: GameVote[],
+  targetGameId: string,
+  newPoints: number,
+  gameCount: number
+): GameVote[] {
+  const maxPoints = getMaxVotePoints(gameCount);
+  const clampedPoints = Math.min(Math.max(0, newPoints), maxPoints);
+
+  // 1. Asignar los puntos al juego objetivo y desasignar (reset a 0) si otro juego tenía el mismo valor positivo
+  let updatedVotes = votes.map((v) => {
+    if (v.gameId === targetGameId) {
+      return { ...v, points: clampedPoints };
+    }
+    if (clampedPoints > 0 && v.points === clampedPoints) {
+      return { ...v, points: 0 };
+    }
+    return v;
+  });
+
+  // 2. Si con este cambio se completan todos los puestos positivos (N-1), asegurar que el único restante quede en 0
+  if (areAllPositivePointsAssigned(updatedVotes, gameCount)) {
+    const zeroGame = updatedVotes.find((v) => v.points === 0);
+    if (zeroGame) {
+      updatedVotes = updatedVotes.map((v) =>
+        v.gameId === zeroGame.gameId ? { ...v, points: 0 } : v
+      );
+    }
+  }
+
+  return updatedVotes;
+}
+
+
+/**
  * Calculates new Aura Rank, Multiplier, and Quota Balance based on Quota payment and rules:
  * - +3 or more: Socio VIP (1.5x)
  * - 0 to +2: Socio Regular (1.0x)

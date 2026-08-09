@@ -1,7 +1,13 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import type { Voter, AuraRank, Game } from '../types/voting';
-import { getVotePointOptions } from '../types/voting';
+
+import {
+  getVotePointOptions,
+  getUsedPositivePoints,
+  getAutoZeroGameId,
+  updateVoterVotes,
+} from '../types/voting';
 import { fetchSteamProfile, isValidSteamId64 } from '../services/steamApi';
 import { FaTimes } from "react-icons/fa";
 import { VoteItem } from './VoteItem';
@@ -141,31 +147,32 @@ export const UserCard: React.FC<UserCardProps> = React.memo(({
     }
   };
 
-  // Game Points Handler (proporcional a la cantidad de juegos)
+  const gameCount = Object.keys(gamesMap).length;
+  const pointOptions = getVotePointOptions(gameCount);
+  const maxPoints = pointOptions[0] ?? 0;
+
+  // Sanitizar puntos existentes: si un voto tiene un valor mayor al máximo actual,
+  // se muestra 0 para evitar selects fuera de rango.
+  const sanitizedVotes = voter.votes.map((v) => ({
+    ...v,
+    points: v.points > maxPoints ? 0 : v.points,
+  }));
+  const displayVotes = sanitizedVotes;
+
+  const usedPositivePoints = getUsedPositivePoints(displayVotes, maxPoints);
+  const autoZeroGameId = getAutoZeroGameId(displayVotes, gameCount);
+
+  // Game Points Handler con Regla 1 (puntuación única) y Regla 2 (autocompletado 0)
   const handlePointsChange = (gameId: string, newPoints: number) => {
     if (!onUpdateVoter) return;
 
-    const updatedVotes = voter.votes.map((v) =>
-      v.gameId === gameId ? { ...v, points: newPoints } : v
-    );
+    const updatedVotes = updateVoterVotes(displayVotes, gameId, newPoints, gameCount);
 
     onUpdateVoter({
       ...voter,
       votes: updatedVotes,
     });
   };
-
-  const gameCount = Object.keys(gamesMap).length;
-  const pointOptions = getVotePointOptions(gameCount);
-  const maxPoints = pointOptions[0] ?? 0;
-
-  // Sanitizar puntos existentes: si un voto tiene un valor mayor al máximo actual
-  // (por ejemplo, tras eliminar juegos), se muestra 0 para evitar selects fuera de rango.
-  const sanitizedVotes = voter.votes.map((v) => ({
-    ...v,
-    points: v.points > maxPoints ? 0 : v.points,
-  }));
-  const displayVotes = sanitizedVotes;
 
   return (
     <motion.div
@@ -319,40 +326,59 @@ export const UserCard: React.FC<UserCardProps> = React.memo(({
             <div className="game-votes-editor">
               {displayVotes.map((vote) => {
                 const game = gamesMap[vote.gameId];
+                const isAutoZero = vote.gameId === autoZeroGameId;
+
                 return (
-                  <div key={vote.gameId} className="game-vote-edit-row">
-                    <span className="game-edit-name">{game?.title || vote.gameId}</span>
+                  <motion.div
+                    key={vote.gameId}
+                    className={`game-vote-edit-row ${isAutoZero ? 'auto-zero-row' : ''}`}
+                    layout
+                  >
+                    <div className="game-edit-title-group">
+                      <span className="game-edit-name">{game?.title || vote.gameId}</span>
+                    </div>
+
                     <select
-                      className="points-select"
+                      className={`points-select ${isAutoZero ? 'auto-zero-select' : ''}`}
                       value={vote.points}
                       onChange={(e) => handlePointsChange(vote.gameId, Number(e.target.value))}
                     >
                       {pointOptions.map((pts) => {
+                        const isDisabled =
+                          pts > 0 && pts !== vote.points && usedPositivePoints.has(pts);
                         let label = `🔸 ${pts} Pts`;
                         if (pts === maxPoints) {
-                          label = `⭐ ${pts} Pts (Favorito)`;
+                          label = `⭐ ${pts} Pts (Fav)`;
                         } else if (pts === 0) {
-                          label = '⚪ 0 Pts';
+                          label = isAutoZero ? '✨ 0 Pts (Auto)' : '⚪ 0 Pts';
                         }
+
+                        if (isDisabled) {
+                          label += ' 🔒';
+                        }
+
                         return (
-                          <option key={pts} value={pts}>
+                          <option key={pts} value={pts} disabled={isDisabled}>
                             {label}
                           </option>
                         );
                       })}
                     </select>
-                  </div>
+                  </motion.div>
                 );
               })}
             </div>
           </div>
+
         </div>
       )}
 
       {/* NORMAL VOTES DISPLAY */}
       <div className="votes-list">
-        {voter.votes.map((vote) => {
+        {displayVotes.map((vote) => {
           const game = gamesMap[vote.gameId];
+          const isAutoZero = vote.gameId === autoZeroGameId;
+
           return (
             <VoteItem
               key={vote.gameId}
@@ -360,10 +386,13 @@ export const UserCard: React.FC<UserCardProps> = React.memo(({
               game={game}
               multiplier={voter.multiplier}
               maxPoints={maxPoints}
+              isAutoZero={isAutoZero}
             />
           );
         })}
       </div>
+
     </motion.div>
   );
 });
+
