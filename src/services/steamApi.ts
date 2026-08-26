@@ -1,7 +1,9 @@
 /**
  * Service to fetch user profile details from Steam API via SteamID64.
- * Includes CORS proxy fallback and mock fallback if no API key or network fails.
+ * Includes resilient proxy fallbacks and mock profiles.
  */
+
+import { fetchWithCorsFallback } from './proxyFetch';
 
 export interface SteamProfileResult {
   success: boolean;
@@ -9,6 +11,17 @@ export interface SteamProfileResult {
   avatarfull?: string;
   steamId64: string;
   error?: string;
+}
+
+interface SteamPlayerSummaryResponse {
+  response?: {
+    players?: Array<{
+      personaname?: string;
+      avatarfull?: string;
+      avatarmedium?: string;
+      avatar?: string;
+    }>;
+  };
 }
 
 // Default fallback avatar data URI (sleek gamer silhouette)
@@ -46,16 +59,17 @@ export function isValidSteamId64(steamId: string): boolean {
 }
 
 /**
- * Attempts to fetch a Steam profile using the provided API key via CORS proxy.
+ * Attempts to fetch a Steam profile using the provided API key via resilient proxy/fallback.
  * Returns the profile result on success, or null on failure.
  */
 async function fetchFromSteamApi(apiKey: string, steamId: string): Promise<SteamProfileResult | null> {
   try {
     const targetUrl = `https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/?key=${apiKey}&steamids=${steamId}`;
-    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
-    const response = await fetch(proxyUrl);
-    if (!response.ok) return null;
-    const data = await response.json();
+    const data = await fetchWithCorsFallback<SteamPlayerSummaryResponse>(targetUrl, {
+      timeoutMs: 4000,
+      localProxyPrefix: '/api/steam-web',
+    });
+
     const player = data?.response?.players?.[0];
     if (!player) return null;
     const avatarUrl = player.avatarfull || player.avatarmedium || player.avatar;
@@ -67,22 +81,23 @@ async function fetchFromSteamApi(apiKey: string, steamId: string): Promise<Steam
       avatarfull: avatarUrl,
     };
   } catch {
-    console.warn('Steam API direct fetch failed, attempting open proxy fallback...');
+    console.warn('[SteamApi] Falló la consulta directa a Steam API.');
     return null;
   }
 }
 
 /**
- * Attempts to fetch a Steam profile using the public DEMO key via CORS proxy.
+ * Attempts to fetch a Steam profile using the public DEMO key via resilient proxy/fallback.
  * Returns the profile result on success, or null on failure.
  */
 async function fetchFromPublicProxy(steamId: string): Promise<SteamProfileResult | null> {
   try {
     const publicUrl = `https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/?key=DEMO&steamids=${steamId}`;
-    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(publicUrl)}`;
-    const response = await fetch(proxyUrl, { signal: AbortSignal.timeout(3000) });
-    if (!response.ok) return null;
-    const data = await response.json();
+    const data = await fetchWithCorsFallback<SteamPlayerSummaryResponse>(publicUrl, {
+      timeoutMs: 3500,
+      localProxyPrefix: '/api/steam-web',
+    });
+
     const player = data?.response?.players?.[0];
     if (!player?.personaname) return null;
     const avatarUrl = player.avatarfull || player.avatarmedium;
@@ -94,7 +109,7 @@ async function fetchFromPublicProxy(steamId: string): Promise<SteamProfileResult
       avatarfull: avatarUrl,
     };
   } catch {
-    console.warn('Open proxy fallback timed out or failed.');
+    console.warn('[SteamApi] Fallback de proxy público agotado.');
     return null;
   }
 }
@@ -146,6 +161,6 @@ export async function fetchSteamProfile(
     avatarfull: DEFAULT_FALLBACK_AVATAR,
     error: apiKey
       ? 'No se pudo obtener el perfil de Steam. Se usaron datos por defecto.'
-      : 'Steam API Key no configurada o bloqueo CORS. Se usará avatar/nombre por defecto.',
+      : 'Steam API Key no configurada o bloqueo de red. Se usará avatar/nombre por defecto.',
   };
 }

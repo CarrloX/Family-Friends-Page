@@ -128,4 +128,19 @@ export default defineConfig({
   build: {
     chunkSizeWarningLimit: 1000,
   },
+  server: {
+    proxy: {
+      '/api/steam-store': {
+        target: 'https://store.steampowered.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/steam-store/, ''),
+      },
+      '/api/steam-web': {
+        target: 'https://api.steampowered.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/steam-web/, ''),
+      },
+    },
+  },
 })
+
