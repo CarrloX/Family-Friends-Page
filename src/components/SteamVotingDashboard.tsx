@@ -346,6 +346,13 @@ export const SteamVotingDashboard: React.FC = () => {
   // ─── Calcular resultados ─────────────────────────────────
   const results = useMemo(() => calculateResults(voters, gamesMap), [voters, gamesMap]);
 
+  // ─── Calcular total de puntos asignados para determinar estado de votación ───
+  const totalAssignedPoints = useMemo(() => {
+    return voters.reduce((acc, voter) => {
+      return acc + voter.votes.reduce((sum, vote) => sum + (vote.points || 0), 0);
+    }, 0);
+  }, [voters]);
+
   // ─── Reconciliar votos de los integrantes con gamesMap (autocorregir desalineaciones/IDs huérfanos) ───
   useEffect(() => {
     const gameIds = Object.keys(gamesMap);
@@ -913,7 +920,7 @@ export const SteamVotingDashboard: React.FC = () => {
 
       {/* Contenido principal */}
       <div className="dashboard-content">
-        <Header />
+        <Header isVotingInProgress={totalAssignedPoints === 0} />
 
         <AnimatePresence>
           {canManageContent && isEditMode && (
@@ -971,7 +978,11 @@ export const SteamVotingDashboard: React.FC = () => {
           </div>
         </section>
 
-        <WinnerBanner results={results} votersCount={voters.length} />
+        <WinnerBanner
+          results={results}
+          votersCount={voters.length}
+          totalAssignedPoints={totalAssignedPoints}
+        />
 
         <div className="history-footer-action">
           <motion.button
