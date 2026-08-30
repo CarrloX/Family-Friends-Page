@@ -169,31 +169,80 @@ export async function saveActiveVotingState(voters: Voter[], gamesMap: Record<st
   return { status: 'local', message: 'Votación actual guardada localmente' };
 }
 
+export function sanitizeGame(game: Game): Game {
+  if (!game) return game;
+  let cleanGenre = game.genre || '';
+  if (/actualizar|modo\s*edici[oó]n/i.test(cleanGenre)) {
+    cleanGenre = 'Juego de Steam';
+  }
+  return {
+    ...game,
+    genre: cleanGenre,
+  };
+}
+
+export function sanitizeGamesMap(map: Record<string, Game>): Record<string, Game> {
+  const result: Record<string, Game> = {};
+  for (const [key, g] of Object.entries(map || {})) {
+    if (g) result[key] = sanitizeGame(g);
+  }
+  return result;
+}
+
+function parseActiveVotingData(data: ActiveVotingDocument): { voters: Voter[]; gamesMap: Record<string, Game>; games: Game[] } | null {
+  if (!Array.isArray(data.voters) || !data.gamesMap || typeof data.gamesMap !== 'object') {
+    return null;
+  }
+  const cleanGamesMap = sanitizeGamesMap(data.gamesMap);
+  const games = Array.isArray(data.games) && data.games.length > 0
+    ? data.games.map(sanitizeGame)
+    : Object.values(cleanGamesMap);
+  return { voters: data.voters, gamesMap: cleanGamesMap, games };
+}
+
+async function fetchFirestoreActiveVoting(): Promise<{ voters: Voter[]; gamesMap: Record<string, Game>; games: Game[] } | null> {
+  if (!isFirebaseReady()) return null;
+
+  try {
+    await ensureFirebaseAuth();
+    const db = getFirestoreInstance()!;
+    const docRef = doc(db, COLLECTION_ACTIVE_VOTING, DOC_ACTIVE_VOTING);
+    const snap = await getDoc(docRef);
+    if (!snap.exists()) return null;
+
+    const parsed = parseActiveVotingData(snap.data() as ActiveVotingDocument);
+    if (parsed) {
+      writeLocal(LS_KEY_ACTIVE_VOTING, parsed);
+    }
+    return parsed;
+  } catch (err) {
+    console.warn('[DataStore] Error cargando votación actual de Firestore:', err);
+    return null;
+  }
+}
+
+function loadCachedActiveVoting(): { voters: Voter[]; gamesMap: Record<string, Game>; games?: Game[] } | null {
+  const cached = readLocal<{ voters: Voter[]; gamesMap: Record<string, Game>; games?: Game[] } | null>(LS_KEY_ACTIVE_VOTING, null);
+  if (!cached) return null;
+
+  if (cached.gamesMap) {
+    cached.gamesMap = sanitizeGamesMap(cached.gamesMap);
+  }
+  if (cached.games) {
+    cached.games = cached.games.map(sanitizeGame);
+  }
+  return cached;
+}
+
 /**
  * Carga el estado activo de la votación desde Firestore o localStorage.
  */
 export async function loadActiveVotingState(): Promise<{ voters: Voter[]; gamesMap: Record<string, Game>; games?: Game[] } | null> {
-  if (isFirebaseReady()) {
-    try {
-      await ensureFirebaseAuth();
-      const db = getFirestoreInstance()!;
-      const docRef = doc(db, COLLECTION_ACTIVE_VOTING, DOC_ACTIVE_VOTING);
-      const snap = await getDoc(docRef);
-      if (snap.exists()) {
-        const data = snap.data() as ActiveVotingDocument;
-        if (Array.isArray(data.voters) && data.gamesMap && typeof data.gamesMap === 'object') {
-          const games = Array.isArray(data.games) && data.games.length > 0 ? data.games : Object.values(data.gamesMap);
-          writeLocal(LS_KEY_ACTIVE_VOTING, { voters: data.voters, gamesMap: data.gamesMap, games });
-          return { voters: data.voters, gamesMap: data.gamesMap, games };
-        }
-      }
-    } catch (err) {
-      console.warn('[DataStore] Error cargando votación actual de Firestore:', err);
-    }
+  const firestoreState = await fetchFirestoreActiveVoting();
+  if (firestoreState) {
+    return firestoreState;
   }
-
-  const cached = readLocal<{ voters: Voter[]; gamesMap: Record<string, Game>; games?: Game[] } | null>(LS_KEY_ACTIVE_VOTING, null);
-  return cached;
+  return loadCachedActiveVoting();
 }
 
 /**
@@ -278,13 +327,14 @@ export async function loadGames(): Promise<Record<string, Game>> {
         const data = snap.data() as GrupoDocument;
         if (data.gamesMap && typeof data.gamesMap === 'object') {
           console.log('[DataStore] Juegos cargados desde Firestore.');
-          writeLocal(LS_KEY_GAMES, data.gamesMap);
-          return data.gamesMap;
+          const cleanMap = sanitizeGamesMap(data.gamesMap);
+          writeLocal(LS_KEY_GAMES, cleanMap);
+          return cleanMap;
         }
         // Fallback: si solo existe el array `games`, reconstruir el mapa
         if (Array.isArray(data.games)) {
           const rebuiltMap: Record<string, Game> = {};
-          data.games.forEach((g) => { rebuiltMap[g.id] = g; });
+          data.games.forEach((g) => { rebuiltMap[g.id] = sanitizeGame(g); });
           console.log('[DataStore] Juegos reconstruidos desde array dinámico.');
           writeLocal(LS_KEY_GAMES, rebuiltMap);
           return rebuiltMap;
@@ -294,7 +344,7 @@ export async function loadGames(): Promise<Record<string, Game>> {
       console.warn('[DataStore] Error cargando juegos de Firestore, usando localStorage:', err);
     }
   }
-  return readLocal<Record<string, Game>>(LS_KEY_GAMES, {});
+  return sanitizeGamesMap(readLocal<Record<string, Game>>(LS_KEY_GAMES, {}));
 }
 
 /**

@@ -143,7 +143,15 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
           <div className="winner-modal-info">
             <span className="winner-tag">1º LUGAR GANADOR</span>
             <h4>{winningResult.game?.title}</h4>
-            <span className="winner-points">{winningResult.weightedPoints} Puntos Ponderados</span>
+            <div className="winner-modal-meta-row">
+              <span className="winner-points">{winningResult.weightedPoints} Puntos Ponderados</span>
+              {winningResult.game?.price?.finalFormatted && (
+                <span className="winner-modal-price">
+                  🏷️ {winningResult.game.price.finalFormatted}
+                  {winningResult.game.price.discountPercent ? ` (-${winningResult.game.price.discountPercent}%)` : ''}
+                </span>
+              )}
+            </div>
           </div>
         </div>
 

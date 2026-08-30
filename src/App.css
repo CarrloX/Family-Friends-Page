@@ -1016,6 +1016,14 @@
   will-change: transform;
 }
 
+.winner-meta-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .winner-genre {
   font-size: 13px;
   font-weight: 700;
@@ -1028,6 +1036,82 @@
 .winner-genre:hover {
   letter-spacing: 2px;
   text-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+}
+
+.winner-steam-price-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(23, 26, 33, 0.85);
+  border: 1px solid rgba(102, 192, 244, 0.25);
+  border-radius: 8px;
+  padding: 5px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #ffffff;
+  text-decoration: none;
+  transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(8px);
+}
+
+.winner-steam-price-badge:hover {
+  border-color: var(--neon-cyan-accent);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(56, 189, 248, 0.35);
+  color: #ffffff;
+}
+
+.winner-steam-price-badge.has-discount {
+  background: linear-gradient(135deg, rgba(76, 107, 34, 0.4) 0%, rgba(23, 26, 33, 0.9) 100%);
+  border-color: rgba(164, 208, 7, 0.6);
+  box-shadow: 0 2px 10px rgba(164, 208, 7, 0.2);
+}
+
+.winner-steam-price-badge.has-discount:hover {
+  border-color: #a4d007;
+  box-shadow: 0 4px 18px rgba(164, 208, 7, 0.4);
+}
+
+.steam-price-icon {
+  font-size: 16px;
+  color: #66c0f4;
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.winner-steam-price-badge:hover .steam-price-icon {
+  transform: rotate(-10deg) scale(1.1);
+}
+
+.price-discount-pill {
+  background: #a4d007;
+  color: #000000;
+  font-size: 12px;
+  font-weight: 900;
+  padding: 2px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.3px;
+  box-shadow: 0 2px 6px rgba(164, 208, 7, 0.35);
+}
+
+.price-old-strikethrough {
+  font-size: 12px;
+  color: #8f98a0;
+  text-decoration: line-through;
+  opacity: 0.85;
+}
+
+.price-current-value {
+  font-size: 13px;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: 0.3px;
+}
+
+.winner-steam-price-badge.has-discount .price-current-value {
+  color: #a4d007;
+  text-shadow: 0 0 8px rgba(164, 208, 7, 0.4);
 }
 
 .winner-title {
@@ -3199,10 +3283,28 @@ background: #3b0764;
   color: var(--neon-purple-bright);
 }
 
+.winner-modal-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
 .winner-modal-info .winner-points {
   font-size: 12px;
   color: #38bdf8;
   font-weight: 600;
+}
+
+.winner-modal-price {
+  font-size: 11px;
+  font-weight: 700;
+  color: #a4d007;
+  background: rgba(164, 208, 7, 0.12);
+  border: 1px solid rgba(164, 208, 7, 0.3);
+  padding: 1px 6px;
+  border-radius: 4px;
 }
 
 .voters-payment-section {

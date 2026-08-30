@@ -153,7 +153,8 @@ const SingleGameSlotEditor: React.FC<SingleGameSlotEditorProps> = ({
       title: item.name,
       coverImage: item.header_image,
       tinyCoverImage: item.tiny_image,
-      genre: item.price_formatted || 'Juego de Steam',
+      genre: 'Juego de Steam',
+      price: item.price,
       description: 'Cargando descripción oficial de Steam...',
     };
 
@@ -163,19 +164,14 @@ const SingleGameSlotEditor: React.FC<SingleGameSlotEditorProps> = ({
     setIsSearching(false);
     setShowDropdown(false);
 
-    // Fetch official short description from Steam AppDetails API
+    // Fetch official details (genres, description, discount/price) from Steam AppDetails API
     const details = await fetchSteamGameDetails(item.id);
-    if (details.description) {
-      onUpdateGame(gameId, {
-        ...baseGame,
-        description: details.description,
-      });
-    } else {
-      onUpdateGame(gameId, {
-        ...baseGame,
-        description: `Juego oficial de la Tienda de Steam (${item.name}).`,
-      });
-    }
+    onUpdateGame(gameId, {
+      ...baseGame,
+      genre: details.genres || 'Juego de Steam',
+      price: details.price || item.price,
+      description: details.description || `Juego oficial de la Tienda de Steam (${item.name}).`,
+    });
   };
 
   // Handle manual title edit

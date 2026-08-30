@@ -9,6 +9,53 @@ const CORS_PROXIES = [
   (target: string) => `https://corsproxy.org/?${encodeURIComponent(target)}`,
 ];
 
+function resolveLocalProxyUrl(targetUrl: string): string | null {
+  if (targetUrl.startsWith('https://store.steampowered.com/')) {
+    return targetUrl.replace('https://store.steampowered.com', '/api/steam-store');
+  }
+  if (targetUrl.startsWith('https://api.steampowered.com/')) {
+    return targetUrl.replace('https://api.steampowered.com', '/api/steam-web');
+  }
+  return null;
+}
+
+async function fetchFromLocalProxy<T>(targetUrl: string, timeoutMs: number): Promise<T | null> {
+  const localUrl = resolveLocalProxyUrl(targetUrl);
+  if (!localUrl) return null;
+
+  try {
+    const res = await fetch(localUrl, { signal: AbortSignal.timeout(timeoutMs) });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return (data as T) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function parseProxyResponse<T>(res: Response, proxyUrl: string): Promise<T | null> {
+  if (proxyUrl.includes('allorigins.win/get')) {
+    const wrapper = await res.json();
+    if (!wrapper?.contents) return null;
+    const parsed = typeof wrapper.contents === 'string'
+      ? JSON.parse(wrapper.contents)
+      : wrapper.contents;
+    return parsed as T;
+  }
+  const data = await res.json();
+  return (data as T) ?? null;
+}
+
+async function fetchFromProxyUrl<T>(proxyUrl: string, timeoutMs: number): Promise<T | null> {
+  try {
+    const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(timeoutMs) });
+    if (!res.ok) return null;
+    return await parseProxyResponse<T>(res, proxyUrl);
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Executes a resilient fetch for a given Steam or external API URL.
  * Automatically tries local Vite dev proxy first (if applicable), then falls back to tested CORS proxies.
@@ -19,55 +66,16 @@ export async function fetchWithCorsFallback<T = unknown>(
 ): Promise<T | null> {
   const timeoutMs = options.timeoutMs || 4000;
 
-  // 1. If in dev or local proxy prefix is supplied, attempt local proxy
   if (options.localProxyPrefix) {
-    try {
-      let localUrl = '';
-      if (targetUrl.startsWith('https://store.steampowered.com/')) {
-        localUrl = targetUrl.replace('https://store.steampowered.com', '/api/steam-store');
-      } else if (targetUrl.startsWith('https://api.steampowered.com/')) {
-        localUrl = targetUrl.replace('https://api.steampowered.com', '/api/steam-web');
-      }
-
-      if (localUrl) {
-        const res = await fetch(localUrl, { signal: AbortSignal.timeout(timeoutMs) });
-        if (res.ok) {
-          const data = await res.json();
-          if (data) return data as T;
-        }
-      }
-    } catch {
-      // Local dev proxy unavailable or failed, continue to external fallbacks
-    }
+    const localResult = await fetchFromLocalProxy<T>(targetUrl, timeoutMs);
+    if (localResult !== null) return localResult;
   }
 
-  // 2. Try external CORS proxies sequentially
   for (const proxyFn of CORS_PROXIES) {
-    try {
-      const proxyUrl = proxyFn(targetUrl);
-      const res = await fetch(proxyUrl, {
-        signal: AbortSignal.timeout(timeoutMs),
-      });
-
-      if (!res.ok) continue;
-
-      // Handle AllOrigins JSON wrapper
-      if (proxyUrl.includes('allorigins.win/get')) {
-        const wrapper = await res.json();
-        if (wrapper?.contents) {
-          const parsed = typeof wrapper.contents === 'string' 
-            ? JSON.parse(wrapper.contents) 
-            : wrapper.contents;
-          return parsed as T;
-        }
-      } else {
-        const data = await res.json();
-        if (data) return data as T;
-      }
-    } catch {
-      // Try next proxy silently
-    }
+    const proxyResult = await fetchFromProxyUrl<T>(proxyFn(targetUrl), timeoutMs);
+    if (proxyResult !== null) return proxyResult;
   }
 
   return null;
 }
+

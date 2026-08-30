@@ -1,14 +1,250 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FaGamepad } from 'react-icons/fa';
-import type { GameResult } from '../types/voting';
+import { FaGamepad, FaSteam } from 'react-icons/fa';
+import type { GameResult, SteamPriceInfo } from '../types/voting';
 import { getMaxVotePoints } from '../types/voting';
+import { fetchSteamGameDetails } from '../services/steamStoreApi';
 
 interface WinnerBannerProps {
   results: GameResult[];
   votersCount?: number;
   totalAssignedPoints?: number;
 }
+
+const VotingInProgressView: React.FC<{ totalVoters: number; resultsCount: number }> = ({
+  totalVoters,
+  resultsCount,
+}) => (
+  <motion.div
+    key="voting-in-progress-view"
+    className="voting-progress-banner-glow"
+    initial={{ opacity: 0, scale: 0.97, y: 12 }}
+    animate={{ opacity: 1, scale: 1, y: 0 }}
+    exit={{ opacity: 0, scale: 0.97, y: -12 }}
+    transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+  >
+    <div className="voting-progress-banner">
+      <div className="voting-progress-header-row">
+        <div className="voting-live-pill">
+          <span className="live-pulse-dot"></span>
+          <span>EN VOTACIÓN • EN TIEMPO REAL</span>
+        </div>
+        <div className="voting-status-chip">
+          ⚖️ Ponderación de Aura Activa
+        </div>
+      </div>
+
+      <div className="voting-progress-body">
+        <div className="voting-radar-visual">
+          <div className="radar-ring"></div>
+          <div className="radar-ring"></div>
+          <div className="radar-ring"></div>
+          <div className="radar-center-core">
+            <FaGamepad className="radar-gamepad-icon" />
+          </div>
+        </div>
+
+        <div className="voting-progress-content">
+          <h2 className="voting-progress-title">VOTACIÓN EN CURSO</h2>
+          <p className="voting-progress-desc">
+            Ningún integrante ha asignado puntos todavía. Califica tus juegos favoritos
+            en las tarjetas para descubrir al líder provisorio en tiempo real.
+          </p>
+
+          <div className="voting-metrics-grid">
+            <div className="voting-metric-card">
+              <span className="metric-label">INTEGRANTES</span>
+              <span className="metric-value">{totalVoters} convocados</span>
+            </div>
+            <div className="voting-metric-card">
+              <span className="metric-label">JUEGOS EN LISTA</span>
+              <span className="metric-value">{resultsCount} propuestos</span>
+            </div>
+            <div className="voting-metric-card">
+              <span className="metric-label">ESTADO DE VOTOS</span>
+              <span className="metric-value highlight">0 PTS registrados</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="voting-instruction-hint">
+        <span>👇</span>
+        <span>Asigna puntos en las tarjetas de abajo para proyectar al ganador en vivo</span>
+      </div>
+    </div>
+  </motion.div>
+);
+
+interface WinnerCardProps {
+  winner: GameResult;
+  appId?: number;
+  winnerHdCover?: string;
+  winnerCoverFallbacks: string[];
+  displayedGenre: string;
+  livePrice: SteamPriceInfo | null;
+  maxPoints: number;
+  totalVoters: number;
+}
+
+const WinnerCard: React.FC<WinnerCardProps> = ({
+  winner,
+  appId,
+  winnerHdCover,
+  winnerCoverFallbacks,
+  displayedGenre,
+  livePrice,
+  maxPoints,
+  totalVoters,
+}) => (
+  <div className="winner-banner-glow">
+    <div className="winner-banner">
+      <div className="winner-trophy-tag">
+        <span className="trophy-icon">🏆</span>
+        <span className="trophy-text">JUEGO GANADOR DE LA VOTACIÓN</span>
+      </div>
+
+      <div className="winner-content">
+        <div className="winner-image-container">
+          <img
+            src={winnerHdCover}
+            alt={winner.game.title}
+            className="winner-image"
+            loading="lazy"
+            onError={(e) => {
+              const target = e.currentTarget;
+              const currentFallback = Number.parseInt(target.dataset.fallbackLevel || '0', 10);
+              if (currentFallback < winnerCoverFallbacks.length) {
+                const nextUrl = winnerCoverFallbacks[currentFallback];
+                target.dataset.fallbackLevel = String(currentFallback + 1);
+                target.src = nextUrl;
+              }
+            }}
+          />
+          <div className="winner-badge-overlay">1º LUGAR</div>
+        </div>
+
+        <div className="winner-details">
+          <div className="winner-meta-header">
+            {displayedGenre && <div className="winner-genre">{displayedGenre}</div>}
+
+            {livePrice && (
+              <a
+                href={appId ? `https://store.steampowered.com/app/${appId}` : undefined}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`winner-steam-price-badge ${livePrice.discountPercent && livePrice.discountPercent > 0 ? 'has-discount' : ''}`}
+                title="Ver en la Tienda Oficial de Steam"
+              >
+                <FaSteam className="steam-price-icon" />
+                {livePrice.discountPercent && livePrice.discountPercent > 0 ? (
+                  <>
+                    <span className="price-discount-pill">-{livePrice.discountPercent}%</span>
+                    {livePrice.initialFormatted && (
+                      <span className="price-old-strikethrough">{livePrice.initialFormatted}</span>
+                    )}
+                    <span className="price-current-value">{livePrice.finalFormatted}</span>
+                  </>
+                ) : (
+                  <span className="price-current-value">
+                    {livePrice.finalFormatted || (livePrice.isFree ? 'Gratis' : 'Ver en Steam')}
+                  </span>
+                )}
+              </a>
+            )}
+          </div>
+          <h2 className="winner-title">{winner.game.title}</h2>
+          <p className="winner-description">{winner.game.description}</p>
+
+          <div className="winner-stats-grid">
+            <motion.div
+              className="stat-card primary-stat"
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+            >
+              <span className="stat-label">TOTAL PUNTOS PONDERADOS</span>
+              <span className="stat-value">{winner.weightedPoints} <small>PTS</small></span>
+            </motion.div>
+
+            <motion.div
+              className="stat-card"
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+            >
+              <span className="stat-label">VOTOS DE FAVORITO ({maxPoints} PTS)</span>
+              <span className="stat-value">{winner.firstPlaceVotes} <small>/ {totalVoters} integrantes</small></span>
+            </motion.div>
+
+            <motion.div
+              className="stat-card"
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+            >
+              <span className="stat-label">PUNTOS BRUTOS</span>
+              <span className="stat-value">{winner.rawPoints} <small>PTS</small></span>
+            </motion.div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
+const PodiumList: React.FC<{ runnersUp: GameResult[] }> = ({ runnersUp }) => {
+  if (runnersUp.length === 0) return null;
+
+  const getRankLabel = (rankPosition: number) => {
+    if (rankPosition === 2) return '2º LUGAR 🥈';
+    if (rankPosition === 3) return '3º LUGAR 🥉';
+    return `${rankPosition}º LUGAR`;
+  };
+
+  return (
+    <div className="podium-container">
+      <h4 className="podium-heading">TABLA DE POSICIONES FINAL</h4>
+      <div className="podium-grid">
+        {runnersUp.map((result, idx) => {
+          const rankPosition = idx + 2;
+          return (
+            <motion.div
+              key={result.game.id}
+              layout
+              className={`podium-card position-${rankPosition}`}
+              whileHover={{ scale: 1.02, y: -3 }}
+              whileTap={{ scale: 0.97 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+            >
+              <div className="podium-rank">{getRankLabel(rankPosition)}</div>
+              <img
+                src={result.game.coverImage}
+                alt={result.game.title}
+                className="podium-thumb"
+                loading="lazy"
+                onError={(e) => {
+                  const target = e.currentTarget;
+                  if (!target.dataset.failed) {
+                    target.dataset.failed = 'true';
+                    if (result.game?.tinyCoverImage) {
+                      target.src = result.game.tinyCoverImage;
+                    } else if (result.game?.appId) {
+                      target.src = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${result.game.appId}/capsule_sm_120.jpg`;
+                    }
+                  }
+                }}
+              />
+              <div className="podium-info">
+                <span className="podium-title">{result.game.title}</span>
+                <span className="podium-score">
+                  <strong>{result.weightedPoints}</strong> pts ponderados ({result.rawPoints} pts base)
+                </span>
+              </div>
+            </motion.div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
 
 export const WinnerBanner: React.FC<WinnerBannerProps> = React.memo(({
   results,
@@ -20,13 +256,55 @@ export const WinnerBanner: React.FC<WinnerBannerProps> = React.memo(({
   const maxPoints = getMaxVotePoints(results.length);
   const totalVoters = votersCount;
 
+  // High-Definition Steam Cover (616x353 HD capsule) for 1st Place Winner
+  const appId = winner?.game?.appId;
+
+  // Estado para detalles en vivo cargados asíncronamente desde la API oficial de Steam
+  const [fetchedDetails, setFetchedDetails] = useState<{
+    appId?: number;
+    price?: SteamPriceInfo;
+    genre?: string;
+  }>({});
+
+  useEffect(() => {
+    if (!appId) return;
+
+    let isMounted = true;
+    fetchSteamGameDetails(appId)
+      .then((details) => {
+        if (!isMounted) return;
+        setFetchedDetails({
+          appId,
+          price: details.price,
+          genre: details.genres,
+        });
+      })
+      .catch((err) => {
+        console.warn('[WinnerBanner] Error al consultar datos en vivo de Steam:', err);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [appId]);
+
+  const livePrice = (fetchedDetails.appId === appId && fetchedDetails.price)
+    ? fetchedDetails.price
+    : (winner?.game?.price || null);
+
+  const rawGenre = (fetchedDetails.appId === appId && fetchedDetails.genre)
+    ? fetchedDetails.genre
+    : (winner?.game?.genre || '');
+
+  const displayedGenre = rawGenre && !/actualizar|modo\s*edici[oó]n/i.test(rawGenre)
+    ? rawGenre
+    : '';
+
   // Detect whether any member has assigned points
   const hasVotes = totalAssignedPoints !== undefined
     ? totalAssignedPoints > 0
     : results.some((r) => r.rawPoints > 0 || r.weightedPoints > 0);
 
-  // High-Definition Steam Cover (616x353 HD capsule) for 1st Place Winner
-  const appId = winner?.game?.appId;
   const cdnBase = 'https://cdn.akamai.steamstatic.com/steam/apps';
   const winnerHdCover = appId
     ? `${cdnBase}/${appId}/capsule_616x353.jpg`
@@ -47,68 +325,8 @@ export const WinnerBanner: React.FC<WinnerBannerProps> = React.memo(({
     <section className="winner-section">
       <AnimatePresence mode="wait">
         {!hasVotes || !winner?.game ? (
-          /* ─── ESTADO 1: EN VOTACIÓN (0 PUNTOS REGISTRADOS) ─── */
-          <motion.div
-            key="voting-in-progress-view"
-            className="voting-progress-banner-glow"
-            initial={{ opacity: 0, scale: 0.97, y: 12 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.97, y: -12 }}
-            transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-          >
-            <div className="voting-progress-banner">
-              <div className="voting-progress-header-row">
-                <div className="voting-live-pill">
-                  <span className="live-pulse-dot"></span>
-                  <span>EN VOTACIÓN • EN TIEMPO REAL</span>
-                </div>
-                <div className="voting-status-chip">
-                  ⚖️ Ponderación de Aura Activa
-                </div>
-              </div>
-
-              <div className="voting-progress-body">
-                <div className="voting-radar-visual">
-                  <div className="radar-ring"></div>
-                  <div className="radar-ring"></div>
-                  <div className="radar-ring"></div>
-                  <div className="radar-center-core">
-                    <FaGamepad className="radar-gamepad-icon" />
-                  </div>
-                </div>
-
-                <div className="voting-progress-content">
-                  <h2 className="voting-progress-title">VOTACIÓN EN CURSO</h2>
-                  <p className="voting-progress-desc">
-                    Ningún integrante ha asignado puntos todavía. Califica tus juegos favoritos
-                    en las tarjetas para descubrir al líder provisorio en tiempo real.
-                  </p>
-
-                  <div className="voting-metrics-grid">
-                    <div className="voting-metric-card">
-                      <span className="metric-label">INTEGRANTES</span>
-                      <span className="metric-value">{totalVoters} convocados</span>
-                    </div>
-                    <div className="voting-metric-card">
-                      <span className="metric-label">JUEGOS EN LISTA</span>
-                      <span className="metric-value">{results.length} propuestos</span>
-                    </div>
-                    <div className="voting-metric-card">
-                      <span className="metric-label">ESTADO DE VOTOS</span>
-                      <span className="metric-value highlight">0 PTS registrados</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="voting-instruction-hint">
-                <span>👇</span>
-                <span>Asigna puntos en las tarjetas de abajo para proyectar al ganador en vivo</span>
-              </div>
-            </div>
-          </motion.div>
+          <VotingInProgressView totalVoters={totalVoters} resultsCount={results.length} />
         ) : (
-          /* ─── ESTADO 2: JUEGO GANADOR / LÍDER PROVISORIO CON VOTOS ─── */
           <motion.div
             key="winner-results-view"
             className="winner-view-wrapper"
@@ -118,127 +336,17 @@ export const WinnerBanner: React.FC<WinnerBannerProps> = React.memo(({
             exit={{ opacity: 0, scale: 0.97, y: -12 }}
             transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
           >
-            {/* Featured Winner Card */}
-            <div className="winner-banner-glow">
-              <div className="winner-banner">
-                <div className="winner-trophy-tag">
-                  <span className="trophy-icon">🏆</span>
-                  <span className="trophy-text">JUEGO GANADOR DE LA VOTACIÓN</span>
-                </div>
-
-                <div className="winner-content">
-                  <div className="winner-image-container">
-                    <img
-                      src={winnerHdCover}
-                      alt={winner.game.title}
-                      className="winner-image"
-                      loading="lazy"
-                      onError={(e) => {
-                        const target = e.currentTarget;
-                        const currentFallback = Number.parseInt(target.dataset.fallbackLevel || '0', 10);
-                        if (currentFallback < winnerCoverFallbacks.length) {
-                          const nextUrl = winnerCoverFallbacks[currentFallback];
-                          target.dataset.fallbackLevel = String(currentFallback + 1);
-                          target.src = nextUrl;
-                        }
-                      }}
-                    />
-                    <div className="winner-badge-overlay">1º LUGAR</div>
-                  </div>
-
-                  <div className="winner-details">
-                    <div className="winner-genre">{winner.game.genre}</div>
-                    <h2 className="winner-title">{winner.game.title}</h2>
-                    <p className="winner-description">{winner.game.description}</p>
-
-                    <div className="winner-stats-grid">
-                      <motion.div
-                        className="stat-card primary-stat"
-                        whileHover={{ scale: 1.03 }}
-                        whileTap={{ scale: 0.97 }}
-                      >
-                        <span className="stat-label">TOTAL PUNTOS PONDERADOS</span>
-                        <span className="stat-value">{winner.weightedPoints} <small>PTS</small></span>
-                      </motion.div>
-
-                      <motion.div
-                        className="stat-card"
-                        whileHover={{ scale: 1.03 }}
-                        whileTap={{ scale: 0.97 }}
-                      >
-                        <span className="stat-label">VOTOS DE FAVORITO ({maxPoints} PTS)</span>
-                        <span className="stat-value">{winner.firstPlaceVotes} <small>/ {totalVoters} integrantes</small></span>
-                      </motion.div>
-
-                      <motion.div
-                        className="stat-card"
-                        whileHover={{ scale: 1.03 }}
-                        whileTap={{ scale: 0.97 }}
-                      >
-                        <span className="stat-label">PUNTOS BRUTOS</span>
-                        <span className="stat-value">{winner.rawPoints} <small>PTS</small></span>
-                      </motion.div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Podium / Runner ups */}
-            {runnersUp.length > 0 && (
-              <div className="podium-container">
-                <h4 className="podium-heading">TABLA DE POSICIONES FINAL</h4>
-                <div className="podium-grid">
-                  {runnersUp.map((result, idx) => {
-                    const rankPosition = idx + 2;
-                    let rankLabel: string;
-                    if (rankPosition === 2) {
-                      rankLabel = '2º LUGAR 🥈';
-                    } else if (rankPosition === 3) {
-                      rankLabel = '3º LUGAR 🥉';
-                    } else {
-                      rankLabel = `${rankPosition}º LUGAR`;
-                    }
-
-                    return (
-                      <motion.div
-                        key={result.game.id}
-                        layout
-                        className={`podium-card position-${rankPosition}`}
-                        whileHover={{ scale: 1.02, y: -3 }}
-                        whileTap={{ scale: 0.97 }}
-                        transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-                      >
-                        <div className="podium-rank">{rankLabel}</div>
-                        <img
-                          src={result.game.coverImage}
-                          alt={result.game.title}
-                          className="podium-thumb"
-                          loading="lazy"
-                          onError={(e) => {
-                            const target = e.currentTarget;
-                            if (!target.dataset.failed) {
-                              target.dataset.failed = 'true';
-                              if (result.game?.tinyCoverImage) {
-                                target.src = result.game.tinyCoverImage;
-                              } else if (result.game?.appId) {
-                                target.src = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${result.game.appId}/capsule_sm_120.jpg`;
-                              }
-                            }
-                          }}
-                        />
-                        <div className="podium-info">
-                          <span className="podium-title">{result.game.title}</span>
-                          <span className="podium-score">
-                            <strong>{result.weightedPoints}</strong> pts ponderados ({result.rawPoints} pts base)
-                          </span>
-                        </div>
-                      </motion.div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
+            <WinnerCard
+              winner={winner}
+              appId={appId}
+              winnerHdCover={winnerHdCover}
+              winnerCoverFallbacks={winnerCoverFallbacks}
+              displayedGenre={displayedGenre}
+              livePrice={livePrice}
+              maxPoints={maxPoints}
+              totalVoters={totalVoters}
+            />
+            <PodiumList runnersUp={runnersUp} />
           </motion.div>
         )}
       </AnimatePresence>

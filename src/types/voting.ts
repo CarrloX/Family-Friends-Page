@@ -10,6 +10,16 @@ export type AuraRank =
 
 export const VOTING_TYPE_MARKER = true;
 
+export interface SteamPriceInfo {
+  isFree?: boolean;
+  currency?: string;
+  initial?: number;
+  final?: number;
+  discountPercent?: number;
+  initialFormatted?: string;
+  finalFormatted?: string;
+}
+
 export interface Game {
   id: string;
   appId?: number;
@@ -18,6 +28,7 @@ export interface Game {
   coverImage: string;
   tinyCoverImage?: string;
   description: string;
+  price?: SteamPriceInfo;
 }
 
 export interface GameVote {
