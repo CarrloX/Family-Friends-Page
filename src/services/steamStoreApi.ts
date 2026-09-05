@@ -134,6 +134,13 @@ export async function searchSteamStore(query: string): Promise<SteamSearchResult
   return [];
 }
 
+// Cache en memoria para evitar peticiones redundantes y bloqueos de tasa (429)
+const appDetailsCache = new Map<number, {
+  description?: string;
+  genres?: string;
+  price?: SteamPriceInfo;
+}>();
+
 /**
  * Consulta la API oficial de Steam AppDetails para obtener descripción, géneros y precio/descuentos.
  */
@@ -142,10 +149,14 @@ export async function fetchSteamGameDetails(appId: number): Promise<{
   genres?: string;
   price?: SteamPriceInfo;
 }> {
+  if (appDetailsCache.has(appId)) {
+    return appDetailsCache.get(appId)!;
+  }
+
   try {
     const targetUrl = `https://store.steampowered.com/api/appdetails?appids=${appId}&cc=CO&l=spanish`;
     const data = await fetchWithCorsFallback<SteamAppDetailsResponse>(targetUrl, {
-      timeoutMs: 3500,
+      timeoutMs: 6500,
       localProxyPrefix: '/api/steam-store',
     });
 
@@ -190,17 +201,14 @@ export async function fetchSteamGameDetails(appId: number): Promise<{
         };
       }
 
-      console.log(`[SteamStoreApi] Detalles obtenidos para appId ${appId}:`, {
-        description: cleanDesc?.slice(0, 50),
-        genres: genresList,
-        price: priceInfo,
-      });
-
-      return {
+      const result = {
         description: cleanDesc,
         genres: genresList,
         price: priceInfo,
       };
+
+      appDetailsCache.set(appId, result);
+      return result;
     }
   } catch (err) {
     console.warn(`[SteamStoreApi] Error obteniendo AppDetails para appId ${appId}:`, err);

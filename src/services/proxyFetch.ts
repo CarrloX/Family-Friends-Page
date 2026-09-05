@@ -4,9 +4,8 @@
 
 // List of public CORS proxies to try in order when direct/local proxy fails
 const CORS_PROXIES = [
-  (target: string) => `https://cors.eu.org/${target}`,
+  (target: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(target)}`,
   (target: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(target)}`,
-  (target: string) => `https://corsproxy.org/?${encodeURIComponent(target)}`,
 ];
 
 function resolveLocalProxyUrl(targetUrl: string): string | null {
