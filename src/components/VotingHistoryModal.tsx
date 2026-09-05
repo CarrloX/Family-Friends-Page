@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useDragControls } from 'framer-motion';
 import type { VotingHistoryRecord } from '../types/voting';
 import { DeleteHistoryRecordConfirmModal } from './DeleteHistoryRecordConfirmModal';
 import { HistoryListItem } from './HistoryListItem';
@@ -24,11 +24,15 @@ export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = React.memo(
   onClose,
   canManageContent = false,
 }) => {
+  const dragControls = useDragControls();
+  const [isHandlePressed, setIsHandlePressed] = useState(false);
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(
     history.length > 0 ? history[0].id : null
   );
   const [currentPage, setCurrentPage] = useState(1);
-  const [isMobile, setIsMobile] = useState(false);
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth <= 768 : false
+  );
   const [mobileShowDetails, setMobileShowDetails] = useState(false);
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(history.length / ITEMS_PER_PAGE)), [history.length]);
@@ -79,6 +83,7 @@ export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = React.memo(
       exit={{ opacity: 0 }}
       transition={{ duration: 0.25 }}
       onClick={onClose}
+      style={{ WebkitTapHighlightColor: 'transparent', outline: 'none' }}
     >
       <motion.div
         className="history-modal-container bottom-sheet-panel"
@@ -87,23 +92,62 @@ export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = React.memo(
         exit={{ y: '100%', opacity: 0, scale: 0.95 }}
         transition={{ type: 'spring', stiffness: 320, damping: 30 }}
         onClick={(e) => e.stopPropagation()}
+        style={{ WebkitTapHighlightColor: 'transparent', outline: 'none' }}
+        drag={isMobile ? 'y' : false}
+        dragControls={dragControls}
+        dragListener={false}
+        dragConstraints={{ top: 0 }}
+        dragElastic={{ top: 0.05, bottom: 0.6 }}
+        onDragEnd={(_e, info) => {
+          setIsHandlePressed(false);
+          if (info.offset.y > 80 || info.velocity.y > 300) {
+            onClose();
+          }
+        }}
       >
-        {/* Handle visual superior estilo bottom sheet */}
-        <div className="bottom-sheet-handle" aria-hidden="true"></div>
-        <div className="modal-header">
+        {/* Handle visual superior estilo bottom sheet con animación elástica al tocar */}
+        <div
+          className="bottom-sheet-handle-zone"
+          onPointerDown={(e) => {
+            setIsHandlePressed(true);
+            if (isMobile) {
+              dragControls.start(e);
+            }
+          }}
+          onPointerUp={() => setIsHandlePressed(false)}
+          onPointerCancel={() => setIsHandlePressed(false)}
+          aria-label="Deslizar hacia abajo para cerrar"
+          role="button"
+          tabIndex={-1}
+        >
+          <motion.div
+            className="bottom-sheet-handle"
+            aria-hidden="true"
+            animate={{
+              scaleX: isHandlePressed ? 0.68 : 1,
+              scaleY: isHandlePressed ? 1.35 : 1,
+              backgroundColor: isHandlePressed ? 'var(--neon-purple-bright)' : 'rgba(168, 85, 247, 0.55)',
+              boxShadow: isHandlePressed ? '0 0 16px rgba(168, 85, 247, 0.95)' : '0 0 0px transparent',
+            }}
+            transition={{ type: 'spring', stiffness: 450, damping: 24 }}
+          />
+        </div>
+
+        <div
+          className="modal-header"
+          onPointerDown={(e) => {
+            setIsHandlePressed(true);
+            if (isMobile) {
+              dragControls.start(e);
+            }
+          }}
+          onPointerUp={() => setIsHandlePressed(false)}
+          onPointerCancel={() => setIsHandlePressed(false)}
+        >
           <div className="modal-title-group">
             <h2>📜 HISTORIAL DE VOTACIONES PASADAS</h2>
             <p>Consulta las votaciones finalizadas, el registro de cuotas pagadas y la evolución del Aura.</p>
           </div>
-          <motion.button
-            type="button"
-            className="modal-close-btn"
-            onClick={onClose}
-            whileHover={{ scale: 1.15 }}
-            whileTap={{ scale: 0.9 }}
-          >
-            ✕
-          </motion.button>
         </div>
 
         {history.length === 0 ? (
@@ -238,20 +282,24 @@ export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = React.memo(
         )}
 
         {/* MODAL FOOTER */}
-        <div className="modal-footer-actions">
-          {canManageContent && history.length > 0 && (
-            <button
-              type="button"
-              className="btn-clear-history"
-              onClick={() => setShowClearConfirm(true)}
-            >
-              🗑️ Limpiar Historial
-            </button>
-          )}
-          <button type="button" className="btn-modal-cancel" onClick={onClose}>
-            Cerrar
-          </button>
-        </div>
+        {(!isMobile || (canManageContent && history.length > 0)) && (
+          <div className="modal-footer-actions">
+            {canManageContent && history.length > 0 && (
+              <button
+                type="button"
+                className="btn-clear-history"
+                onClick={() => setShowClearConfirm(true)}
+              >
+                🗑️ Limpiar Historial
+              </button>
+            )}
+            {!isMobile && (
+              <button type="button" className="btn-modal-cancel" onClick={onClose}>
+                Cerrar
+              </button>
+            )}
+          </div>
+        )}
 
         {/* CLEAR HISTORY CONFIRM MODAL */}
         {showClearConfirm && (

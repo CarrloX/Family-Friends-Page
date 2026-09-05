@@ -194,6 +194,16 @@ export const SteamVotingDashboard: React.FC = () => {
 
   const [syncState, setSyncState] = useState<SyncState>({ status: 'idle', message: '' });
 
+  // Auto-ocultar el indicador de sincronización tras 5 segundos al completarse o fallar
+  useEffect(() => {
+    if (syncState.status !== 'idle' && syncState.status !== 'saving') {
+      const timer = setTimeout(() => {
+        setSyncState({ status: 'idle', message: '' });
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [syncState]);
+
    const votersDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
    const gamesDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
    const activeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -558,14 +568,6 @@ export const SteamVotingDashboard: React.FC = () => {
     }
 
     setHistory((prev) => prev.filter((r) => r.id !== recordId));
-
-    setTimeout(() => {
-      setSyncState((prev) =>
-        prev.status === 'synced' && prev.message === 'Registro eliminado'
-          ? { status: 'idle', message: '' }
-          : prev
-      );
-    }, 3000);
   }, [history]);
 
   const handleResetData = async () => {
@@ -583,13 +585,6 @@ export const SteamVotingDashboard: React.FC = () => {
   const handleResetAllAura = async () => {
     setVoters((prev) => prev.map(resetVoterAura));
     setSyncState({ status: 'synced', message: 'Aura restablecido para todos' });
-    setTimeout(() => {
-      setSyncState((prev) =>
-        prev.status === 'synced' && prev.message === 'Aura restablecido para todos'
-          ? { status: 'idle', message: '' }
-          : prev
-      );
-    }, 3000);
     setShowResetAuraConfirm(false);
   };
 
@@ -674,13 +669,6 @@ export const SteamVotingDashboard: React.FC = () => {
     const backup = createBackupData(voters, gamesMap, history, steamApiKey);
     downloadBackup(backup);
     setSyncState({ status: 'synced', message: 'Backup exportado ✅' });
-    setTimeout(() => {
-      setSyncState((prev) =>
-        prev.status === 'synced' && prev.message === 'Backup exportado ✅'
-          ? { status: 'idle', message: '' }
-          : prev
-      );
-    }, 3000);
   };
 
   // ─── Backup: Importar ─────────────────────────────────────
@@ -726,7 +714,8 @@ export const SteamVotingDashboard: React.FC = () => {
     if (isLoading) return null;
 
     const { status, message } = syncState;
-    let icon: string;
+    const isVisible = status !== 'idle';
+    let icon = '✅';
     let className = 'sync-indicator';
 
     switch (status) {
@@ -747,14 +736,26 @@ export const SteamVotingDashboard: React.FC = () => {
         className += ' sync-local';
         break;
       default:
-        return null;
+        break;
     }
 
     return (
-      <div className={className} title={message}>
-        <span className="sync-icon">{icon}</span>
-        <span className="sync-text">{message}</span>
-      </div>
+      <AnimatePresence>
+        {isVisible && (
+          <motion.div
+            key="sync-indicator"
+            className={className}
+            title={message}
+            initial={{ opacity: 0, y: 12, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 8, scale: 0.95 }}
+            transition={{ duration: 0.25, ease: 'easeOut' }}
+          >
+            <span className="sync-icon">{icon}</span>
+            <span className="sync-text">{message}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
     );
   };
 

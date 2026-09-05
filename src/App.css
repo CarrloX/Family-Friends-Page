@@ -2982,6 +2982,12 @@ background: #3b0764;
   justify-content: center;
   padding: 20px;
   animation: fadeIn 0.3s ease-out;
+  -webkit-tap-highlight-color: transparent !important;
+  -webkit-touch-callout: none;
+  outline: none;
+  touch-action: manipulation;
+  will-change: opacity;
+  transform: translateZ(0);
 }
 
 .modal-backdrop-close {
@@ -2994,6 +3000,9 @@ background: #3b0764;
   border: none;
   cursor: pointer;
   z-index: 0;
+  -webkit-tap-highlight-color: transparent !important;
+  outline: none;
+  touch-action: manipulation;
 }
 
 /* ==================== BOTTOM SHEET MODAL ANIMATIONS ==================== */
@@ -3002,6 +3011,10 @@ background: #3b0764;
 
 .bottom-sheet-backdrop {
   cursor: pointer;
+  -webkit-tap-highlight-color: transparent !important;
+  -webkit-touch-callout: none;
+  outline: none;
+  touch-action: manipulation;
 }
 
 .bottom-sheet-panel {
@@ -3010,23 +3023,60 @@ background: #3b0764;
   position: relative;
   z-index: 1;
   cursor: default;
+  -webkit-tap-highlight-color: transparent !important;
+  -webkit-touch-callout: none;
+  outline: none;
 }
 
 /* Handle visual superior estilo bottom sheet móvil */
+.bottom-sheet-handle-zone {
+  display: none;
+  width: 100%;
+  padding: 10px 0 8px;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.bottom-sheet-handle-zone:active {
+  cursor: grabbing;
+}
+
+.bottom-sheet-handle-zone:active .bottom-sheet-handle,
+.bottom-sheet-handle:active {
+  background: var(--neon-purple-bright);
+  transform: scaleX(0.68) scaleY(1.35);
+  box-shadow: 0 0 16px rgba(168, 85, 247, 0.95);
+}
+
 .bottom-sheet-handle {
   display: none; /* Solo visible en móvil */
-  width: 40px;
-  height: 4px;
-  background: rgba(168, 85, 247, 0.5);
-  border-radius: 2px;
+  width: 44px;
+  height: 5px;
+  background: rgba(168, 85, 247, 0.55);
+  border-radius: 3px;
   margin: 0 auto 12px;
   flex-shrink: 0;
+  transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.2s ease, box-shadow 0.2s ease;
+  transform-origin: center center;
 }
 
 /* En móvil: el panel se ancla al borde inferior */
 @media (max-width: 768px) {
+  .bottom-sheet-handle-zone {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
   .bottom-sheet-handle {
     display: block;
+  }
+
+  .bottom-sheet-handle-zone .bottom-sheet-handle {
+    margin: 0 auto;
   }
 
   .bottom-sheet-panel {
@@ -3041,6 +3091,22 @@ background: #3b0764;
     margin: 0 !important;
     /* Animación de entrada desde abajo */
     animation: bottomSheetSlideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* El modal de historial usa framer-motion para arrastre fluido sin saltos CSS */
+  .bottom-sheet-panel.history-modal-container {
+    animation: none !important;
+  }
+
+  .bottom-sheet-panel.history-modal-container .modal-header {
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    cursor: grab;
+  }
+
+  .bottom-sheet-panel.history-modal-container .modal-header:active {
+    cursor: grabbing;
   }
 
   /* Asegurar que el contenido sea scrollable */
@@ -4263,6 +4329,10 @@ background: #3b0764;
     text-align: center;
   }
 
+  .history-modal-container .btn-modal-cancel {
+    display: none !important;
+  }
+
 
   .history-content-layout {
     display: flex !important;
@@ -4503,7 +4573,7 @@ background: #3b0764;
 /* ==================== SYNC INDICATOR ==================== */
 .sync-indicator {
   position: fixed;
-  bottom: 16px;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
   right: 16px;
   z-index: 9999;
   display: flex;
