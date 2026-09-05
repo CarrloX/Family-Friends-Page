@@ -66,17 +66,24 @@ export function getGameImageFallbacks(game?: Partial<Game>): string[] {
     fallbacks.push(cleanedCover);
   }
 
-  // 2. Si tiene appId de Steam, añadir las rutas oficiales en orden de confiabilidad
+  // 2. Si tiene tinyCoverImage verificada (devuelta por Steam Search API con hash exacto).
+  // Esto previene errores 404 en juegos no lanzados (como Jurassic World Evolution 3) que aún no tienen header.jpg publicado.
+  if (game.tinyCoverImage && !fallbacks.includes(game.tinyCoverImage)) {
+    fallbacks.push(game.tinyCoverImage);
+  }
+
+  // 3. Si tiene appId de Steam, añadir las rutas oficiales en orden de confiabilidad
   if (appId && !Number.isNaN(appId) && appId > 0) {
-    // Header estándar en shared.akamai (el más confiable)
-    fallbacks.push(`https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`);
+    // Header estándar en shared.akamai (el más confiable para juegos lanzados)
+    const sharedHeader = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`;
+    if (!fallbacks.includes(sharedHeader)) {
+      fallbacks.push(sharedHeader);
+    }
 
     // Mirror en cdn.akamai
-    fallbacks.push(`https://cdn.akamai.steamstatic.com/steam/apps/${appId}/header.jpg`);
-
-    // Tiny cover original si existe (frecuentemente cápsula 231x87 válida de Steam)
-    if (game.tinyCoverImage && !fallbacks.includes(game.tinyCoverImage)) {
-      fallbacks.push(game.tinyCoverImage);
+    const cdnHeader = `https://cdn.akamai.steamstatic.com/steam/apps/${appId}/header.jpg`;
+    if (!fallbacks.includes(cdnHeader)) {
+      fallbacks.push(cdnHeader);
     }
 
     // Cápsulas alternativas
