@@ -1,13 +1,42 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { SteamVotingDashboard } from './components/SteamVotingDashboard';
+import { UpdatePrompt } from './components/UpdatePrompt';
 import { useRegisterSW } from 'virtual:pwa-register/react';
 import './App.css';
 
 function App() {
   const {
-    needRefresh: [needRefresh, setNeedRefresh],
+    needRefresh: [needRefresh],
     updateServiceWorker,
-  } = useRegisterSW();
+  } = useRegisterSW({
+    onRegisteredSW(_swUrl, registration) {
+      if (!registration) return;
+
+      // Comprobación periódica en segundo plano cada 10 minutos
+      const intervalMs = 10 * 60 * 1000;
+      setInterval(() => {
+        if (!navigator.onLine) return;
+        registration.update().catch((err) => {
+          console.debug('Error comprobando actualización periódica de SW:', err);
+        });
+      }, intervalMs);
+
+      // Comprobar actualización al volver a la pestaña o reactivar la app en el móvil
+      const handleVisibilityOrFocus = () => {
+        if (document.visibilityState === 'visible' && navigator.onLine) {
+          registration.update().catch((err) => {
+            console.debug('Error comprobando actualización al enfocar:', err);
+          });
+        }
+      };
+
+      document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+      window.addEventListener('focus', handleVisibilityOrFocus);
+    },
+    onRegisterError(error) {
+      console.error('Error registrando Service Worker:', error);
+    },
+  });
 
   return (
     <>
@@ -24,32 +53,10 @@ function App() {
         </motion.div>
       </AnimatePresence>
 
-      <AnimatePresence>
-        {needRefresh && (
-          <motion.div
-            className="update-toast"
-            initial={{ opacity: 0, y: 50, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 20, scale: 0.95 }}
-            transition={{ type: 'spring', stiffness: 300, damping: 25 }}
-          >
-            <div className="update-toast-content">
-              <span className="update-toast-icon">🚀</span>
-              <span className="update-toast-text">Nueva versión disponible</span>
-            </div>
-            <button
-              type="button"
-              className="update-toast-btn"
-              onClick={() => {
-                void updateServiceWorker(true);
-                setNeedRefresh(false);
-              }}
-            >
-              Actualizar
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <UpdatePrompt
+        show={needRefresh}
+        updateServiceWorker={updateServiceWorker}
+      />
     </>
   );
 }

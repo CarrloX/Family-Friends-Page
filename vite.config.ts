@@ -43,17 +43,15 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{html,js,css,ico,png,svg,woff2}'],
         cleanupOutdatedCaches: true,
-        skipWaiting: true,
-        clientsClaim: true,
         runtimeCaching: [
           {
-            urlPattern: /\.(?:js|css|woff2?|ttf|otf|eot)$/i,
-            handler: 'StaleWhileRevalidate',
+            urlPattern: /\.(?:woff2?|ttf|otf|eot)$/i,
+            handler: 'CacheFirst',
             options: {
-              cacheName: 'app-assets-cache',
+              cacheName: 'app-fonts-cache',
               expiration: {
-                maxEntries: 50,
-                maxAgeSeconds: 30 * 24 * 60 * 60, // 30 días
+                maxEntries: 30,
+                maxAgeSeconds: 365 * 24 * 60 * 60, // 1 año
               },
               cacheableResponse: {
                 statuses: [0, 200],
