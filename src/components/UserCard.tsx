@@ -229,7 +229,7 @@ export const UserCard: React.FC<UserCardProps> = React.memo(({
       {/* Header Info */}
       <div className="card-header">
         <div className="avatar-wrapper">
-          <img key={voter.avatar} src={voter.avatar} alt={voter.name} className="user-avatar" loading="lazy" />
+          <img key={voter.avatar} src={voter.avatar} alt={voter.name} className="user-avatar" loading="eager" />
         </div>
 
         <div className="user-meta">

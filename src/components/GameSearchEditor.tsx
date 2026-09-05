@@ -278,7 +278,7 @@ const SingleGameSlotEditor: React.FC<SingleGameSlotEditorProps> = ({
                 whileHover={{ scale: 1.01, backgroundColor: 'rgba(102, 192, 244, 0.15)' }}
                 whileTap={{ scale: 0.98 }}
               >
-                <img src={item.tiny_image} alt={item.name} className="dropdown-item-thumb" loading="lazy" />
+                <img src={item.tiny_image} alt={item.name} className="dropdown-item-thumb" loading="eager" />
                 <div className="dropdown-item-info">
                   <span className="dropdown-item-title">{item.name}</span>
                   <span className="dropdown-item-meta">
