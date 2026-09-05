@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import type { Voter, GameResult, Game, VotingHistoryRecord, VoterSnapshotInHistory } from '../types/voting';
 import { calculateAuraStatus } from '../types/voting';
 import { VoterPaymentRow } from './VoterPaymentRow';
+import { GameThumbnail } from './GameThumbnail';
 
 interface FinishVotingModalProps {
   allResults: GameResult[];
@@ -123,22 +124,10 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
 
         {/* WINNING GAME PREVIEW */}
         <div className="modal-winner-card">
-          <img
-            src={winningResult.game?.coverImage}
+          <GameThumbnail
+            game={winningResult.game}
             alt={winningResult.game?.title}
             className="winner-modal-thumb"
-            loading="lazy"
-            onError={(e) => {
-              const target = e.currentTarget;
-              if (!target.dataset.failed) {
-                target.dataset.failed = 'true';
-                if (winningResult.game?.tinyCoverImage) {
-                  target.src = winningResult.game.tinyCoverImage;
-                } else if (winningResult.game?.appId) {
-                  target.src = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${winningResult.game.appId}/capsule_sm_120.jpg`;
-                }
-              }
-            }}
           />
           <div className="winner-modal-info">
             <span className="winner-tag">1º LUGAR GANADOR</span>

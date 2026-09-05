@@ -3594,6 +3594,7 @@ background: #3b0764;
   height: 28px;
   object-fit: cover;
   border-radius: 4px;
+  background-color: #171a21;
 }
 
 .history-item-info {
@@ -3715,6 +3716,7 @@ background: #3b0764;
   object-fit: cover;
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.2);
+  background-color: #171a21;
 }
 
 .history-competitors-section h5, .history-voters-table-container h5 {
@@ -3753,6 +3755,7 @@ background: #3b0764;
   object-fit: cover;
   border-radius: 4px;
   flex-shrink: 0;
+  background-color: #171a21;
 }
 
 .competitor-info {

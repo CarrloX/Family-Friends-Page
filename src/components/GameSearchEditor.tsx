@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import type { Game } from '../types/voting';
 import { searchSteamStore, fetchSteamGameDetails, type SteamSearchResultItem } from '../services/steamStoreApi';
+import { GameThumbnail } from './GameThumbnail';
 
 interface GameSearchEditorProps {
   gamesMap: Record<string, Game>;
@@ -239,22 +240,10 @@ const SingleGameSlotEditor: React.FC<SingleGameSlotEditorProps> = ({
       </div>
 
       <div className="slot-current-preview">
-        <img
-          src={game?.coverImage}
+        <GameThumbnail
+          game={game}
           alt={game?.title}
           className="slot-cover-thumb"
-          loading="lazy"
-          onError={(e) => {
-            const target = e.currentTarget;
-            if (!target.dataset.failed) {
-              target.dataset.failed = 'true';
-              if (game?.tinyCoverImage) {
-                target.src = game.tinyCoverImage;
-              } else if (game?.appId) {
-                target.src = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${game.appId}/capsule_sm_120.jpg`;
-              }
-            }
-          }}
         />
         <div className="slot-preview-meta">
           <div className="slot-game-title">{game?.title || 'Seleccionar juego'}</div>

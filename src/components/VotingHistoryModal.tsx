@@ -5,6 +5,7 @@ import { DeleteHistoryRecordConfirmModal } from './DeleteHistoryRecordConfirmMod
 import { HistoryListItem } from './HistoryListItem';
 import { CompetitorCard } from './CompetitorCard';
 import { VoterSnapshotRow } from './VoterSnapshotRow';
+import { GameThumbnail } from './GameThumbnail';
 
 const ITEMS_PER_PAGE = 5;
 
@@ -179,22 +180,11 @@ export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = React.memo(
                     </button>
                   )}
                   {!isMobile && (
-                    <img
-                      src={selectedRecord.winningGame?.coverImage}
+                    <GameThumbnail
+                      game={selectedRecord.winningGame}
                       alt={selectedRecord.winningGame?.title}
                       className="history-details-banner"
-                      loading="lazy"
-                      onError={(e) => {
-                        const target = e.currentTarget;
-                        if (!target.dataset.failed) {
-                          target.dataset.failed = 'true';
-                          if (selectedRecord.winningGame?.tinyCoverImage) {
-                            target.src = selectedRecord.winningGame.tinyCoverImage;
-                          } else if (selectedRecord.winningGame?.appId) {
-                            target.src = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${selectedRecord.winningGame.appId}/capsule_sm_120.jpg`;
-                          }
-                        }
-                      }}
+                      recordId={selectedRecord.id}
                     />
                   )}
                 </div>
@@ -209,10 +199,11 @@ export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = React.memo(
                       const pts = 'weightedPoints' in item ? item.weightedPoints : null;
                       return (
                         <CompetitorCard
-                          key={game.id}
+                          key={`${selectedRecord.id}-${game.id || idx}`}
                           game={game}
                           pts={pts}
                           idx={idx}
+                          recordId={selectedRecord.id}
                         />
                       );
                     })}

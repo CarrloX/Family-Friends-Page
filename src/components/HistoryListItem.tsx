@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import type { VotingHistoryRecord } from '../types/voting';
+import { GameThumbnail } from './GameThumbnail';
 
 interface HistoryListItemProps {
   rec: VotingHistoryRecord;
@@ -34,21 +35,11 @@ export const HistoryListItem: React.FC<HistoryListItemProps> = React.memo(({
         whileHover={{ scale: 1.01 }}
         whileTap={{ scale: 0.98 }}
       >
-        <img
-          src={rec.winningGame?.coverImage}
+        <GameThumbnail
+          game={rec.winningGame}
           alt={rec.winningGame?.title}
           className="history-item-thumb"
-          onError={(e) => {
-            const target = e.currentTarget;
-            if (!target.dataset.failed) {
-              target.dataset.failed = 'true';
-              if (rec.winningGame?.tinyCoverImage) {
-                target.src = rec.winningGame.tinyCoverImage;
-              } else if (rec.winningGame?.appId) {
-                target.src = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${rec.winningGame.appId}/capsule_sm_120.jpg`;
-              }
-            }
-          }}
+          recordId={rec.id}
         />
         <div className="history-item-info">
           <span className="history-item-winner">🏆 {rec.winningGame?.title}</span>

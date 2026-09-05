@@ -13,6 +13,7 @@ import {
 import { getFirestoreInstance, isFirebaseReady, ensureFirebaseAuth } from './firebaseConfig';
 import { getAdminAccessState } from './accessControl';
 import type { Voter, Game, VotingHistoryRecord } from '../types/voting';
+import { fixSteamCoverUrl } from '../utils/steamImages';
 
 // ============================================================
 // Constantes para localStorage (fallback)
@@ -175,9 +176,11 @@ export function sanitizeGame(game: Game): Game {
   if (/actualizar|modo\s*edici[oó]n/i.test(cleanGenre)) {
     cleanGenre = 'Juego de Steam';
   }
+  const cleanCover = fixSteamCoverUrl(game.coverImage, game.appId);
   return {
     ...game,
     genre: cleanGenre,
+    coverImage: cleanCover || game.coverImage,
   };
 }
 
@@ -187,6 +190,29 @@ export function sanitizeGamesMap(map: Record<string, Game>): Record<string, Game
     if (g) result[key] = sanitizeGame(g);
   }
   return result;
+}
+
+export function sanitizeVotingHistoryRecord(record: VotingHistoryRecord): VotingHistoryRecord {
+  if (!record) return record;
+  const winningGame = sanitizeGame(record.winningGame);
+  const gamesMap = sanitizeGamesMap(record.gamesMap || {});
+  const games = Array.isArray(record.games)
+    ? record.games.map(sanitizeGame)
+    : Object.values(gamesMap);
+  const resultsSnapshot = Array.isArray(record.resultsSnapshot)
+    ? record.resultsSnapshot.map((r) => ({
+        ...r,
+        game: sanitizeGame(r.game),
+      }))
+    : [];
+
+  return {
+    ...record,
+    winningGame,
+    gamesMap,
+    games,
+    resultsSnapshot,
+  };
 }
 
 function parseActiveVotingData(data: ActiveVotingDocument): { voters: Voter[]; gamesMap: Record<string, Game>; games: Game[] } | null {
@@ -355,14 +381,16 @@ export async function addHistoryRecord(record: VotingHistoryRecord): Promise<Syn
     return buildReadOnlyState();
   }
 
+  const cleanRecord = sanitizeVotingHistoryRecord(record);
+
   if (isFirebaseReady()) {
     try {
       await ensureFirebaseAuth();
       const db = getFirestoreInstance()!;
       const colRef = collection(db, COLLECTION_HISTORY);
       await addDoc(colRef, {
-        ...record,
-        date: record.date,
+        ...cleanRecord,
+        date: cleanRecord.date,
         savedAt: Timestamp.now(),
       });
       console.log('[DataStore] Historial sincronizado con Firestore.');
@@ -370,13 +398,13 @@ export async function addHistoryRecord(record: VotingHistoryRecord): Promise<Syn
     } catch (err) {
       console.warn('[DataStore] Error sincronizando historial, usando localStorage:', err);
       const history = readLocal<VotingHistoryRecord[]>(LS_KEY_HISTORY, []);
-      history.unshift(record);
+      history.unshift(cleanRecord);
       writeLocal(LS_KEY_HISTORY, history);
       return { status: 'local', message: 'Guardado localmente (sin conexión)' };
     }
   }
   const history = readLocal<VotingHistoryRecord[]>(LS_KEY_HISTORY, []);
-  history.unshift(record);
+  history.unshift(cleanRecord);
   writeLocal(LS_KEY_HISTORY, history);
   return { status: 'local', message: 'Guardado localmente' };
 }
@@ -396,7 +424,7 @@ export async function loadHistory(): Promise<VotingHistoryRecord[]> {
         const records: VotingHistoryRecord[] = [];
         snap.forEach((d) => {
           const data = d.data() as VotingHistoryRecord & { savedAt?: Timestamp };
-          records.push(data);
+          records.push(sanitizeVotingHistoryRecord(data));
         });
         console.log('[DataStore] Historial cargado desde Firestore.');
         writeLocal(LS_KEY_HISTORY, records);
@@ -406,7 +434,8 @@ export async function loadHistory(): Promise<VotingHistoryRecord[]> {
       console.warn('[DataStore] Error cargando historial de Firestore, usando localStorage:', err);
     }
   }
-  return readLocal<VotingHistoryRecord[]>(LS_KEY_HISTORY, []);
+  const localHistory = readLocal<VotingHistoryRecord[]>(LS_KEY_HISTORY, []);
+  return localHistory.map(sanitizeVotingHistoryRecord);
 }
 
 /**

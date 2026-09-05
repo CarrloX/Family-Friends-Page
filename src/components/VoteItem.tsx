@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { GameVote, Game } from '../types/voting';
+import { GameThumbnail } from './GameThumbnail';
 
 interface VoteItemProps {
   vote: GameVote;
@@ -70,26 +71,10 @@ export const VoteItem: React.FC<VoteItemProps> = React.memo(({
       layout
     >
       <div className="game-thumb-container">
-        <img
-          key={game?.id || vote.gameId}
-          src={game?.coverImage}
-          alt={game?.title}
+        <GameThumbnail
+          game={game}
+          alt={game.title}
           className="game-thumb"
-          loading="lazy"
-          onError={(e) => {
-            const target = e.currentTarget;
-            if (!target.dataset.fallback) {
-              target.dataset.fallback = '1';
-              if (game?.tinyCoverImage) {
-                target.src = game.tinyCoverImage;
-              } else if (game?.appId) {
-                target.src = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${game.appId}/capsule_sm_120.jpg`;
-              }
-            } else if (target.dataset.fallback === '1' && game?.appId) {
-              target.dataset.fallback = '2';
-              target.src = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${game.appId}/capsule_sm_120.jpg`;
-            }
-          }}
         />
       </div>
 
@@ -102,7 +87,6 @@ export const VoteItem: React.FC<VoteItemProps> = React.memo(({
         <div className="vote-points-row">
           {renderPointsLabel()}
 
-
           {!is0Pts && (
             <span className="weighted-pts">
               ➜ <strong>{weightedScore}</strong> pts
@@ -113,4 +97,3 @@ export const VoteItem: React.FC<VoteItemProps> = React.memo(({
     </motion.div>
   );
 });
-

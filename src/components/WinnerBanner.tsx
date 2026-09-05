@@ -4,6 +4,8 @@ import { FaGamepad, FaSteam } from 'react-icons/fa';
 import type { GameResult, SteamPriceInfo } from '../types/voting';
 import { getMaxVotePoints } from '../types/voting';
 import { fetchSteamGameDetails } from '../services/steamStoreApi';
+import { GameThumbnail } from './GameThumbnail';
+import { getGameImageFallbacks } from '../utils/steamImages';
 
 interface WinnerBannerProps {
   results: GameResult[];
@@ -215,22 +217,10 @@ const PodiumList: React.FC<{ runnersUp: GameResult[] }> = ({ runnersUp }) => {
               transition={{ type: 'spring', stiffness: 400, damping: 25 }}
             >
               <div className="podium-rank">{getRankLabel(rankPosition)}</div>
-              <img
-                src={result.game.coverImage}
+              <GameThumbnail
+                game={result.game}
                 alt={result.game.title}
                 className="podium-thumb"
-                loading="lazy"
-                onError={(e) => {
-                  const target = e.currentTarget;
-                  if (!target.dataset.failed) {
-                    target.dataset.failed = 'true';
-                    if (result.game?.tinyCoverImage) {
-                      target.src = result.game.tinyCoverImage;
-                    } else if (result.game?.appId) {
-                      target.src = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${result.game.appId}/capsule_sm_120.jpg`;
-                    }
-                  }
-                }}
               />
               <div className="podium-info">
                 <span className="podium-title">{result.game.title}</span>
@@ -310,16 +300,10 @@ export const WinnerBanner: React.FC<WinnerBannerProps> = React.memo(({
     ? `${cdnBase}/${appId}/capsule_616x353.jpg`
     : winner?.game?.coverImage;
 
-  // Fallback chain for winner cover: HD → header → small capsule → coverImage → tinyCoverImage
-  const winnerCoverFallbacks: string[] = [];
-  if (appId) {
-    winnerCoverFallbacks.push(
-      `${cdnBase}/${appId}/header.jpg`,
-      `${cdnBase}/${appId}/capsule_sm_120.jpg`
-    );
-  }
-  if (winner?.game?.coverImage) winnerCoverFallbacks.push(winner.game.coverImage);
-  if (winner?.game?.tinyCoverImage) winnerCoverFallbacks.push(winner.game.tinyCoverImage);
+  // Fallback chain for winner cover: robust multi-CDN fallback
+  const winnerCoverFallbacks: string[] = winner?.game
+    ? getGameImageFallbacks(winner.game)
+    : [];
 
   return (
     <section className="winner-section">

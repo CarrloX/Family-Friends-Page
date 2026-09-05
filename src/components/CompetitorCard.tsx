@@ -1,16 +1,19 @@
 import React from 'react';
 import type { Game } from '../types/voting';
+import { GameThumbnail } from './GameThumbnail';
 
 interface CompetitorCardProps {
   game: Game;
   pts: number | null;
   idx: number;
+  recordId?: string;
 }
 
 export const CompetitorCard: React.FC<CompetitorCardProps> = React.memo(({
   game,
   pts,
   idx,
+  recordId,
 }) => {
   let medal: string;
   if (idx === 0) medal = '🥇';
@@ -20,21 +23,11 @@ export const CompetitorCard: React.FC<CompetitorCardProps> = React.memo(({
 
   return (
     <div key={game.id} className={`competitor-card ${idx === 0 ? 'winner-competitor' : ''}`}>
-      <img
-        src={game.coverImage}
+      <GameThumbnail
+        game={game}
         alt={game.title}
         className="competitor-thumb"
-        onError={(e) => {
-          const target = e.currentTarget;
-          if (!target.dataset.failed) {
-            target.dataset.failed = 'true';
-            if (game?.tinyCoverImage) {
-              target.src = game.tinyCoverImage;
-            } else if (game?.appId) {
-              target.src = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${game.appId}/capsule_sm_120.jpg`;
-            }
-          }
-        }}
+        recordId={recordId}
       />
       <div className="competitor-info">
         <span className="competitor-medal">{medal}</span>

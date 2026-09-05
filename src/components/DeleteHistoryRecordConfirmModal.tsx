@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import type { VotingHistoryRecord } from '../types/voting';
+import { GameThumbnail } from './GameThumbnail';
 
 interface DeleteHistoryRecordConfirmModalProps {
   record: VotingHistoryRecord;
@@ -23,7 +24,7 @@ export const DeleteHistoryRecordConfirmModal: React.FC<DeleteHistoryRecordConfir
       onClick={onCancel}
     >
       <motion.div
-        className="delete-confirm-modal-container bottom-sheet-panel"
+        className="delete-modal-container bottom-sheet-panel"
         initial={{ y: '100%', opacity: 0, scale: 0.95 }}
         animate={{ y: 0, opacity: 1, scale: 1 }}
         exit={{ y: '100%', opacity: 0, scale: 0.95 }}
@@ -34,8 +35,8 @@ export const DeleteHistoryRecordConfirmModal: React.FC<DeleteHistoryRecordConfir
         <div className="bottom-sheet-handle" aria-hidden="true"></div>
         <div className="modal-header">
           <div className="modal-title-group">
-            <h2>⚠️ Eliminar Votación</h2>
-            <p>Esta acción no se puede deshacer fácilmente.</p>
+            <h2>⚠️ Eliminar Votación del Historial</h2>
+            <p>Esta acción afectará los saldos acumulados de los integrantes.</p>
           </div>
           <motion.button
             type="button"
@@ -51,22 +52,11 @@ export const DeleteHistoryRecordConfirmModal: React.FC<DeleteHistoryRecordConfir
 
         <div className="delete-warning-content">
           <div className="delete-user-preview">
-            <img
-              src={record.winningGame?.coverImage}
+            <GameThumbnail
+              game={record.winningGame}
               alt={record.winningGame?.title}
               className="delete-user-avatar"
-              loading="lazy"
-              onError={(e) => {
-                const target = e.currentTarget;
-                if (!target.dataset.failed) {
-                  target.dataset.failed = 'true';
-                  if (record.winningGame?.tinyCoverImage) {
-                    target.src = record.winningGame.tinyCoverImage;
-                  } else if (record.winningGame?.appId) {
-                    target.src = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${record.winningGame.appId}/capsule_sm_120.jpg`;
-                  }
-                }
-              }}
+              recordId={record.id}
             />
             <div className="delete-user-info">
               <span className="delete-user-name">🏆 {record.winningGame?.title}</span>

@@ -84,11 +84,10 @@ export async function searchSteamStore(query: string): Promise<SteamSearchResult
         const tinyImg =
           item.tiny_image || `https://cdn.akamai.steamstatic.com/steam/apps/${item.id}/capsule_sm_120.jpg`;
 
-        // Derivar header image directamente desde patrón o CDN de Steam
-        let headerImg = tinyImg.replace(/capsule_[^/]+\.jpg/i, 'header.jpg');
-        if (headerImg === tinyImg) {
-          headerImg = `https://cdn.akamai.steamstatic.com/steam/apps/${item.id}/header.jpg`;
-        }
+        // Derivar header image directamente desde el endpoint oficial de Steam (shared.akamai)
+        // NOTA: Steam storesearch devuelve tiny_image con subcarpeta hash (e.g. /apps/123/hash/capsule_231x87.jpg),
+        // pero header.jpg NO existe dentro de esa subcarpeta hash. Vive en la raíz del appId.
+        const headerImg = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${item.id}/header.jpg`;
 
         let priceInfo: SteamPriceInfo | undefined = undefined;
         let formattedPrice = 'Ver en Steam';
