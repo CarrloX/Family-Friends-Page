@@ -16,7 +16,7 @@ export const GameThumbnail: React.FC<GameThumbnailProps> = React.memo(({
   alt,
   className = '',
   recordId = '',
-  loading = 'lazy',
+  loading = 'eager',
   style,
 }) => {
   const fallbacks = useMemo(() => getGameImageFallbacks(game || undefined), [game]);

@@ -26,7 +26,7 @@ export const VoterPaymentRow: React.FC<VoterPaymentRowProps> = React.memo(({
       transition={{ duration: 0.2 }}
     >
       <div className="voter-pay-user">
-        <img src={voter.avatar} alt={voter.name} className="pay-user-avatar" loading="lazy" />
+        <img src={voter.avatar} alt={voter.name} className="pay-user-avatar" loading="eager" />
         <div className="pay-user-meta">
           <span className="pay-user-name">{voter.name}</span>
           <span className="pay-current-rank">

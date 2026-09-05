@@ -112,7 +112,7 @@ const WinnerCard: React.FC<WinnerCardProps> = ({
             src={winnerHdCover}
             alt={winner.game.title}
             className="winner-image"
-            loading="lazy"
+            loading="eager"
             onError={(e) => {
               const target = e.currentTarget;
               const currentFallback = Number.parseInt(target.dataset.fallbackLevel || '0', 10);

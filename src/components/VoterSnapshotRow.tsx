@@ -12,7 +12,7 @@ export const VoterSnapshotRow: React.FC<VoterSnapshotRowProps> = React.memo(({
     <tr key={snap.voterId} className={snap.paidQuota ? 'row-yes' : 'row-no'}>
       <td>
         <div className="voter-cell">
-          <img src={snap.avatar} alt={snap.name} className="table-avatar" loading="lazy" />
+          <img src={snap.avatar} alt={snap.name} className="table-avatar" loading="eager" />
           <span className="table-name">{snap.name}</span>
         </div>
       </td>
