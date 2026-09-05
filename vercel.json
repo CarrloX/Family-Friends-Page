@@ -1,0 +1,17 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    {
+      "source": "/api/steam-store/:path*",
+      "destination": "https://store.steampowered.com/:path*"
+    },
+    {
+      "source": "/api/steam-web/:path*",
+      "destination": "https://api.steampowered.com/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

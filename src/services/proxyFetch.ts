@@ -8,6 +8,19 @@ const CORS_PROXIES = [
   (target: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(target)}`,
 ];
 
+function isProxyCapableEnvironment(): boolean {
+  if (typeof window === 'undefined') return false;
+  // Entorno de desarrollo local (Vite dev server)
+  if (import.meta.env.DEV || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    return true;
+  }
+  // Despliegue en Vercel (gestionado mediante vercel.json rewrites)
+  if (window.location.hostname.includes('vercel.app')) {
+    return true;
+  }
+  return false;
+}
+
 function resolveLocalProxyUrl(targetUrl: string): string | null {
   if (targetUrl.startsWith('https://store.steampowered.com/')) {
     return targetUrl.replace('https://store.steampowered.com', '/api/steam-store');
@@ -19,6 +32,7 @@ function resolveLocalProxyUrl(targetUrl: string): string | null {
 }
 
 async function fetchFromLocalProxy<T>(targetUrl: string, timeoutMs: number): Promise<T | null> {
+  if (!isProxyCapableEnvironment()) return null;
   const localUrl = resolveLocalProxyUrl(targetUrl);
   if (!localUrl) return null;
 
