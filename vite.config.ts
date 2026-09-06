@@ -15,8 +15,8 @@ export default defineConfig({
         name: 'Steam Family - Votación de Juegos',
         short_name: 'Steam Votes',
         description: 'Sistema de votación de juegos y gestión de Aura para el grupo de Steam Family.',
-        theme_color: '#0f0e17',
-        background_color: '#0f0e17',
+        theme_color: '#1b2838',
+        background_color: '#0b0e14',
         display: 'standalone',
         orientation: 'portrait',
         icons: [
