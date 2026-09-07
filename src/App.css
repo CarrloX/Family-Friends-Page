@@ -1038,15 +1038,20 @@
   text-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
 }
 
+.winner-image-link {
+  cursor: pointer;
+  text-decoration: none;
+}
+
 .winner-steam-price-badge {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   background: rgba(23, 26, 33, 0.85);
   border: 1px solid rgba(102, 192, 244, 0.25);
-  border-radius: 8px;
-  padding: 5px 12px;
-  font-size: 13px;
+  border-radius: 9px;
+  padding: 8px 20px;
+  font-size: 30px;
   font-weight: 700;
   color: #ffffff;
   text-decoration: none;
@@ -1074,7 +1079,7 @@
 }
 
 .steam-price-icon {
-  font-size: 16px;
+  font-size: 19px;
   color: #66c0f4;
   flex-shrink: 0;
   transition: transform 0.2s ease;
@@ -1087,23 +1092,23 @@
 .price-discount-pill {
   background: #a4d007;
   color: #000000;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 900;
-  padding: 2px 6px;
-  border-radius: 4px;
+  padding: 3px 8px;
+  border-radius: 5px;
   letter-spacing: 0.3px;
   box-shadow: 0 2px 6px rgba(164, 208, 7, 0.35);
 }
 
 .price-old-strikethrough {
-  font-size: 12px;
+  font-size: 13px;
   color: #8f98a0;
   text-decoration: line-through;
   opacity: 0.85;
 }
 
 .price-current-value {
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 800;
   color: #ffffff;
   letter-spacing: 0.3px;
@@ -1118,18 +1123,23 @@
   font-family: var(--font-display);
   font-size: 36px;
   font-weight: 900;
-  color: #ffffff;
   letter-spacing: -0.5px;
   line-height: 1.1;
-  transition: all 0.3s ease;
-}
-
-.winner-title:hover {
-  background: linear-gradient(135deg, #ffffff, var(--neon-purple-bright));
+  background-image: linear-gradient(135deg, #ffffff 0%, #ffffff 40%, var(--neon-purple-bright) 100%);
+  background-size: 250% 100%;
+  background-position: 0% 50%;
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
-  filter: drop-shadow(0 0 20px rgba(157, 78, 221, 0.5));
+  color: #ffffff;
+  filter: drop-shadow(0 0 0px transparent);
+  transition: background-position 0.5s cubic-bezier(0.2, 0.8, 0.2, 1),
+              filter 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.winner-title:hover {
+  background-position: 100% 50%;
+  filter: drop-shadow(0 0 20px rgba(157, 78, 221, 0.55));
 }
 
 .winner-description {
@@ -1264,7 +1274,7 @@
 .podium-card {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   background: rgba(11, 14, 20, 0.5);
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 12px;
@@ -1303,10 +1313,11 @@
   border-radius: 6px;
   white-space: nowrap;
   transition: all 0.3s ease;
+  transform-origin: center center;
 }
 
 .podium-card:hover .podium-rank {
-  transform: scale(1.1);
+  transform: scale(1.05);
   background: var(--neon-purple-bright);
   border-color: var(--neon-purple-bright);
 }
@@ -1321,19 +1332,22 @@
   flex-shrink: 0;
   background: rgba(0, 0, 0, 0.4);
   transition: all 0.3s ease;
+  transform-origin: center center;
 }
 
 .podium-card:hover .podium-thumb {
-  transform: scale(1.15);
+  transform: scale(1.06);
   border-color: var(--neon-purple-bright);
-  box-shadow: 0 0 15px rgba(157, 78, 221, 0.5);
+  box-shadow: 0 0 12px rgba(157, 78, 221, 0.5);
 }
 
 .podium-info {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
   overflow: hidden;
+  margin-left: 4px;
+  min-width: 0;
 }
 
 .podium-title {
@@ -1353,15 +1367,24 @@
 .podium-score {
   font-size: 12px;
   color: var(--steam-text-muted);
-  transition: all 0.3s ease;
+  transition: color 0.3s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .podium-score strong {
   color: var(--steam-blue-light);
+  font-weight: 700;
+  margin-right: 2px;
 }
 
 .podium-card:hover .podium-score {
-  transform: scale(1.05);
+  color: #d1d5db;
+}
+
+.podium-card:hover .podium-score strong {
+  color: var(--neon-purple-bright);
 }
 
 /* ==================== VOTING IN PROGRESS BANNER ==================== */
@@ -4155,6 +4178,29 @@ background: #3b0764;
     font-size: 11px;
   }
 
+  .winner-steam-price-badge {
+    padding: 4px 10px;
+    font-size: 12px;
+    gap: 7px;
+  }
+
+  .winner-steam-price-badge .steam-price-icon {
+    font-size: 14px;
+  }
+
+  .winner-steam-price-badge .price-discount-pill {
+    font-size: 11px;
+    padding: 2px 5px;
+  }
+
+  .winner-steam-price-badge .price-old-strikethrough {
+    font-size: 11px;
+  }
+
+  .winner-steam-price-badge .price-current-value {
+    font-size: 12px;
+  }
+
   .winner-title {
     font-size: 22px;
   }
@@ -5362,7 +5408,7 @@ background: #3b0764;
   }
 
   .podium-card:hover .podium-score {
-    transform: scale(1.02);
+    transform: none;
   }
 
 

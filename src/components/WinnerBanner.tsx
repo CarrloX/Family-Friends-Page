@@ -84,6 +84,7 @@ interface WinnerCardProps {
   winnerHdCover?: string;
   winnerCoverFallbacks: string[];
   displayedGenre: string;
+  displayedDescription: string;
   livePrice: SteamPriceInfo | null;
   maxPoints: number;
   totalVoters: number;
@@ -95,6 +96,7 @@ const WinnerCard: React.FC<WinnerCardProps> = ({
   winnerHdCover,
   winnerCoverFallbacks,
   displayedGenre,
+  displayedDescription,
   livePrice,
   maxPoints,
   totalVoters,
@@ -107,24 +109,51 @@ const WinnerCard: React.FC<WinnerCardProps> = ({
       </div>
 
       <div className="winner-content">
-        <div className="winner-image-container">
-          <img
-            src={winnerHdCover}
-            alt={winner.game.title}
-            className="winner-image"
-            loading="eager"
-            onError={(e) => {
-              const target = e.currentTarget;
-              const currentFallback = Number.parseInt(target.dataset.fallbackLevel || '0', 10);
-              if (currentFallback < winnerCoverFallbacks.length) {
-                const nextUrl = winnerCoverFallbacks[currentFallback];
-                target.dataset.fallbackLevel = String(currentFallback + 1);
-                target.src = nextUrl;
-              }
-            }}
-          />
-          <div className="winner-badge-overlay">1º LUGAR</div>
-        </div>
+        {appId ? (
+          <a
+            href={`https://store.steampowered.com/app/${appId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="winner-image-container winner-image-link"
+            title={`Abrir ${winner.game.title} en la Tienda Oficial de Steam`}
+          >
+            <img
+              src={winnerHdCover}
+              alt={winner.game.title}
+              className="winner-image"
+              loading="eager"
+              onError={(e) => {
+                const target = e.currentTarget;
+                const currentFallback = Number.parseInt(target.dataset.fallbackLevel || '0', 10);
+                if (currentFallback < winnerCoverFallbacks.length) {
+                  const nextUrl = winnerCoverFallbacks[currentFallback];
+                  target.dataset.fallbackLevel = String(currentFallback + 1);
+                  target.src = nextUrl;
+                }
+              }}
+            />
+            <div className="winner-badge-overlay">1º LUGAR</div>
+          </a>
+        ) : (
+          <div className="winner-image-container">
+            <img
+              src={winnerHdCover}
+              alt={winner.game.title}
+              className="winner-image"
+              loading="eager"
+              onError={(e) => {
+                const target = e.currentTarget;
+                const currentFallback = Number.parseInt(target.dataset.fallbackLevel || '0', 10);
+                if (currentFallback < winnerCoverFallbacks.length) {
+                  const nextUrl = winnerCoverFallbacks[currentFallback];
+                  target.dataset.fallbackLevel = String(currentFallback + 1);
+                  target.src = nextUrl;
+                }
+              }}
+            />
+            <div className="winner-badge-overlay">1º LUGAR</div>
+          </div>
+        )}
 
         <div className="winner-details">
           <div className="winner-meta-header">
@@ -156,7 +185,7 @@ const WinnerCard: React.FC<WinnerCardProps> = ({
             )}
           </div>
           <h2 className="winner-title">{winner.game.title}</h2>
-          <p className="winner-description">{winner.game.description}</p>
+          <p className="winner-description">{displayedDescription}</p>
 
           <div className="winner-stats-grid">
             <motion.div
@@ -254,6 +283,7 @@ export const WinnerBanner: React.FC<WinnerBannerProps> = React.memo(({
     appId?: number;
     price?: SteamPriceInfo;
     genre?: string;
+    description?: string;
   }>({});
 
   useEffect(() => {
@@ -267,6 +297,7 @@ export const WinnerBanner: React.FC<WinnerBannerProps> = React.memo(({
           appId,
           price: details.price,
           genre: details.genres,
+          description: details.description,
         });
       })
       .catch((err) => {
@@ -289,6 +320,10 @@ export const WinnerBanner: React.FC<WinnerBannerProps> = React.memo(({
   const displayedGenre = rawGenre && !/actualizar|modo\s*edici[oó]n/i.test(rawGenre)
     ? rawGenre
     : '';
+
+  const displayedDescription = (fetchedDetails.appId === appId && fetchedDetails.description)
+    ? fetchedDetails.description
+    : (winner?.game?.description || '');
 
   // Detect whether any member has assigned points
   const hasVotes = totalAssignedPoints !== undefined
@@ -326,6 +361,7 @@ export const WinnerBanner: React.FC<WinnerBannerProps> = React.memo(({
               winnerHdCover={winnerHdCover}
               winnerCoverFallbacks={winnerCoverFallbacks}
               displayedGenre={displayedGenre}
+              displayedDescription={displayedDescription}
               livePrice={livePrice}
               maxPoints={maxPoints}
               totalVoters={totalVoters}

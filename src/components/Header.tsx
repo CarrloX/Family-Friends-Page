@@ -51,7 +51,7 @@ export const Header: React.FC<HeaderProps> = React.memo(({ isVotingInProgress = 
             >
               <span className="live-dot" style={{ backgroundColor: '#22c55e', boxShadow: '0 0 8px #22c55e' }}></span>
               <span className="badge-text">
-                🔥 VOTOS REGISTRADOS • RESULTADOS EN VIVO
+                🔥 VOTOS REGISTRADOS • RESULTADOS
               </span>
             </motion.div>
           )}
@@ -70,11 +70,11 @@ export const Header: React.FC<HeaderProps> = React.memo(({ isVotingInProgress = 
 
       <div className="steam-title">
         <FaSteam className="steam-icon" />
-        <span>RESULTADOS DE VOTACIÓN STEAM</span>
+        <span>VOTACIONES DE STEAM FAMILY</span>
       </div>
 
       <p className="steam-subtitle">
-        Ponderación de aura por participante • Sistema de Voto Ponderado Co-Op
+       Votaciones de Participantes • Sistema de Aura
       </p>
 
       <div className="header-divider"></div>

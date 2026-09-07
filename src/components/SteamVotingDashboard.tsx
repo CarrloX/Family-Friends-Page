@@ -946,10 +946,10 @@ export const SteamVotingDashboard: React.FC = () => {
         <section className="voters-section">
           <div className="section-title-wrapper">
             <h2 className="section-title">
-              <span className="title-icon">🎮</span> PONDERACIÓN POR INTEGRANTE ({voters.length} USUARIOS)
+              <span className="title-icon">🎮</span> VOTACIONES DE PARTICIPANTES
             </h2>
             <span className="voter-count-badge">
-              {isEditMode ? '🖐️ Arrastrá tarjetas / Editá juegos arriba' : `${voters.length} / ${voters.length} Votantes Activos`}
+              {isEditMode ? '🖐️ Arrastrá tarjetas / Editá juegos arriba' : `${voters.length} / ${MAX_VOTERS} Integrantes`}
             </span>
           </div>
 
