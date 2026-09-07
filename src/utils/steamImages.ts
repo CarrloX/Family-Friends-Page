@@ -35,8 +35,8 @@ export function fixSteamCoverUrl(url?: string, appId?: number): string {
 
   // Detectar y corregir el patrón erróneo con hash en store_item_assets o cdn.akamai
   const brokenHashPattern = /(?:store_item_assets\/steam|steam)\/apps\/(\d+)\/[a-f0-9]{16,}\/header\.jpg/i;
-  const match = url.match(brokenHashPattern);
-  if (match && match[1]) {
+  const match = brokenHashPattern.exec(url);
+  if (match?.[1]) {
     const extractedAppId = match[1];
     return `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${extractedAppId}/header.jpg`;
   }
@@ -44,66 +44,62 @@ export function fixSteamCoverUrl(url?: string, appId?: number): string {
   return url;
 }
 
+function isCustomCoverUrl(url: string): boolean {
+  if (!url) return false;
+  return (
+    url.startsWith('data:') ||
+    url.startsWith('blob:') ||
+    (!url.includes('steamstatic.com') && !url.includes('steamcommunity.com'))
+  );
+}
+
+function getOfficialSteamUrls(appId?: number): string[] {
+  if (!appId || Number.isNaN(appId) || appId <= 0) {
+    return [];
+  }
+
+  return [
+    `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`,
+    `https://cdn.akamai.steamstatic.com/steam/apps/${appId}/header.jpg`,
+    `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_231x87.jpg`,
+    `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_616x353.jpg`,
+    `https://cdn.akamai.steamstatic.com/steam/apps/${appId}/capsule_sm_120.jpg`,
+  ];
+}
+
 /**
  * Construye una lista de URLs en orden de prioridad para intentar cargar la imagen de un juego.
  */
 export function getGameImageFallbacks(game?: Partial<Game>): string[] {
-  const fallbacks: string[] = [];
   if (!game) {
     return [getSteamPlaceholderSvg()];
   }
 
   const appId = game.appId ? Number(game.appId) : undefined;
   const cleanedCover = fixSteamCoverUrl(game.coverImage, appId);
+  const candidates: string[] = [];
 
-  // 1. Si la portada es personalizada (data URL, upload local o URL externa diferente de Steam Store)
-  const isCustomCover =
-    cleanedCover.startsWith('data:') ||
-    cleanedCover.startsWith('blob:') ||
-    (!cleanedCover.includes('steamstatic.com') && !cleanedCover.includes('steamcommunity.com') && cleanedCover.length > 0);
-
-  if (isCustomCover && cleanedCover) {
-    fallbacks.push(cleanedCover);
+  // 1. Portada personalizada (data URL, upload local o URL externa)
+  if (isCustomCoverUrl(cleanedCover)) {
+    candidates.push(cleanedCover);
   }
 
-  // 2. Si tiene tinyCoverImage verificada (devuelta por Steam Search API con hash exacto).
-  // Esto previene errores 404 en juegos no lanzados (como Jurassic World Evolution 3) que aún no tienen header.jpg publicado.
-  if (game.tinyCoverImage && !fallbacks.includes(game.tinyCoverImage)) {
-    fallbacks.push(game.tinyCoverImage);
+  // 2. tinyCoverImage verificada (previene 404 en juegos no lanzados)
+  if (game.tinyCoverImage) {
+    candidates.push(game.tinyCoverImage);
   }
 
-  // 3. Si tiene appId de Steam, añadir las rutas oficiales en orden de confiabilidad
-  if (appId && !Number.isNaN(appId) && appId > 0) {
-    // Header estándar en shared.akamai (el más confiable para juegos lanzados)
-    const sharedHeader = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`;
-    if (!fallbacks.includes(sharedHeader)) {
-      fallbacks.push(sharedHeader);
-    }
+  // 3. Rutas oficiales en Steam CDNs
+  candidates.push(...getOfficialSteamUrls(appId));
 
-    // Mirror en cdn.akamai
-    const cdnHeader = `https://cdn.akamai.steamstatic.com/steam/apps/${appId}/header.jpg`;
-    if (!fallbacks.includes(cdnHeader)) {
-      fallbacks.push(cdnHeader);
-    }
-
-    // Cápsulas alternativas
-    fallbacks.push(`https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_231x87.jpg`);
-    fallbacks.push(`https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_616x353.jpg`);
-    fallbacks.push(`https://cdn.akamai.steamstatic.com/steam/apps/${appId}/capsule_sm_120.jpg`);
-  }
-
-  // 3. Si cleanedCover no se agregó previamente
-  if (cleanedCover && !fallbacks.includes(cleanedCover)) {
-    fallbacks.push(cleanedCover);
-  }
-
-  // 4. Si tinyCoverImage no se agregó previamente
-  if (game.tinyCoverImage && !fallbacks.includes(game.tinyCoverImage)) {
-    fallbacks.push(game.tinyCoverImage);
+  // 4. Portada limpia si no era custom o no se capturó
+  if (cleanedCover) {
+    candidates.push(cleanedCover);
   }
 
   // 5. Placeholder final en SVG (siempre garantizado que se renderice)
-  fallbacks.push(getSteamPlaceholderSvg(game.title || 'Steam Game'));
+  candidates.push(getSteamPlaceholderSvg(game.title || 'Steam Game'));
 
-  return fallbacks;
+  // Desduplicar manteniendo el orden de prioridad
+  return [...new Set(candidates)];
 }

@@ -106,7 +106,8 @@ export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = React.memo(
         }}
       >
         {/* Handle visual superior estilo bottom sheet con animación elástica al tocar */}
-        <div
+        <button
+          type="button"
           className="bottom-sheet-handle-zone"
           onPointerDown={(e) => {
             setIsHandlePressed(true);
@@ -117,8 +118,6 @@ export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = React.memo(
           onPointerUp={() => setIsHandlePressed(false)}
           onPointerCancel={() => setIsHandlePressed(false)}
           aria-label="Deslizar hacia abajo para cerrar"
-          role="button"
-          tabIndex={-1}
         >
           <motion.div
             className="bottom-sheet-handle"
@@ -131,7 +130,7 @@ export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = React.memo(
             }}
             transition={{ type: 'spring', stiffness: 450, damping: 24 }}
           />
-        </div>
+        </button>
 
         <div
           className="modal-header"

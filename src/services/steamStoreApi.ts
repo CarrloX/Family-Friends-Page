@@ -26,6 +26,15 @@ interface SteamStoreSearchResponse {
   }>;
 }
 
+interface SteamPriceOverview {
+  currency: string;
+  initial: number;
+  final: number;
+  discount_percent: number;
+  initial_formatted: string;
+  final_formatted: string;
+}
+
 interface SteamAppDetailsResponse {
   [appId: string]: {
     success?: boolean;
@@ -34,14 +43,7 @@ interface SteamAppDetailsResponse {
       is_free?: boolean;
       short_description?: string;
       genres?: Array<{ id?: string; description: string }>;
-      price_overview?: {
-        currency: string;
-        initial: number;
-        final: number;
-        discount_percent: number;
-        initial_formatted: string;
-        final_formatted: string;
-      };
+      price_overview?: SteamPriceOverview;
     };
   };
 }
@@ -141,6 +143,41 @@ const appDetailsCache = new Map<number, {
   price?: SteamPriceInfo;
 }>();
 
+function parseSteamPriceInfo(
+  priceOverview?: SteamPriceOverview,
+  isFree?: boolean
+): SteamPriceInfo | undefined {
+  if (priceOverview) {
+    const initial = priceOverview.initial;
+    const final = priceOverview.final;
+    const discountPercent = priceOverview.discount_percent || 0;
+    const initialFormatted = priceOverview.initial_formatted || (initial ? formatCopPrice(initial) : undefined);
+    const finalFormatted = priceOverview.final_formatted || formatCopPrice(final);
+
+    return {
+      isFree: false,
+      currency: priceOverview.currency || 'COP',
+      initial,
+      final,
+      discountPercent,
+      initialFormatted: discountPercent > 0 ? initialFormatted : undefined,
+      finalFormatted,
+    };
+  }
+
+  if (isFree) {
+    return {
+      isFree: true,
+      currency: 'COP',
+      final: 0,
+      discountPercent: 0,
+      finalFormatted: 'Gratis',
+    };
+  }
+
+  return undefined;
+}
+
 /**
  * Consulta la API oficial de Steam AppDetails para obtener descripción, géneros y precio/descuentos.
  */
@@ -171,35 +208,7 @@ export async function fetchSteamGameDetails(appId: number): Promise<{
         ? appInfo.genres.map((g) => g.description).join(' / ')
         : undefined;
 
-      let priceInfo: SteamPriceInfo | undefined = undefined;
-      const isFree = Boolean(appInfo.is_free);
-
-      if (appInfo.price_overview) {
-        const po = appInfo.price_overview;
-        const initial = po.initial;
-        const final = po.final;
-        const discountPercent = po.discount_percent || 0;
-        const initialFormatted = po.initial_formatted || (initial ? formatCopPrice(initial) : undefined);
-        const finalFormatted = po.final_formatted || formatCopPrice(final);
-
-        priceInfo = {
-          isFree: false,
-          currency: po.currency || 'COP',
-          initial,
-          final,
-          discountPercent,
-          initialFormatted: discountPercent > 0 ? initialFormatted : undefined,
-          finalFormatted,
-        };
-      } else if (isFree) {
-        priceInfo = {
-          isFree: true,
-          currency: 'COP',
-          final: 0,
-          discountPercent: 0,
-          finalFormatted: 'Gratis',
-        };
-      }
+      const priceInfo = parseSteamPriceInfo(appInfo.price_overview, appInfo.is_free);
 
       const result = {
         description: cleanDesc,

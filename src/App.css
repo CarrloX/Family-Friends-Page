@@ -3038,6 +3038,9 @@ background: #3b0764;
   user-select: none;
   -webkit-user-select: none;
   -webkit-tap-highlight-color: transparent;
+  background: transparent;
+  border: none;
+  outline: none;
 }
 
 .bottom-sheet-handle-zone:active {
@@ -5802,6 +5805,7 @@ background: #3b0764;
     font-size: 11px;
     display: -webkit-box;
     -webkit-line-clamp: 1;
+    line-clamp: 1;
     -webkit-box-orient: vertical;
     overflow: hidden;
   }

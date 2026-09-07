@@ -724,7 +724,6 @@ export const SteamVotingDashboard: React.FC = () => {
         className += ' sync-saving';
         break;
       case 'synced':
-        icon = '✅';
         className += ' sync-synced';
         break;
       case 'error':
