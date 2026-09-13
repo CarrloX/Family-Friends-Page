@@ -123,6 +123,7 @@ export default defineConfig({
       },
     }),
   ],
+  envPrefix: ['VITE_', 'FIREBASE_'],
   build: {
     chunkSizeWarningLimit: 1000,
   },

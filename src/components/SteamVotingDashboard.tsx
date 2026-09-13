@@ -32,7 +32,13 @@ import {
   importBackup,
   type SyncState,
 } from '../services/dataStore';
-import { getAdminAccessState, requestAdminUnlock, unlockWithPin } from '../services/accessControl';
+import {
+  getAdminAccessState,
+  loginAdminWithPassword,
+  logoutAdmin,
+  requestAdminUnlock,
+} from '../services/accessControl';
+import { subscribeToAuthState } from '../services/firebaseConfig';
 
 const MIN_VOTERS = 2;
 const MAX_VOTERS = 6;
@@ -203,6 +209,14 @@ export const SteamVotingDashboard: React.FC = () => {
       return () => clearTimeout(timer);
     }
   }, [syncState]);
+
+  // Suscripción en tiempo real al estado de autenticación de Firebase
+  useEffect(() => {
+    const unsubscribe = subscribeToAuthState(() => {
+      setAdminAccess(getAdminAccessState());
+    });
+    return unsubscribe;
+  }, []);
 
    const votersDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
    const gamesDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -446,35 +460,41 @@ export const SteamVotingDashboard: React.FC = () => {
   }, [gamesMap]);
 
   // ─── Desbloqueo de admin vía modal BottomSheet (reemplaza window.prompt) ───
-  const requestAdminUnlockViaModal = useCallback((): Promise<boolean> => {
+  // ─── Desbloqueo de admin vía modal BottomSheet ───
+  const requestAdminUnlockViaModal = useCallback((forceOpen = false): Promise<boolean> => {
     const state = getAdminAccessState();
-    // Si ya tiene acceso (local o sesión previa), no necesita PIN
-    if (state.canManageContent) {
+    // Si ya está autenticado y no se fuerza abrir el modal, no necesita volver a identificarse
+    if (state.isAuthenticated && !forceOpen) {
       return Promise.resolve(true);
     }
-    // Si es entorno local, desbloquea sin PIN
-    if (state.isLocalEnvironment) {
-      setAdminAccess(getAdminAccessState());
-      return Promise.resolve(true);
-    }
-    // En producción: abre el modal de PIN y espera la resolución
+
+    // Abre el modal de inicio de sesión de Firebase Auth y espera resolución
     return new Promise<boolean>((resolve) => {
       pinModalResolveRef.current = resolve;
       setShowPinModal(true);
     });
   }, []);
 
-  // Handler cuando el usuario envía el PIN en el modal
-  const handlePinSubmit = useCallback((enteredPin: string): boolean => {
-    const isValid = unlockWithPin(enteredPin);
-    if (isValid) {
-      setAdminAccess(getAdminAccessState());
-      setShowPinModal(false);
-      pinModalResolveRef.current?.(true);
-      pinModalResolveRef.current = null;
-    }
-    // Si no es válido, retorna false para que el modal muestre el error
-    return isValid;
+  // Handler cuando el usuario envía la contraseña en el modal
+  const handlePinSubmit = useCallback(
+    async (password: string): Promise<boolean | { success: boolean; error?: string }> => {
+      const result = await loginAdminWithPassword(password);
+      if (result.success) {
+        setAdminAccess(getAdminAccessState());
+        setShowPinModal(false);
+        pinModalResolveRef.current?.(true);
+        pinModalResolveRef.current = null;
+        return true;
+      }
+      return result;
+    },
+    []
+  );
+
+  const handleLogoutAdmin = useCallback(async () => {
+    await logoutAdmin();
+    setAdminAccess(getAdminAccessState());
+    setIsEditMode(false);
   }, []);
 
   // Handler cuando el usuario cancela el modal de PIN
@@ -484,23 +504,30 @@ export const SteamVotingDashboard: React.FC = () => {
     pinModalResolveRef.current = null;
   }, []);
 
-  // Atajo de teclado Shift + Alt + A para desbloqueo de admin
+  // Atajo de teclado Shift + Alt + A (o Alt + Shift + A) para acceso de admin
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.shiftKey && event.altKey && event.key.toLowerCase() === 'a') {
+      const isKeyA = event.key === 'a' || event.key === 'A' || event.code === 'KeyA';
+      const isAltShift = event.altKey && event.shiftKey;
+
+      if (isAltShift && isKeyA) {
         event.preventDefault();
-        // Desbloqueo asíncrono vía modal BottomSheet (reemplaza window.prompt)
-        requestAdminUnlockViaModal().then((unlocked) => {
-          setAdminAccess(getAdminAccessState());
-          if (unlocked) {
-            setIsEditMode(false);
-          }
-        });
+        event.stopPropagation();
+
+        const state = getAdminAccessState();
+        if (state.isAuthenticated) {
+          // Si ya está autenticado, alternar modo edición
+          setIsEditMode((prev) => !prev);
+        } else {
+          // Si no está autenticado, abrir inmediatamente el modal
+          void requestAdminUnlockViaModal(true);
+        }
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    // Usar capture phase para asegurar recepción antes de que otros elementos intercepten
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
   }, [requestAdminUnlockViaModal]);
 
   const handleToggleEditMode = useCallback(() => {
@@ -789,9 +816,53 @@ export const SteamVotingDashboard: React.FC = () => {
         </motion.button>
       )}
 
+      {adminAccess.isAuthenticated && (
+        <motion.div
+          className="admin-session-badge"
+          initial={{ opacity: 0, x: -10 }}
+          animate={{ opacity: 1, x: 0 }}
+          style={{
+            position: 'fixed',
+            top: 14,
+            left: 14,
+            zIndex: 90,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            background: 'rgba(23, 26, 33, 0.94)',
+            border: '1px solid rgba(168, 85, 247, 0.5)',
+            boxShadow: '0 0 15px rgba(168, 85, 247, 0.25)',
+            borderRadius: 20,
+            padding: '6px 12px',
+            fontSize: '12px',
+            color: '#c084fc',
+            backdropFilter: 'blur(8px)',
+          }}
+        >
+          <span>🛡️ {adminAccess.adminEmail || 'Admin'}</span>
+          <button
+            type="button"
+            onClick={handleLogoutAdmin}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: '#f87171',
+              cursor: 'pointer',
+              fontSize: '11px',
+              fontWeight: 600,
+              padding: '2px 6px',
+              borderRadius: 4,
+            }}
+            title="Cerrar sesión de Administrador (Volver a solo lectura)"
+          >
+            Cerrar sesión
+          </button>
+        </motion.div>
+      )}
+
       {showReadOnlyBanner && isReadOnlyMode && (
         <div className="read-only-banner">
-          Modo lectura activo. Usa <strong>?admin=true</strong> o <strong>Shift + Alt + A</strong> para desbloquear edición temporal.
+          Modo lectura activo. Presiona <strong>Alt + Shift + A</strong> para identificarte como administrador.
         </div>
       )}
 

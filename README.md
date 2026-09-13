@@ -47,7 +47,8 @@ VITE_FIREBASE_STORAGE_BUCKET=tu_storage_bucket
 VITE_FIREBASE_MESSAGING_SENDER_ID=tu_sender_id
 VITE_FIREBASE_APP_ID=tu_app_id
 VITE_FIREBASE_MEASUREMENT_ID=tu_measurement_id
-VITE_ADMIN_PIN=FAMILY2026
+# Opcional: correo sugerido por defecto en el modal de administrador
+VITE_ADMIN_EMAIL=admin@familyandfriendssteam.firebaseapp.com
 ```
 
 > Si no configurás Firebase, la app seguirá funcionando con almacenamiento local en el navegador.
@@ -82,11 +83,12 @@ src/
   types/          Tipos TypeScript
 ```
 
-## Uso
+## Seguridad y Control de Acceso
 
-- Abre la app en el navegador y comienza a agregar participantes y juegos.
-- Para habilitar edición administrativa, accedé desde un entorno local o usá el parámetro `?admin=true` en la URL.
-- En producción, el PIN de administrador se puede definir con `VITE_ADMIN_PIN`.
+- **Lectura pública**: Los datos de votación, miembros e historial son de lectura pública para todos los integrantes.
+- **Escritura restringida en Firestore**: Las reglas de Firestore (`firestore.rules`) garantizan que únicamente usuarios autenticados (`request.auth != null`) puedan escribir o borrar datos en el servidor.
+- **Sin contraseñas en el cliente**: No se guardan ni comparan contraseñas o PINs en el código compilado de la aplicación. La autenticación se delega directamente a **Firebase Authentication**.
+- **Acceso de Administrador**: Presiona `Shift + Alt + A` o haz clic en las acciones administrativas para abrir el modal de inicio de sesión con tu cuenta de administrador de Firebase.
 
 ## Notas
 

@@ -4,56 +4,73 @@ import { FaLock, FaShieldAlt } from 'react-icons/fa';
 
 interface AdminPinModalProps {
   onCancel: () => void;
-  /** Retorna true si el PIN es válido, false si es incorrecto */
-  onSuccess: (enteredPin: string) => boolean;
+  /** Retorna true o { success: true } si la contraseña es válida */
+  onSuccess: (password: string) => Promise<boolean | { success: boolean; error?: string }>;
 }
 
 /**
  * AdminPinModal
- * BottomSheet animado para ingresar el PIN de administrador,
- * reemplazando el window.prompt() nativo por una ventana emergente
- * con estilo oscuro/neón y animación de despliegue desde abajo.
+ * BottomSheet animado para autenticación segura de administrador con Firebase Auth.
+ * Solo solicita la contraseña; la verificación se realiza de manera segura en el servidor
+ * sin comparar variables en el código cliente.
  */
 export const AdminPinModal: React.FC<AdminPinModalProps> = ({ onCancel, onSuccess }) => {
-  const [pin, setPin] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [shake, setShake] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Autofocus en el input al abrir
+  // Autofocus en el input de contraseña al abrir
   useEffect(() => {
     const timer = setTimeout(() => inputRef.current?.focus(), 350);
     return () => clearTimeout(timer);
   }, []);
 
-  // Cerrar con tecla Escape
+  // Cerrar con tecla Escape si no se está enviando
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
+      if (e.key === 'Escape' && !isSubmitting) {
         onCancel();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onCancel]);
+  }, [onCancel, isSubmitting]);
 
-  const handleSubmit = (e: React.SyntheticEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!pin.trim()) {
-      setError('Ingresa el PIN de administrador.');
+    if (!password.trim()) {
+      setError('Ingresa la contraseña de administrador.');
       setShake(true);
       setTimeout(() => setShake(false), 500);
       return;
     }
-    // La validación la hace el padre via onSuccess.
-    // Si retorna false, el PIN es incorrecto: mostramos error y shake.
-    const isValid = onSuccess(pin);
-    if (!isValid) {
-      setError('PIN incorrecto. Intenta nuevamente.');
+
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
+      const res = await onSuccess(password);
+      const isSuccess = typeof res === 'boolean' ? res : res.success;
+      const errorMsg =
+        typeof res === 'object' && res.error
+          ? res.error
+          : 'Contraseña incorrecta. Intenta nuevamente.';
+
+      if (!isSuccess) {
+        setError(errorMsg);
+        setShake(true);
+        setTimeout(() => setShake(false), 500);
+        setPassword('');
+        inputRef.current?.focus();
+      }
+    } catch {
+      setError('Error al conectar con el servidor de autenticación.');
       setShake(true);
       setTimeout(() => setShake(false), 500);
-      setPin('');
-      inputRef.current?.focus();
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -64,7 +81,9 @@ export const AdminPinModal: React.FC<AdminPinModalProps> = ({ onCancel, onSucces
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.25 }}
-      onClick={onCancel}
+      onClick={() => {
+        if (!isSubmitting) onCancel();
+      }}
     >
       <motion.div
         className="admin-pin-modal-container bottom-sheet-panel"
@@ -83,12 +102,13 @@ export const AdminPinModal: React.FC<AdminPinModalProps> = ({ onCancel, onSucces
               <FaShieldAlt style={{ marginRight: 8, verticalAlign: 'middle' }} />
               Acceso de Administrador
             </h2>
-            <p>Ingresa el PIN para habilitar edición temporal en esta sesión.</p>
+            <p>Ingresa la contraseña para habilitar edición en el servidor.</p>
           </div>
           <motion.button
             type="button"
             className="modal-close-btn"
             onClick={onCancel}
+            disabled={isSubmitting}
             aria-label="Cerrar"
             whileHover={{ scale: 1.15 }}
             whileTap={{ scale: 0.9 }}
@@ -103,15 +123,15 @@ export const AdminPinModal: React.FC<AdminPinModalProps> = ({ onCancel, onSucces
             <input
               ref={inputRef}
               type="password"
-              inputMode="numeric"
               className={`admin-pin-input ${shake ? 'shake-error' : ''}`}
-              placeholder="PIN de administrador..."
-              value={pin}
+              placeholder="Contraseña de administrador..."
+              value={password}
               onChange={(e) => {
-                setPin(e.target.value);
+                setPassword(e.target.value);
                 setError(null);
               }}
-              autoComplete="off"
+              autoComplete="current-password"
+              disabled={isSubmitting}
             />
           </div>
 
@@ -130,6 +150,7 @@ export const AdminPinModal: React.FC<AdminPinModalProps> = ({ onCancel, onSucces
               type="button"
               className="btn-modal-cancel"
               onClick={onCancel}
+              disabled={isSubmitting}
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.97 }}
             >
@@ -138,10 +159,11 @@ export const AdminPinModal: React.FC<AdminPinModalProps> = ({ onCancel, onSucces
             <motion.button
               type="submit"
               className="btn-modal-confirm"
-              whileHover={{ scale: 1.03 }}
-              whileTap={{ scale: 0.97 }}
+              disabled={isSubmitting}
+              whileHover={{ scale: isSubmitting ? 1 : 1.03 }}
+              whileTap={{ scale: isSubmitting ? 1 : 0.97 }}
             >
-              🔓 Desbloquear
+              {isSubmitting ? '⏳ Verificando...' : '🔓 Desbloquear'}
             </motion.button>
           </div>
         </form>

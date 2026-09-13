@@ -1,27 +1,26 @@
 import { initializeApp, type FirebaseApp } from 'firebase/app';
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, type Firestore } from 'firebase/firestore';
-import { getAuth, signInAnonymously, type Auth } from 'firebase/auth';
+import {
+  getAuth,
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+  type Auth,
+  type User,
+} from 'firebase/auth';
 
 /**
- * Configuración de Firebase Firestore.
- *
- * ⚠️ IMPORTANTE: Reemplaza los valores de ejemplo con las credenciales
- * de tu proyecto de Firebase antes de usar la sincronización en la nube.
- *
- * Para obtener estas credenciales:
- * 1. Ve a https://console.firebase.google.com/
- * 2. Crea o selecciona tu proyecto
- * 3. Ve a Configuración del proyecto > General > Tus apps > Web
- * 4. Copia el objeto "firebaseConfig"
+ * Configuración de Firebase Firestore y Auth.
+ * Soporta variables con prefijo VITE_ o FIREBASE_.
  */
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
+  apiKey: (import.meta.env.VITE_FIREBASE_API_KEY || import.meta.env.FIREBASE_API_KEY || '') as string,
+  authDomain: (import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || import.meta.env.FIREBASE_AUTH_DOMAIN || '') as string,
+  projectId: (import.meta.env.VITE_FIREBASE_PROJECT_ID || import.meta.env.FIREBASE_PROJECT_ID || '') as string,
+  storageBucket: (import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || import.meta.env.FIREBASE_STORAGE_BUCKET || '') as string,
+  messagingSenderId: (import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || import.meta.env.FIREBASE_MESSAGING_SENDER_ID || '') as string,
+  appId: (import.meta.env.VITE_FIREBASE_APP_ID || import.meta.env.FIREBASE_APP_ID || '') as string,
+  measurementId: (import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || import.meta.env.FIREBASE_MEASUREMENT_ID || '') as string,
 };
 
 let app: FirebaseApp | null = null;
@@ -37,9 +36,9 @@ export function initFirebase(): { db: Firestore | null; isConfigured: boolean } 
   if (app) return { db, isConfigured };
 
   const hasRealKeys =
-    firebaseConfig.apiKey &&
+    Boolean(firebaseConfig.apiKey) &&
     !firebaseConfig.apiKey.includes('XXXXXXXX') &&
-    firebaseConfig.projectId &&
+    Boolean(firebaseConfig.projectId) &&
     !firebaseConfig.projectId.includes('tu-proyecto');
 
   if (!hasRealKeys) {
@@ -59,18 +58,12 @@ export function initFirebase(): { db: Firestore | null; isConfigured: boolean } 
     auth = getAuth(app);
     isConfigured = true;
 
-    void ensureFirebaseAuth();
-
-    // Opcional: conectar con emulador local para desarrollo
-    // if (process.env.NODE_ENV === 'development') {
-    //   connectFirestoreEmulator(db, 'localhost', 8080);
-    // }
-
-    console.log('[Firebase] Firestore inicializado correctamente.');
+    console.log('[Firebase] Firestore y Auth inicializados correctamente.');
   } catch (err) {
     console.error('[Firebase] Error al inicializar:', err);
     app = null;
     db = null;
+    auth = null;
     isConfigured = false;
   }
 
@@ -89,6 +82,16 @@ export function getFirestoreInstance(): Firestore | null {
 }
 
 /**
+ * Retorna la instancia actual de Auth, o null si no está configurada.
+ */
+export function getAuthInstance(): Auth | null {
+  if (!app) {
+    initFirebase();
+  }
+  return auth;
+}
+
+/**
  * Verifica si Firebase está configurado y listo para usar.
  * Inicializa automáticamente si es la primera vez que se llama.
  */
@@ -99,21 +102,65 @@ export function isFirebaseReady(): boolean {
   return isConfigured && db !== null;
 }
 
-export async function ensureFirebaseAuth(): Promise<void> {
-  if (!app || !auth) {
-    initFirebase();
-    if (!app || !auth) {
-      return;
-    }
+/**
+ * Retorna el usuario actual de Firebase o null si no hay sesión iniciada.
+ */
+export function getCurrentUser(): User | null {
+  const authInstance = getAuthInstance();
+  return authInstance?.currentUser ?? null;
+}
+
+/**
+ * Verifica si el usuario actual está genuinamente autenticado (no anónimo).
+ */
+export function isUserAuthenticated(): boolean {
+  const user = getCurrentUser();
+  return Boolean(user && !user.isAnonymous);
+}
+
+/**
+ * Obtiene el email del usuario administrador autenticado actualmente.
+ */
+export function getCurrentAdminEmail(): string | null {
+  const user = getCurrentUser();
+  return user ? user.email : null;
+}
+
+/**
+ * Permite suscribirse a cambios de estado de autenticación de Firebase.
+ * Retorna una función para cancelar la suscripción.
+ */
+export function subscribeToAuthState(callback: (user: User | null) => void): () => void {
+  const authInstance = getAuthInstance();
+  if (!authInstance) {
+    callback(null);
+    return () => {};
+  }
+  return onAuthStateChanged(authInstance, (user) => {
+    callback(user && !user.isAnonymous ? user : null);
+  });
+}
+
+/**
+ * Inicia sesión de administrador con correo y contraseña en Firebase Auth.
+ * La verificación se realiza de manera segura en los servidores de Google Firebase.
+ */
+export async function signInAdmin(email: string, password: string): Promise<User> {
+  const authInstance = getAuthInstance();
+  if (!authInstance) {
+    throw new Error('Firebase Auth no está disponible o no se ha configurado.');
   }
 
-  if (auth.currentUser) {
-    return;
-  }
+  const credential = await signInWithEmailAndPassword(authInstance, email.trim(), password);
+  return credential.user;
+}
 
-  try {
-    await signInAnonymously(auth);
-  } catch (err) {
-    console.warn('[Firebase] No se pudo autenticar de forma anónima:', err);
+/**
+ * Cierra la sesión activa de Firebase Auth.
+ */
+export async function signOutAdmin(): Promise<void> {
+  const authInstance = getAuthInstance();
+  if (authInstance) {
+    await signOut(authInstance);
   }
 }

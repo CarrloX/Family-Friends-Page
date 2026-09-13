@@ -10,7 +10,7 @@ import {
   Timestamp,
   deleteDoc,
 } from 'firebase/firestore';
-import { getFirestoreInstance, isFirebaseReady, ensureFirebaseAuth } from './firebaseConfig';
+import { getFirestoreInstance, isFirebaseReady } from './firebaseConfig';
 import { getAdminAccessState } from './accessControl';
 import type { Voter, Game, VotingHistoryRecord } from '../types/voting';
 import { fixSteamCoverUrl } from '../utils/steamImages';
@@ -116,7 +116,6 @@ export async function saveVoters(voters: Voter[]): Promise<SyncState> {
 
   if (isFirebaseReady()) {
     try {
-      await ensureFirebaseAuth();
       const db = getFirestoreInstance()!;
       const docRef = doc(db, COLLECTION_GROUP, DOC_MIEMBROS);
       await setDoc(
@@ -151,7 +150,6 @@ export async function saveActiveVotingState(voters: Voter[], gamesMap: Record<st
 
   if (isFirebaseReady()) {
     try {
-      await ensureFirebaseAuth();
       const db = getFirestoreInstance()!;
       const docRef = doc(db, COLLECTION_ACTIVE_VOTING, DOC_ACTIVE_VOTING);
       await setDoc(
@@ -230,7 +228,6 @@ async function fetchFirestoreActiveVoting(): Promise<{ voters: Voter[]; gamesMap
   if (!isFirebaseReady()) return null;
 
   try {
-    await ensureFirebaseAuth();
     const db = getFirestoreInstance()!;
     const docRef = doc(db, COLLECTION_ACTIVE_VOTING, DOC_ACTIVE_VOTING);
     const snap = await getDoc(docRef);
@@ -282,7 +279,6 @@ export async function loadVoters(): Promise<Voter[]> {
 
   if (isFirebaseReady()) {
     try {
-      await ensureFirebaseAuth();
       const db = getFirestoreInstance()!;
       const docRef = doc(db, COLLECTION_GROUP, DOC_MIEMBROS);
       const snap = await getDoc(docRef);
@@ -314,7 +310,6 @@ export async function saveGames(gamesMap: Record<string, Game>): Promise<SyncSta
 
   if (isFirebaseReady()) {
     try {
-      await ensureFirebaseAuth();
       const db = getFirestoreInstance()!;
       const docRef = doc(db, COLLECTION_GROUP, DOC_MIEMBROS);
       await setDoc(
@@ -345,7 +340,6 @@ export async function loadGames(): Promise<Record<string, Game>> {
 
   if (isFirebaseReady()) {
     try {
-      await ensureFirebaseAuth();
       const db = getFirestoreInstance()!;
       const docRef = doc(db, COLLECTION_GROUP, DOC_MIEMBROS);
       const snap = await getDoc(docRef);
@@ -385,7 +379,6 @@ export async function addHistoryRecord(record: VotingHistoryRecord): Promise<Syn
 
   if (isFirebaseReady()) {
     try {
-      await ensureFirebaseAuth();
       const db = getFirestoreInstance()!;
       const colRef = collection(db, COLLECTION_HISTORY);
       await addDoc(colRef, {
@@ -415,7 +408,6 @@ export async function addHistoryRecord(record: VotingHistoryRecord): Promise<Syn
 export async function loadHistory(): Promise<VotingHistoryRecord[]> {
   if (isFirebaseReady()) {
     try {
-      await ensureFirebaseAuth();
       const db = getFirestoreInstance()!;
       const colRef = collection(db, COLLECTION_HISTORY);
       const q = query(colRef, orderBy('savedAt', 'desc'));
@@ -448,7 +440,6 @@ export async function deleteHistoryRecord(recordId: string): Promise<SyncState> 
 
   if (isFirebaseReady()) {
     try {
-      await ensureFirebaseAuth();
       const db = getFirestoreInstance()!;
       const colRef = collection(db, COLLECTION_HISTORY);
       const snap = await getDocs(colRef);
@@ -478,7 +469,6 @@ export async function clearHistory(): Promise<SyncState> {
 
   if (isFirebaseReady()) {
     try {
-      await ensureFirebaseAuth();
       const db = getFirestoreInstance()!;
       const colRef = collection(db, COLLECTION_HISTORY);
       const snap = await getDocs(colRef);
@@ -688,7 +678,6 @@ export async function importBackup(
   // Si Firebase está configurado, sincronizar también allá
   if (isFirebaseReady()) {
     try {
-      await ensureFirebaseAuth();
       const db = getFirestoreInstance()!;
       const docRef = doc(db, COLLECTION_GROUP, DOC_MIEMBROS);
       await setDoc(docRef, {
@@ -751,7 +740,6 @@ export async function resetAllData(): Promise<void> {
 
   if (isFirebaseReady()) {
     try {
-      await ensureFirebaseAuth();
       const db = getFirestoreInstance()!;
       // Limpiar documento de grupo
       const docRef = doc(db, COLLECTION_GROUP, DOC_MIEMBROS);
