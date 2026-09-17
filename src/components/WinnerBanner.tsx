@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FaGamepad, FaSteam } from 'react-icons/fa';
 import type { GameResult, SteamPriceInfo } from '../types/voting';
@@ -222,7 +222,67 @@ const WinnerCard: React.FC<WinnerCardProps> = ({
 );
 
 const PodiumList: React.FC<{ runnersUp: GameResult[] }> = ({ runnersUp }) => {
-  if (runnersUp.length === 0) return null;
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+  const [isOverflowing, setIsOverflowing] = useState(false);
+
+  const checkScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const hasOverflow = el.scrollWidth > el.clientWidth + 2;
+    setIsOverflowing(hasOverflow);
+    setCanScrollLeft(el.scrollLeft > 4);
+    setCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 4);
+  }, []);
+
+  useEffect(() => {
+    if (runnersUp.length === 0) return;
+    checkScroll();
+    const el = scrollRef.current;
+    if (!el) return;
+
+    const handleResize = () => checkScroll();
+    window.addEventListener('resize', handleResize);
+
+    const resizeObserver = new ResizeObserver(() => {
+      checkScroll();
+    });
+    resizeObserver.observe(el);
+
+    // Permitir scroll horizontal fluido con rueda del ratón en desktop cuando haya desbordamiento
+    const onWheelListener = (e: WheelEvent) => {
+      if (el.scrollWidth > el.clientWidth) {
+        if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+          const atLeft = el.scrollLeft <= 0;
+          const atRight = el.scrollLeft >= el.scrollWidth - el.clientWidth - 1;
+          if ((e.deltaY < 0 && !atLeft) || (e.deltaY > 0 && !atRight)) {
+            e.preventDefault();
+            el.scrollLeft += e.deltaY;
+            checkScroll();
+          }
+        }
+      }
+    };
+
+    el.addEventListener('wheel', onWheelListener, { passive: false });
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      resizeObserver.disconnect();
+      el.removeEventListener('wheel', onWheelListener);
+    };
+  }, [checkScroll, runnersUp]);
+
+  const scrollPodium = (direction: 'left' | 'right') => {
+    if (!scrollRef.current) return;
+    const card = scrollRef.current.querySelector<HTMLElement>('.podium-card');
+    const scrollAmount = card ? card.offsetWidth + 14 : 280;
+    scrollRef.current.scrollBy({
+      left: direction === 'left' ? -scrollAmount : scrollAmount,
+      behavior: 'smooth',
+    });
+  };
 
   const getRankLabel = (rankPosition: number) => {
     if (rankPosition === 2) return '2º LUGAR 🥈';
@@ -230,36 +290,80 @@ const PodiumList: React.FC<{ runnersUp: GameResult[] }> = ({ runnersUp }) => {
     return `${rankPosition}º LUGAR`;
   };
 
+  if (runnersUp.length === 0) return null;
+
   return (
     <div className="podium-container">
-      <h4 className="podium-heading">TABLA DE POSICIONES FINAL</h4>
-      <div className="podium-grid">
-        {runnersUp.map((result, idx) => {
-          const rankPosition = idx + 2;
-          return (
-            <motion.div
-              key={result.game.id}
-              layout
-              className={`podium-card position-${rankPosition}`}
-              whileHover={{ scale: 1.02, y: -3 }}
-              whileTap={{ scale: 0.97 }}
-              transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+      <div className="podium-header-bar">
+        <h4 className="podium-heading">TABLA DE POSICIONES FINAL</h4>
+        {isOverflowing && (
+          <div className="podium-carousel-nav" aria-label="Navegación de posiciones">
+            <button
+              type="button"
+              className="podium-nav-btn"
+              onClick={() => scrollPodium('left')}
+              disabled={!canScrollLeft}
+              aria-label="Ver juego anterior"
+              title="Ver anteriores"
             >
-              <div className="podium-rank">{getRankLabel(rankPosition)}</div>
-              <GameThumbnail
-                game={result.game}
-                alt={result.game.title}
-                className="podium-thumb"
-              />
-              <div className="podium-info">
-                <span className="podium-title">{result.game.title}</span>
-                <span className="podium-score">
-                  <strong>{result.weightedPoints}</strong> pts ponderados ({result.rawPoints} pts base)
-                </span>
-              </div>
-            </motion.div>
-          );
-        })}
+              ◀
+            </button>
+            <span className="podium-scroll-hint">Desliza para ver más</span>
+            <button
+              type="button"
+              className="podium-nav-btn"
+              onClick={() => scrollPodium('right')}
+              disabled={!canScrollRight}
+              aria-label="Ver siguiente juego"
+              title="Ver siguientes"
+            >
+              ▶
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="podium-carousel-wrapper">
+        {isOverflowing && canScrollLeft && (
+          <div className="podium-fade-edge fade-left" aria-hidden="true" />
+        )}
+
+        <div
+          ref={scrollRef}
+          className="podium-grid"
+          onScroll={checkScroll}
+        >
+          {runnersUp.map((result, idx) => {
+            const rankPosition = idx + 2;
+            return (
+              <motion.div
+                key={result.game.id}
+                layout
+                className={`podium-card position-${rankPosition}`}
+                whileHover={{ scale: 1.02, y: -3 }}
+                whileTap={{ scale: 0.97 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+              >
+                <div className="podium-rank">{getRankLabel(rankPosition)}</div>
+                <GameThumbnail
+                  game={result.game}
+                  alt={result.game.title}
+                  className="podium-thumb"
+                />
+                <div className="podium-info">
+                  <span className="podium-title">{result.game.title}</span>
+                  <span className="podium-score">
+                    <strong>{result.weightedPoints}</strong> pts ponderados ({result.rawPoints} pts base)
+                  </span>
+                </div>
+              </motion.div>
+            );
+          })}
+        </div>
+
+        {isOverflowing && canScrollRight && (
+          <div className="podium-fade-edge fade-right" aria-hidden="true" />
+        )}
       </div>
     </div>
   );

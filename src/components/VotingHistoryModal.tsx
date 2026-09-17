@@ -147,6 +147,18 @@ export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = React.memo(
             <h2>📜 HISTORIAL DE VOTACIONES PASADAS</h2>
             <p>Consulta las votaciones finalizadas, el registro de cuotas pagadas y la evolución del Aura.</p>
           </div>
+          {!isMobile && (
+            <motion.button
+              type="button"
+              className="modal-close-btn history-header-close-btn"
+              onClick={onClose}
+              whileHover={{ scale: 1.15, rotate: 90 }}
+              whileTap={{ scale: 0.9 }}
+              aria-label="Cerrar historial"
+            >
+              ✕
+            </motion.button>
+          )}
         </div>
 
         {history.length === 0 ? (
@@ -293,9 +305,17 @@ export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = React.memo(
               </button>
             )}
             {!isMobile && (
-              <button type="button" className="btn-modal-cancel" onClick={onClose}>
-                Cerrar
-              </button>
+              <motion.button
+                type="button"
+                className="btn-modal-cancel btn-history-close"
+                onClick={onClose}
+                whileHover={{ scale: 1.04, y: -2 }}
+                whileTap={{ scale: 0.96 }}
+                aria-label="Cerrar ventana de historial"
+              >
+                <span className="btn-close-icon" aria-hidden="true">✕</span>
+                <span>Cerrar</span>
+              </motion.button>
             )}
           </div>
         )}

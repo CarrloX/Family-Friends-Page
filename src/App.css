@@ -1246,12 +1246,20 @@
   box-shadow: 0 10px 30px rgba(157, 78, 221, 0.2);
 }
 
+.podium-header-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .podium-heading {
   font-size: 15px;
   font-weight: 800;
   color: var(--steam-text-bright);
   letter-spacing: 0.5px;
   transition: all 0.3s ease;
+  margin: 0;
 }
 
 .podium-heading:hover {
@@ -1259,16 +1267,118 @@
   transform: translateX(5px);
 }
 
-.podium-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 14px;
+.podium-carousel-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-@media (max-width: 900px) {
-  .podium-grid {
-    grid-template-columns: 1fr;
+.podium-scroll-hint {
+  font-size: 11px;
+  font-weight: 600;
+  color: #c084fc;
+  opacity: 0.9;
+  letter-spacing: 0.3px;
+  user-select: none;
+}
+
+@media (max-width: 600px) {
+  .podium-scroll-hint {
+    display: none;
   }
+}
+
+.podium-nav-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: rgba(30, 27, 75, 0.85);
+  border: 1px solid rgba(168, 85, 247, 0.35);
+  color: #f3e8ff;
+  font-size: 11px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.25s ease;
+  user-select: none;
+}
+
+.podium-nav-btn:hover:not(:disabled) {
+  background: var(--neon-purple-bright);
+  border-color: #d8b4fe;
+  color: #ffffff;
+  transform: scale(1.1);
+  box-shadow: 0 0 12px rgba(168, 85, 247, 0.6);
+}
+
+.podium-nav-btn:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.podium-carousel-wrapper {
+  position: relative;
+  width: 100%;
+  border-radius: 12px;
+}
+
+.podium-fade-edge {
+  position: absolute;
+  top: 0;
+  bottom: 10px;
+  width: 32px;
+  pointer-events: none;
+  z-index: 3;
+  transition: opacity 0.3s ease;
+}
+
+.podium-fade-edge.fade-left {
+  left: 0;
+  background: linear-gradient(90deg, rgba(23, 26, 33, 0.95), transparent);
+  border-top-left-radius: 12px;
+  border-bottom-left-radius: 12px;
+}
+
+.podium-fade-edge.fade-right {
+  right: 0;
+  background: linear-gradient(270deg, rgba(23, 26, 33, 0.95), transparent);
+  border-top-right-radius: 12px;
+  border-bottom-right-radius: 12px;
+}
+
+.podium-grid {
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 4px 4px 10px 4px;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x mandatory;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(168, 85, 247, 0.5) rgba(15, 23, 42, 0.6);
+}
+
+.podium-grid::-webkit-scrollbar {
+  height: 6px;
+}
+
+.podium-grid::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.6);
+  border-radius: 999px;
+}
+
+.podium-grid::-webkit-scrollbar-thumb {
+  background: linear-gradient(90deg, #7e22ce, #a855f7);
+  border-radius: 999px;
+  box-shadow: 0 0 8px rgba(168, 85, 247, 0.4);
+}
+
+.podium-grid::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(90deg, #9333ea, #c084fc);
 }
 
 .podium-card {
@@ -1282,6 +1392,9 @@
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   will-change: transform;
   contain: layout style paint;
+  flex: 1 1 0px;
+  min-width: 270px;
+  scroll-snap-align: start;
 }
 
 .podium-card:nth-child(1) {
@@ -3600,6 +3713,14 @@ background: #3b0764;
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-modal-cancel:hover {
+  background: rgba(49, 46, 129, 0.85);
+  border-color: rgba(168, 85, 247, 0.4);
+  color: #ffffff;
+  transform: translateY(-1px);
 }
 
 .btn-modal-confirm {
@@ -3936,6 +4057,104 @@ background: #3b0764;
   font-weight: 600;
   cursor: pointer;
   margin-right: auto;
+  transition: all 0.25s ease;
+}
+
+.btn-clear-history:hover {
+  background: #dc2626;
+  border-color: #f87171;
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.5);
+  transform: translateY(-1px);
+}
+
+/* ==================== BOTÓN CERRAR HISTORIAL (DESKTOP) ==================== */
+.btn-history-close {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: linear-gradient(135deg, rgba(23, 26, 33, 0.95) 0%, rgba(30, 27, 75, 0.9) 100%);
+  border: 1px solid rgba(168, 85, 247, 0.45);
+  color: #f3e8ff;
+  padding: 9px 24px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35), 0 0 12px rgba(168, 85, 247, 0.2);
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+  will-change: transform, box-shadow, background, border-color;
+}
+
+/* Efecto de destello de luz al pasar el cursor */
+.btn-history-close::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.28), transparent);
+  transform: skewX(-20deg);
+  transition: left 0.65s ease;
+  pointer-events: none;
+}
+
+/* Hover: Transición vibrante a tonos púrpuras neón con resplandor eléctrico */
+.btn-history-close:hover {
+  background: linear-gradient(135deg, #7e22ce 0%, #9333ea 50%, #6366f1 100%);
+  border-color: #d8b4fe;
+  color: #ffffff;
+  transform: translateY(-2px) scale(1.03);
+  box-shadow: 
+    0 0 22px rgba(168, 85, 247, 0.7), 
+    0 0 40px rgba(147, 51, 234, 0.4),
+    0 8px 22px rgba(0, 0, 0, 0.45);
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.85);
+}
+
+.btn-history-close:hover::before {
+  left: 170%;
+}
+
+.btn-history-close .btn-close-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 900;
+  color: #c084fc;
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), color 0.3s ease;
+}
+
+.btn-history-close:hover .btn-close-icon {
+  transform: rotate(90deg) scale(1.2);
+  color: #ffffff;
+  text-shadow: 0 0 8px #ffffff;
+}
+
+.btn-history-close:active {
+  transform: translateY(0) scale(0.97);
+  box-shadow: 0 0 14px rgba(168, 85, 247, 0.45);
+}
+
+/* Botón cerrar en el encabezado del historial (Desktop) */
+.history-header-close-btn {
+  background: rgba(30, 27, 75, 0.85);
+  border: 1px solid rgba(168, 85, 247, 0.35);
+  color: #e9d5ff;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.history-header-close-btn:hover {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.35) 0%, rgba(168, 85, 247, 0.45) 100%);
+  border-color: #f87171;
+  color: #ffffff;
+  box-shadow: 0 0 16px rgba(239, 68, 68, 0.6), 0 0 25px rgba(168, 85, 247, 0.4);
 }
 
 .empty-history-box {
@@ -4226,9 +4445,18 @@ background: #3b0764;
     font-size: 13px;
   }
 
+  .podium-grid {
+    gap: 10px;
+    padding-bottom: 8px;
+  }
+
   .podium-card {
+    flex: 0 0 84%;
+    min-width: 240px;
+    max-width: 320px;
     padding: 8px 10px;
     gap: 8px;
+    scroll-snap-align: start;
   }
 
   .podium-thumb {
@@ -4616,6 +4844,54 @@ background: #3b0764;
 
   .user-cards-grid {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* Podium carousel en modo horizontal (landscape) */
+  .podium-container {
+    padding: 12px 14px;
+    gap: 10px;
+  }
+
+  .podium-header-bar {
+    gap: 8px;
+  }
+
+  .podium-heading {
+    font-size: 12px;
+  }
+
+  .podium-grid {
+    gap: 10px;
+    padding-bottom: 6px;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .podium-card {
+    flex: 0 0 46%;
+    min-width: 220px;
+    max-width: 290px;
+    padding: 7px 10px;
+    gap: 8px;
+    scroll-snap-align: start;
+  }
+
+  .podium-thumb {
+    width: 46px;
+    height: 24px;
+  }
+
+  .podium-title {
+    font-size: 11px;
+  }
+
+  .podium-score {
+    font-size: 10px;
+  }
+
+  .podium-rank {
+    font-size: 9px;
+    padding: 2px 5px;
   }
 }
 
