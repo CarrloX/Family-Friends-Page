@@ -3,7 +3,7 @@ import { motion, AnimatePresence, useDragControls } from 'framer-motion';
 import type { VotingHistoryRecord } from '../types/voting';
 import { DeleteHistoryRecordConfirmModal } from './DeleteHistoryRecordConfirmModal';
 import { HistoryListItem } from './HistoryListItem';
-import { CompetitorCard } from './CompetitorCard';
+import { HistoryCompetitorsCarousel } from './HistoryCompetitorsCarousel';
 import { VoterSnapshotRow } from './VoterSnapshotRow';
 import { GameThumbnail } from './GameThumbnail';
 
@@ -219,11 +219,17 @@ export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = React.memo(
             {selectedRecord && (!isMobile || mobileShowDetails) && (
               <div className="history-details-panel">
                 <div className="history-record-header">
-                  <div className="winner-details-badge">
-                    <span className="trophy-tag">🏆 JUEGO GANADOR</span>
-                    <h3>{selectedRecord.winningGame?.title}</h3>
-                    <span className="record-date-tag">🗓️ {selectedRecord.date}</span>
+                {/* Fondo difuminado cinematográfico del juego ganador */}
+                  <div className="history-header-blur-bg" aria-hidden="true">
+                    <GameThumbnail
+                      game={selectedRecord.winningGame}
+                      alt=""
+                      className="history-header-blur-img"
+                      recordId={selectedRecord.id}
+                    />
+                    <div className="history-header-blur-overlay" />
                   </div>
+
                   {isMobile && (
                     <button
                       type="button"
@@ -234,36 +240,27 @@ export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = React.memo(
                       ◀ Volver
                     </button>
                   )}
-                  {!isMobile && (
+
+                  <div className="history-record-header-main">
                     <GameThumbnail
                       game={selectedRecord.winningGame}
                       alt={selectedRecord.winningGame?.title}
                       className="history-details-banner"
                       recordId={selectedRecord.id}
                     />
-                  )}
-                </div>
-
-                {/* PODIUM RESULTS */}
-                <div className="history-competitors-section">
-                  <h5>🏆 TABLA DE POSICIONES FINAL:</h5>
-                  <div className="competitors-grid">
-                    {(selectedRecord.resultsSnapshot || Object.values(selectedRecord.gamesMap || {})).map((item, idx) => {
-                      // Support both GameResult[] and Game[] shapes
-                      const game = 'game' in item ? item.game : item;
-                      const pts = 'weightedPoints' in item ? item.weightedPoints : null;
-                      return (
-                        <CompetitorCard
-                          key={`${selectedRecord.id}-${game.id || idx}`}
-                          game={game}
-                          pts={pts}
-                          idx={idx}
-                          recordId={selectedRecord.id}
-                        />
-                      );
-                    })}
+                    <div className="winner-details-badge">
+                      <span className="trophy-tag">🏆 JUEGO GANADOR</span>
+                      <h3>{selectedRecord.winningGame?.title}</h3>
+                      <span className="record-date-tag">🗓️ {selectedRecord.date}</span>
+                    </div>
                   </div>
                 </div>
+
+                {/* PODIUM RESULTS CAROUSEL */}
+                <HistoryCompetitorsCarousel
+                  items={selectedRecord.resultsSnapshot || Object.values(selectedRecord.gamesMap || {})}
+                  recordId={selectedRecord.id}
+                />
 
                 {/* VOTERS BREAKDOWN TABLE */}
                 <div className="history-voters-table-container">
