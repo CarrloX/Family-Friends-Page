@@ -1,78 +1,255 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { FaLock, FaShieldAlt } from 'react-icons/fa';
+import { motion, useAnimationControls } from 'framer-motion';
+import { FaLock, FaShieldAlt, FaUnlock, FaSpinner, FaClock } from 'react-icons/fa';
+
+import type { AuthResult, AuthErrorCode } from '../services/accessControl';
+
+export type { AuthResult, AuthErrorCode };
 
 interface AdminPinModalProps {
   onCancel: () => void;
-  /** Retorna true o { success: true } si la contraseña es válida */
-  onSuccess: (password: string) => Promise<boolean | { success: boolean; error?: string }>;
+  /** Función que intenta autenticar la contraseña ingresada en el servidor */
+  onAuthenticate: (password: string) => Promise<AuthResult>;
 }
 
 /**
- * AdminPinModal
- * BottomSheet animado para autenticación segura de administrador con Firebase Auth.
- * Solo solicita la contraseña; la verificación se realiza de manera segura en el servidor
- * sin comparar variables en el código cliente.
+ * Modal de autenticación de administrador (BottomSheet animado).
+ * La autenticación se delega mediante `onAuthenticate`.
+ * La autorización efectiva debe validarse del lado servidor/reglas.
  */
-export const AdminPinModal: React.FC<AdminPinModalProps> = ({ onCancel, onSuccess }) => {
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [shake, setShake] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+const FOCUSABLE_SELECTOR =
+  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-  // Autofocus en el input de contraseña al abrir
+/**
+ * Determina si un elemento es visible en pantalla y accesible para el foco.
+ *
+ * Utiliza `getClientRects().length > 0` en lugar de `offsetParent !== null` para evitar
+ * falsos negativos en elementos con `position: fixed`, SVG o contextos de CSS modernos.
+ * Excluye además elementos que contengan o hereden el atributo `aria-hidden="true"`.
+ */
+function isFocusableVisible(el: HTMLElement): boolean {
+  if (el.getAttribute('aria-hidden') === 'true' || el.closest('[aria-hidden="true"]')) {
+    return false;
+  }
+  return el.getClientRects().length > 0;
+}
+
+/**
+ * Controla el ciclo de tabulación para mantener el foco dentro del diálogo modal (Focus Trap).
+ */
+function trapFocus(e: KeyboardEvent, modal: HTMLElement) {
+  const focusableElements = Array.from(
+    modal.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)
+  ).filter(isFocusableVisible);
+
+  if (focusableElements.length === 0) {
+    e.preventDefault();
+    return;
+  }
+
+  const firstElement = focusableElements[0];
+  const lastElement = focusableElements.at(-1);
+
+  if (e.shiftKey) {
+    // Shift + Tab: si estamos en el primer elemento o fuera del modal, ir al último
+    if (document.activeElement === firstElement || !modal.contains(document.activeElement)) {
+      e.preventDefault();
+      lastElement?.focus();
+    }
+  } else if (document.activeElement === lastElement || !modal.contains(document.activeElement)) {
+    // Tab: si estamos en el último elemento o fuera del modal, ir al primero
+    e.preventDefault();
+    firstElement?.focus();
+  }
+}
+
+interface PinModalError {
+  message: string;
+  type: AuthErrorCode | 'validation';
+}
+
+export const AdminPinModal = ({
+  onCancel,
+  onAuthenticate,
+}: AdminPinModalProps) => {
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState<PinModalError | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [lockoutRemaining, setLockoutRemaining] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+  // Refs estables para listeners globales de eventos (evitan recrear listeners en cada render)
+  // isSubmittingRef se sincroniza de forma síncrona e inmediata en handleSubmit/finally
+  const isSubmittingRef = useRef(false);
+  const onCancelRef = useRef(onCancel);
+  const inputControls = useAnimationControls();
+
+  // Mantener onCancelRef sincronizado con el prop más reciente
   useEffect(() => {
-    const timer = setTimeout(() => inputRef.current?.focus(), 350);
-    return () => clearTimeout(timer);
+    onCancelRef.current = onCancel;
+  }, [onCancel]);
+
+  // Temporizador de cuenta regresiva cuando el proveedor/servicio activa bloqueo por intentos fallidos ('rate-limited')
+  useEffect(() => {
+    if (lockoutRemaining <= 0) return;
+    const interval = setInterval(() => {
+      setLockoutRemaining((prev) => {
+        if (prev <= 1) {
+          setError(null);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [lockoutRemaining]);
+
+  const triggerShake = () => {
+    inputControls.start({
+      x: [-8, 8, -6, 6, -3, 3, 0],
+      transition: { duration: 0.4, ease: 'easeInOut' },
+    });
+  };
+
+  // Capturar el elemento activo previo al abrir y restaurar el foco al cerrar/desmontar
+  useEffect(() => {
+    previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
+    const timer = setTimeout(() => inputRef.current?.focus(), 150);
+
+    return () => {
+      clearTimeout(timer);
+      previouslyFocusedRef.current?.focus();
+    };
   }, []);
 
-  // Cerrar con tecla Escape si no se está enviando
+  // Manejo de teclado: Escape para cerrar y Focus Trap con Tab / Shift+Tab.
+  // Array de deps vacío: el listener se monta una sola vez; los estados se leen
+  // desde los refs estables para evitar desmontajes/remontajes en cada submit.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !isSubmitting) {
-        onCancel();
+      if (e.key === 'Escape' && !isSubmittingRef.current) {
+        onCancelRef.current();
+        return;
+      }
+
+      if (e.key === 'Tab' && modalRef.current) {
+        trapFocus(e, modalRef.current);
       }
     };
+
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onCancel, isSubmitting]);
+  }, []); // montado una sola vez; estado leído desde refs
 
-  const handleSubmit = async (e: React.SyntheticEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (lockoutRemaining > 0) {
+      setError({
+        message: `Acceso bloqueado por seguridad. Espera ${lockoutRemaining}s antes de reintentar.`,
+        type: 'rate-limited',
+      });
+      triggerShake();
+      return;
+    }
+
+    // Se valida que no esté vacío o solo de espacios, pero se envía password intacto
+    // a onAuthenticate para respetar posibles espacios intencionales en la contraseña.
     if (!password.trim()) {
-      setError('Ingresa la contraseña de administrador.');
-      setShake(true);
-      setTimeout(() => setShake(false), 500);
+      setError({
+        message: 'Ingresa la contraseña de administrador.',
+        type: 'validation',
+      });
+      triggerShake();
       return;
     }
 
     setIsSubmitting(true);
+    isSubmittingRef.current = true;
     setError(null);
 
     try {
-      const res = await onSuccess(password);
-      const isSuccess = typeof res === 'boolean' ? res : res.success;
-      const errorMsg =
-        typeof res === 'object' && res.error
-          ? res.error
-          : 'Contraseña incorrecta. Intenta nuevamente.';
+      const res = await onAuthenticate(password);
 
-      if (!isSuccess) {
-        setError(errorMsg);
-        setShake(true);
-        setTimeout(() => setShake(false), 500);
-        setPassword('');
-        inputRef.current?.focus();
+      if (!res.success) {
+        if (res.errorCode === 'rate-limited') {
+          // El servicio activó protección contra fuerza bruta / rate limit
+          const waitTime = res.retryAfterSeconds ?? 60;
+          setLockoutRemaining(waitTime);
+          setError({
+            message: `Demasiados intentos fallidos. Por seguridad, el acceso ha sido bloqueado por ${waitTime}s.`,
+            type: 'rate-limited',
+          });
+          triggerShake();
+          setPassword('');
+        } else if (res.errorCode === 'network-error') {
+          // Ante fallo de red no se borra la contraseña para no obligar a reescribirla
+          setError({
+            message: 'Error de conexión con el servidor. Verifica tu red e intenta nuevamente.',
+            type: 'network-error',
+          });
+          triggerShake();
+          inputRef.current?.focus();
+        } else {
+          // Credenciales erróneas o error no clasificado
+          const isUnknown = res.errorCode === 'unknown-error';
+          setError({
+            message: res.error || 'Credenciales incorrectas. Intenta nuevamente.',
+            type: isUnknown ? 'unknown-error' : 'invalid-credentials',
+          });
+          triggerShake();
+          setPassword('');
+          inputRef.current?.focus();
+        }
       }
     } catch {
-      setError('Error al conectar con el servidor de autenticación.');
-      setShake(true);
-      setTimeout(() => setShake(false), 500);
+      // Punto 16: fallo de conexión inesperado -> mantener contraseña y reenfocar el input
+      setError({
+        message: 'Error al conectar con el servidor de autenticación.',
+        type: 'network-error',
+      });
+      triggerShake();
+      inputRef.current?.focus();
     } finally {
+      isSubmittingRef.current = false;
       setIsSubmitting(false);
     }
   };
+
+  let submitButtonContent: React.ReactNode;
+  if (lockoutRemaining > 0) {
+    submitButtonContent = (
+      <>
+        <FaClock aria-hidden="true" style={{ marginRight: 6, verticalAlign: 'middle' }} />
+        <span>Espera ({lockoutRemaining}s)</span>
+      </>
+    );
+  } else if (isSubmitting) {
+    submitButtonContent = (
+      <>
+        <motion.span
+          animate={{ rotate: 360 }}
+          transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
+          style={{ display: 'inline-flex', marginRight: 6, verticalAlign: 'middle' }}
+        >
+          <FaSpinner aria-hidden="true" />
+        </motion.span>
+        <span>Verificando…</span>
+      </>
+    );
+  } else {
+    submitButtonContent = (
+      <>
+        <FaUnlock aria-hidden="true" style={{ marginRight: 6, verticalAlign: 'middle' }} />
+        <span>Desbloquear</span>
+      </>
+    );
+  }
+
+  // Semántica de accesibilidad: aria-invalid solo aplica ante valor de contraseña incorrecto
+  // o vacío; un fallo de conectividad o rate-limit no invalida el dato del input.
+  const isCredentialError =
+    error?.type === 'invalid-credentials' || error?.type === 'validation';
 
   return (
     <motion.div
@@ -82,10 +259,14 @@ export const AdminPinModal: React.FC<AdminPinModalProps> = ({ onCancel, onSucces
       exit={{ opacity: 0 }}
       transition={{ duration: 0.25 }}
       onClick={() => {
-        if (!isSubmitting) onCancel();
+        if (!isSubmittingRef.current) onCancelRef.current();
       }}
     >
       <motion.div
+        ref={modalRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="admin-modal-title"
         className="admin-pin-modal-container bottom-sheet-panel"
         initial={{ y: '100%', opacity: 0, scale: 0.95 }}
         animate={{ y: 0, opacity: 1, scale: 1 }}
@@ -98,11 +279,11 @@ export const AdminPinModal: React.FC<AdminPinModalProps> = ({ onCancel, onSucces
 
         <div className="modal-header">
           <div className="modal-title-group">
-            <h2>
-              <FaShieldAlt style={{ marginRight: 8, verticalAlign: 'middle' }} />
+            <h2 id="admin-modal-title">
+              <FaShieldAlt aria-hidden="true" style={{ marginRight: 8, verticalAlign: 'middle' }} />
               Acceso de Administrador
             </h2>
-            <p>Ingresa la contraseña para habilitar edición en el servidor.</p>
+            <p>Ingresa la contraseña para habilitar permisos de administrador.</p>
           </div>
           <motion.button
             type="button"
@@ -118,30 +299,45 @@ export const AdminPinModal: React.FC<AdminPinModalProps> = ({ onCancel, onSucces
         </div>
 
         <form className="admin-pin-form" onSubmit={handleSubmit}>
-          <div className="admin-pin-input-wrapper">
-            <FaLock className="admin-pin-icon" />
+          <label htmlFor="admin-password" className="sr-only">
+            Contraseña de administrador
+          </label>
+          <motion.div
+            className="admin-pin-input-wrapper"
+            animate={inputControls}
+          >
+            <FaLock className="admin-pin-icon" aria-hidden="true" />
             <input
               ref={inputRef}
+              id="admin-password"
               type="password"
-              className={`admin-pin-input ${shake ? 'shake-error' : ''}`}
-              placeholder="Contraseña de administrador..."
+              aria-invalid={isCredentialError}
+              aria-describedby={error ? 'admin-password-error' : undefined}
+              className={`admin-pin-input ${isCredentialError ? 'has-error' : ''}`}
+              placeholder={
+                lockoutRemaining > 0
+                  ? `Bloqueado por seguridad (${lockoutRemaining}s)...`
+                  : 'Contraseña de administrador...'
+              }
               value={password}
               onChange={(e) => {
                 setPassword(e.target.value);
                 setError(null);
               }}
               autoComplete="current-password"
-              disabled={isSubmitting}
+              disabled={isSubmitting || lockoutRemaining > 0}
             />
-          </div>
+          </motion.div>
 
           {error && (
             <motion.div
+              id="admin-password-error"
+              role="alert"
               className="admin-pin-error"
               initial={{ opacity: 0, y: -5 }}
               animate={{ opacity: 1, y: 0 }}
             >
-              {error}
+              {error.message}
             </motion.div>
           )}
 
@@ -159,11 +355,12 @@ export const AdminPinModal: React.FC<AdminPinModalProps> = ({ onCancel, onSucces
             <motion.button
               type="submit"
               className="btn-modal-confirm"
-              disabled={isSubmitting}
-              whileHover={{ scale: isSubmitting ? 1 : 1.03 }}
-              whileTap={{ scale: isSubmitting ? 1 : 0.97 }}
+              disabled={isSubmitting || lockoutRemaining > 0}
+              aria-busy={isSubmitting}
+              whileHover={{ scale: isSubmitting || lockoutRemaining > 0 ? 1 : 1.03 }}
+              whileTap={{ scale: isSubmitting || lockoutRemaining > 0 ? 1 : 0.97 }}
             >
-              {isSubmitting ? '⏳ Verificando...' : '🔓 Desbloquear'}
+              {submitButtonContent}
             </motion.button>
           </div>
         </form>

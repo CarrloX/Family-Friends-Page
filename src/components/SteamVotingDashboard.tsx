@@ -37,6 +37,7 @@ import {
   loginAdminWithPassword,
   logoutAdmin,
   requestAdminUnlock,
+  type AuthResult,
 } from '../services/accessControl';
 import { subscribeToAuthState } from '../services/firebaseConfig';
 
@@ -477,14 +478,13 @@ export const SteamVotingDashboard: React.FC = () => {
 
   // Handler cuando el usuario envía la contraseña en el modal
   const handlePinSubmit = useCallback(
-    async (password: string): Promise<boolean | { success: boolean; error?: string }> => {
+    async (password: string): Promise<AuthResult> => {
       const result = await loginAdminWithPassword(password);
       if (result.success) {
         setAdminAccess(getAdminAccessState());
         setShowPinModal(false);
         pinModalResolveRef.current?.(true);
         pinModalResolveRef.current = null;
-        return true;
       }
       return result;
     },
@@ -1120,7 +1120,7 @@ export const SteamVotingDashboard: React.FC = () => {
           <AdminPinModal
             key="admin-pin-modal"
             onCancel={handlePinCancel}
-            onSuccess={handlePinSubmit}
+            onAuthenticate={handlePinSubmit}
           />
         )}
       </AnimatePresence>

@@ -53,7 +53,6 @@ export const HistoryCompetitorsCarousel: React.FC<HistoryCompetitorsCarouselProp
     });
     resizeObserver.observe(el);
 
-    // Permitir scroll horizontal fluido con rueda del ratón en desktop cuando haya desbordamiento
     const onWheelListener = (e: WheelEvent) => {
       if (el.scrollWidth > el.clientWidth) {
         if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
@@ -68,7 +67,29 @@ export const HistoryCompetitorsCarousel: React.FC<HistoryCompetitorsCarouselProp
       }
     };
 
+    const onMouseDownListener = (e: MouseEvent) => {
+      isDraggingRef.current = true;
+      startXRef.current = e.pageX - el.offsetLeft;
+      scrollLeftRef.current = el.scrollLeft;
+    };
+
+    const onMouseMoveListener = (e: MouseEvent) => {
+      if (!isDraggingRef.current) return;
+      e.preventDefault();
+      const x = e.pageX - el.offsetLeft;
+      const walk = (x - startXRef.current) * 1.4;
+      el.scrollLeft = scrollLeftRef.current - walk;
+      checkScroll();
+    };
+
+    const onMouseUpOrLeaveListener = () => {
+      isDraggingRef.current = false;
+    };
+
     el.addEventListener('wheel', onWheelListener, { passive: false });
+    el.addEventListener('mousedown', onMouseDownListener);
+    window.addEventListener('mousemove', onMouseMoveListener);
+    window.addEventListener('mouseup', onMouseUpOrLeaveListener);
 
     return () => {
       clearTimeout(t1);
@@ -76,6 +97,9 @@ export const HistoryCompetitorsCarousel: React.FC<HistoryCompetitorsCarouselProp
       window.removeEventListener('resize', handleResize);
       resizeObserver.disconnect();
       el.removeEventListener('wheel', onWheelListener);
+      el.removeEventListener('mousedown', onMouseDownListener);
+      window.removeEventListener('mousemove', onMouseMoveListener);
+      window.removeEventListener('mouseup', onMouseUpOrLeaveListener);
     };
   }, [checkScroll, items, recordId]);
 
@@ -95,28 +119,6 @@ export const HistoryCompetitorsCarousel: React.FC<HistoryCompetitorsCarouselProp
       left: direction === 'left' ? -scrollAmount : scrollAmount,
       behavior: 'smooth',
     });
-  };
-
-  const handleMouseDown = (e: React.MouseEvent) => {
-    const el = scrollRef.current;
-    if (!el) return;
-    isDraggingRef.current = true;
-    startXRef.current = e.pageX - el.offsetLeft;
-    scrollLeftRef.current = el.scrollLeft;
-  };
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!isDraggingRef.current || !scrollRef.current) return;
-    e.preventDefault();
-    const el = scrollRef.current;
-    const x = e.pageX - el.offsetLeft;
-    const walk = (x - startXRef.current) * 1.4;
-    el.scrollLeft = scrollLeftRef.current - walk;
-    checkScroll();
-  };
-
-  const handleMouseUpOrLeave = () => {
-    isDraggingRef.current = false;
   };
 
   if (items.length === 0) return null;
@@ -161,10 +163,6 @@ export const HistoryCompetitorsCarousel: React.FC<HistoryCompetitorsCarouselProp
           ref={scrollRef}
           className="competitors-grid"
           onScroll={checkScroll}
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUpOrLeave}
-          onMouseLeave={handleMouseUpOrLeave}
         >
           {items.map((item, idx) => {
             const game = 'game' in item ? item.game : item;

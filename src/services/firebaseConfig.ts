@@ -8,6 +8,11 @@ import {
   type Auth,
   type User,
 } from 'firebase/auth';
+import {
+  initializeAppCheck,
+  ReCaptchaV3Provider,
+  type AppCheck,
+} from 'firebase/app-check';
 
 /**
  * Configuración de Firebase Firestore y Auth.
@@ -26,6 +31,7 @@ const firebaseConfig = {
 let app: FirebaseApp | null = null;
 let db: Firestore | null = null;
 let auth: Auth | null = null;
+let appCheck: AppCheck | null = null;
 let isConfigured = false;
 
 /**
@@ -58,16 +64,54 @@ export function initFirebase(): { db: Firestore | null; isConfigured: boolean } 
     auth = getAuth(app);
     isConfigured = true;
 
+    // Inicialización de Firebase App Check (mitigación de abuso / fuerza bruta)
+    const recaptchaSiteKey = (
+      import.meta.env.VITE_RECAPTCHA_SITE_KEY ||
+      import.meta.env.VITE_FIREBASE_APPCHECK_KEY ||
+      ''
+    ) as string;
+
+    if (typeof window !== 'undefined') {
+      try {
+        if (import.meta.env.DEV && !recaptchaSiteKey) {
+          // Permite token de depuración para desarrollo local
+          // @ts-expect-error - Flag global de depuración para App Check en desarrollo
+          self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+        }
+
+        if (recaptchaSiteKey) {
+          appCheck = initializeAppCheck(app, {
+            provider: new ReCaptchaV3Provider(recaptchaSiteKey),
+            isTokenAutoRefreshEnabled: true,
+          });
+          console.log('[Firebase] App Check inicializado con reCAPTCHA.');
+        }
+      } catch (appCheckErr) {
+        console.warn('[Firebase] No se pudo inicializar App Check (opcional):', appCheckErr);
+      }
+    }
+
     console.log('[Firebase] Firestore y Auth inicializados correctamente.');
   } catch (err) {
     console.error('[Firebase] Error al inicializar:', err);
     app = null;
     db = null;
     auth = null;
+    appCheck = null;
     isConfigured = false;
   }
 
   return { db, isConfigured };
+}
+
+/**
+ * Retorna la instancia actual de App Check, o null si no está configurada.
+ */
+export function getAppCheckInstance(): AppCheck | null {
+  if (!app) {
+    initFirebase();
+  }
+  return appCheck;
 }
 
 /**
@@ -142,8 +186,9 @@ export function subscribeToAuthState(callback: (user: User | null) => void): () 
 }
 
 /**
- * Inicia sesión de administrador con correo y contraseña en Firebase Auth.
- * La verificación se realiza de manera segura en los servidores de Google Firebase.
+ * Inicia sesión de administrador mediante el SDK cliente de Firebase Auth.
+ * La autenticación se resuelve directamente contra la API de Google Identity Toolkit (BaaS),
+ * sin servidores propios intermedios de aplicación.
  */
 export async function signInAdmin(email: string, password: string): Promise<User> {
   const authInstance = getAuthInstance();

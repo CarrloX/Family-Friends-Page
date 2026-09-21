@@ -74,6 +74,22 @@ function buildReadOnlyState(message = 'Solo lectura activa'): SyncState {
   return { status: 'read-only', message };
 }
 
+/**
+ * Determina si un error de Firestore se debe a rechazo de autorización en el servidor
+ * (código `permission-denied` o mensaje de permisos insuficientes).
+ */
+function isPermissionDeniedError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const code = 'code' in err ? String((err as { code?: unknown }).code) : '';
+  const message = 'message' in err ? String((err as { message?: unknown }).message) : '';
+  return (
+    code === 'permission-denied' ||
+    code === 'firestore/permission-denied' ||
+    message.includes('insufficient permissions') ||
+    message.includes('Missing or insufficient permissions')
+  );
+}
+
 // ============================================================
 // Colecciones de Firestore
 // ============================================================
@@ -126,6 +142,10 @@ export async function saveVoters(voters: Voter[]): Promise<SyncState> {
       console.log('[DataStore] Votantes sincronizados con Firestore.');
       return { status: 'synced', message: 'Sincronizado con la nube' };
     } catch (err) {
+      if (isPermissionDeniedError(err)) {
+        console.error('[DataStore] Escritura de votantes denegada por el servidor (permisos insuficientes).');
+        return { status: 'error', message: 'Permiso denegado por el servidor: requiere rol de administrador' };
+      }
       console.warn('[DataStore] Error sincronizando votantes, usando localStorage:', err);
       writeLocal(LS_KEY_VOTERS, voters);
       return { status: 'local', message: 'Guardado localmente (sin conexión)' };
@@ -160,6 +180,10 @@ export async function saveActiveVotingState(voters: Voter[], gamesMap: Record<st
       console.log('[DataStore] Votación actual sincronizada con Firestore.');
       return { status: 'synced', message: 'Votación actual sincronizada' };
     } catch (err) {
+      if (isPermissionDeniedError(err)) {
+        console.error('[DataStore] Sincronización de votación activa denegada por el servidor (permisos insuficientes).');
+        return { status: 'error', message: 'Permiso denegado por el servidor: requiere rol de administrador' };
+      }
       console.warn('[DataStore] Error sincronizando votación actual:', err);
       return { status: 'local', message: 'Votación actual guardada localmente' };
     }
@@ -320,6 +344,10 @@ export async function saveGames(gamesMap: Record<string, Game>): Promise<SyncSta
       console.log('[DataStore] Juegos sincronizados con Firestore.');
       return { status: 'synced', message: 'Sincronizado con la nube' };
     } catch (err) {
+      if (isPermissionDeniedError(err)) {
+        console.error('[DataStore] Actualización de juegos denegada por el servidor (permisos insuficientes).');
+        return { status: 'error', message: 'Permiso denegado por el servidor: requiere rol de administrador' };
+      }
       console.warn('[DataStore] Error sincronizando juegos, usando localStorage:', err);
       writeLocal(LS_KEY_GAMES, gamesMap);
       return { status: 'local', message: 'Guardado localmente (sin conexión)' };
@@ -389,6 +417,10 @@ export async function addHistoryRecord(record: VotingHistoryRecord): Promise<Syn
       console.log('[DataStore] Historial sincronizado con Firestore.');
       return { status: 'synced', message: 'Sincronizado con la nube' };
     } catch (err) {
+      if (isPermissionDeniedError(err)) {
+        console.error('[DataStore] Inserción de historial denegada por el servidor (permisos insuficientes).');
+        return { status: 'error', message: 'Permiso denegado por el servidor: requiere rol de administrador' };
+      }
       console.warn('[DataStore] Error sincronizando historial, usando localStorage:', err);
       const history = readLocal<VotingHistoryRecord[]>(LS_KEY_HISTORY, []);
       history.unshift(cleanRecord);
@@ -449,6 +481,10 @@ export async function deleteHistoryRecord(recordId: string): Promise<SyncState> 
         console.log(`[DataStore] Registro ${recordId} eliminado de Firestore.`);
       }
     } catch (err) {
+      if (isPermissionDeniedError(err)) {
+        console.error('[DataStore] Eliminación de historial denegada por el servidor (permisos insuficientes).');
+        return { status: 'error', message: 'Permiso denegado por el servidor: requiere rol de administrador' };
+      }
       console.warn('[DataStore] Error eliminando registro de Firestore:', err);
     }
   }
@@ -476,6 +512,10 @@ export async function clearHistory(): Promise<SyncState> {
       await Promise.all(deletePromises);
       console.log('[DataStore] Historial limpiado en Firestore.');
     } catch (err) {
+      if (isPermissionDeniedError(err)) {
+        console.error('[DataStore] Vaciado de historial denegado por el servidor (permisos insuficientes).');
+        return { status: 'error', message: 'Permiso denegado por el servidor: requiere rol de administrador' };
+      }
       console.warn('[DataStore] Error limpiando historial en Firestore:', err);
     }
   }

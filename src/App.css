@@ -3292,6 +3292,19 @@ background: #3b0764;
   }
 }
 
+/* Utilidad de accesibilidad para lectores de pantalla */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .admin-pin-form {
   display: flex;
   flex-direction: column;
@@ -3339,17 +3352,11 @@ background: #3b0764;
   font-weight: 400;
 }
 
-/* Animación shake para PIN incorrecto */
+/* Estado de error visual para PIN incorrecto (animación delegada a Framer Motion) */
+.admin-pin-input.has-error,
 .admin-pin-input.shake-error {
   border-color: #ef4444 !important;
   box-shadow: 0 0 15px rgba(239, 68, 68, 0.5) !important;
-  animation: shake 0.4s ease-in-out;
-}
-
-@keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  20%, 60% { transform: translateX(-8px); }
-  40%, 80% { transform: translateX(8px); }
 }
 
 .admin-pin-error {
@@ -4064,6 +4071,7 @@ background: #3b0764;
 .competitors-carousel-wrapper {
   position: relative;
   width: 100%;
+  min-width: 0;
   border-radius: 8px;
 }
 
@@ -4094,13 +4102,6 @@ background: #3b0764;
 .history-competitors-section {
   width: 100%;
   min-width: 0;
-}
-
-.competitors-carousel-wrapper {
-  position: relative;
-  width: 100%;
-  min-width: 0;
-  border-radius: 8px;
 }
 
 .competitors-grid {
@@ -4905,7 +4906,7 @@ background: #3b0764;
   .winner-details-badge h3 {
     font-size: 16px;
     line-height: 1.3;
-    word-break: break-word;
+    overflow-wrap: break-word;
     text-shadow: 0 2px 14px rgba(0, 0, 0, 1);
   }
 

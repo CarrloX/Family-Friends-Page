@@ -34,6 +34,23 @@ export function getDefaultAdminEmail(): string {
   return envEmail || 'admin@familyandfriendssteam.firebaseapp.com';
 }
 
+/**
+ * Códigos de error de autenticación normalizados a nivel de dominio.
+ * Desacoplan la capa de presentación (UI) de cualquier proveedor de autenticación subyacente (Firebase, Supabase, Auth0, backend propio, etc.).
+ */
+export type AuthErrorCode =
+  | 'invalid-credentials'
+  | 'rate-limited'
+  | 'network-error'
+  | 'unknown-error';
+
+export interface AuthResult {
+  success: boolean;
+  error?: string;
+  errorCode?: AuthErrorCode;
+  retryAfterSeconds?: number;
+}
+
 export interface AdminAccessState {
   canManageContent: boolean;
   isLocalEnvironment: boolean;
@@ -44,9 +61,13 @@ export interface AdminAccessState {
 }
 
 /**
- * Obtiene el estado actual de acceso administrativo.
- * Los permisos de escritura están estrictamente condicionados a la autenticación
- * en Firebase Auth, sin validar contraseñas ni variables en el código cliente.
+ * Obtiene el estado actual de acceso administrativo para la interfaz de usuario (UI).
+ *
+ * NOTA DE SEGURIDAD:
+ * Los valores aquí expuestos (`canManageContent`, `isReadOnly`) controlan únicamente la
+ * experiencia de usuario en el frontend (renderizado condicional de botones y edición).
+ * La autorización real e inquebrantable reside en las reglas del servidor (`firestore.rules`),
+ * que exigen un token de Firebase Auth válido con privilegios de administrador para cualquier mutación.
  */
 export function getAdminAccessState(options?: {
   hostname?: string;
@@ -76,65 +97,111 @@ export function getAdminAccessState(options?: {
   };
 }
 
+interface MappedAuthError {
+  message: string;
+  code: AuthErrorCode;
+  retryAfterSeconds?: number;
+}
+
 /**
- * Mapea códigos de error de Firebase Authentication a mensajes claros en español neutro.
+ * Traduce códigos de error específicos del proveedor (Firebase Authentication) a
+ * conceptos de dominio normalizados (`AuthErrorCode`) y mensajes seguros conforme a OWASP.
+ * Evita la enumeración de cuentas o filtración de detalles internos del proveedor.
  */
-function mapAuthError(err: unknown): string {
+function mapAuthError(err: unknown): MappedAuthError {
   if (!err || typeof err !== 'object') {
-    return 'Error desconocido al autenticar.';
+    return {
+      message: 'Credenciales incorrectas o error al autenticar.',
+      code: 'invalid-credentials',
+    };
   }
 
-  const code = 'code' in err ? String(err.code) : '';
+  const rawCode = 'code' in err ? String(err.code) : '';
 
-  switch (code) {
+  switch (rawCode) {
     case 'auth/invalid-credential':
     case 'auth/wrong-password':
     case 'auth/user-not-found':
-      return 'Contraseña incorrecta. Intenta nuevamente.';
     case 'auth/invalid-email':
-      return 'El formato del correo electrónico no es válido.';
-    case 'auth/user-disabled':
-      return 'La cuenta de administrador se encuentra deshabilitada.';
+      // Mensaje unificado para prevenir enumeración de cuentas
+      return {
+        message: 'Credenciales incorrectas. Intenta nuevamente.',
+        code: 'invalid-credentials',
+      };
     case 'auth/too-many-requests':
-      return 'Demasiados intentos fallidos. Por seguridad, espera unos minutos antes de reintentar.';
+      return {
+        message: 'Demasiados intentos fallidos. Por seguridad, el acceso ha sido bloqueado temporalmente.',
+        code: 'rate-limited',
+        retryAfterSeconds: 60,
+      };
     case 'auth/network-request-failed':
-      return 'Error de conexión al servidor de autenticación. Verifica tu red.';
+      return {
+        message: 'Error de conexión con el servidor. Verifica tu red e intenta nuevamente.',
+        code: 'network-error',
+      };
+    case 'auth/user-disabled':
     case 'auth/operation-not-allowed':
-      return 'El método de autenticación con correo/contraseña no está habilitado en Firebase Console.';
     default:
-      return 'code' in err && typeof err.code === 'string'
-        ? `Error de autenticación: ${err.code}`
-        : 'No se pudo verificar la sesión de administrador.';
+      // Detalles técnicos o no previstos no se exponen al usuario final
+      return {
+        message: 'No se pudo verificar la sesión. Intenta nuevamente.',
+        code: 'unknown-error',
+      };
   }
 }
 
 /**
- * Inicia sesión de administrador mediante Firebase Authentication usando únicamente la contraseña.
- * El correo de administrador configurado se maneja internamente en el servidor/entorno.
- * NO realiza comparaciones directas de variables en el cliente.
+ * Inicia sesión de administrador mediante Firebase Authentication usando la contraseña ingresada.
+ * Resuelve el correo de administrador internamente desde las variables de entorno.
+ * La solicitud se despacha directamente a Google Identity Toolkit mediante el SDK de cliente.
  */
 export async function loginAdminWithPassword(
   password: string
-): Promise<{ success: boolean; error?: string }> {
+): Promise<AuthResult> {
   return loginAdminWithCredentials(getDefaultAdminEmail(), password);
 }
 
 /**
- * Inicia sesión de administrador mediante Firebase Authentication.
- * NO realiza comparaciones directas de variables en el cliente.
+ * Cerrojo a nivel de servicio (In-Flight Mutex).
+ * Evita condiciones de carrera y peticiones concurrentes en el runtime de JavaScript
+ * si múltiples eventos asíncronos se disparan antes de que el estado de React actualice la UI.
+ */
+let activeAuthPromise: Promise<AuthResult> | null = null;
+
+/**
+ * Inicia sesión de administrador mediante el SDK cliente de Firebase Auth (BaaS).
+ * Las credenciales viajan directamente a la API de Google, que emite un ID Token criptográfico.
+ * Implementa deduplicación de peticiones en vuelo (in-flight singleton).
  */
 export async function loginAdminWithCredentials(
   email: string,
   password: string
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    const targetEmail = email.trim() || getDefaultAdminEmail();
-    await signInAdmin(targetEmail, password);
-    return { success: true };
-  } catch (err) {
-    console.warn('[AccessControl] Error al autenticar administrador:', err);
-    return { success: false, error: mapAuthError(err) };
+): Promise<AuthResult> {
+  // Si ya hay una verificación en curso en este runtime, reutilizar la misma promesa
+  if (activeAuthPromise) {
+    return activeAuthPromise;
   }
+
+  activeAuthPromise = (async () => {
+    try {
+      const targetEmail = email.trim() || getDefaultAdminEmail();
+      await signInAdmin(targetEmail, password);
+      return { success: true };
+    } catch (err) {
+      console.warn('[AccessControl] Error al autenticar administrador:', err);
+      const mapped = mapAuthError(err);
+      return {
+        success: false,
+        error: mapped.message,
+        errorCode: mapped.code,
+        retryAfterSeconds: mapped.retryAfterSeconds,
+      };
+    } finally {
+      activeAuthPromise = null;
+    }
+  })();
+
+  return activeAuthPromise;
 }
 
 /**
@@ -151,7 +218,7 @@ export async function logoutAdmin(): Promise<void> {
 export async function unlockWithPin(
   enteredPin: string,
   email?: string
-): Promise<{ success: boolean; error?: string }> {
+): Promise<AuthResult> {
   const targetEmail = email?.trim() || getDefaultAdminEmail();
   return loginAdminWithCredentials(targetEmail, enteredPin);
 }

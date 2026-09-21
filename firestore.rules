@@ -2,19 +2,35 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // Función de autorización en el servidor.
+    // La seguridad NO depende del cliente (React/modal), sino de esta verificación en cada petición.
+    // Requiere una sesión válida de Firebase Auth con el rol de admin (custom claims)
+    // o el correo de administrador autorizado.
+    function isAdmin() {
+      return request.auth != null && (
+        request.auth.token.admin == true ||
+        request.auth.token.email == "admin@familyandfriendssteam.firebaseapp.com"
+      );
+    }
+
+    // Configuración del grupo y miembros
     match /grupo/{doc} {
       allow read: if true;
-      allow write: if request.auth != null;
+      allow write: if isAdmin();
     }
 
+    // Estado de la votación activa
     match /votacion_actual/{doc} {
       allow read: if true;
-      allow write: if request.auth != null;
+      allow write: if isAdmin();
     }
 
+    // Historial de votaciones pasadas
     match /votaciones_pasadas/{doc} {
       allow read: if true;
-      allow write, delete: if request.auth != null;
+      allow write, delete: if isAdmin();
     }
   }
 }
+
