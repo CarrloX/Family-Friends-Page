@@ -11,7 +11,7 @@ import {
   deleteDoc,
 } from 'firebase/firestore';
 import { getFirestoreInstance, isFirebaseReady } from './firebaseConfig';
-import { getAdminAccessState } from './accessControl';
+import { canManageContent } from './accessControl';
 import type { Voter, Game, VotingHistoryRecord } from '../types/voting';
 import { fixSteamCoverUrl } from '../utils/steamImages';
 
@@ -67,7 +67,7 @@ function canWriteToPersistence(): boolean {
   if (typeof window === 'undefined') {
     return true;
   }
-  return getAdminAccessState().canManageContent;
+  return canManageContent();
 }
 
 function buildReadOnlyState(message = 'Solo lectura activa'): SyncState {
@@ -166,8 +166,6 @@ export async function saveActiveVotingState(voters: Voter[], gamesMap: Record<st
   // Array dinámico de juegos derivado del mapa (preserva el orden)
   const games = Object.values(gamesMap);
 
-  writeLocal(LS_KEY_ACTIVE_VOTING, { voters, gamesMap, games });
-
   if (isFirebaseReady()) {
     try {
       const db = getFirestoreInstance()!;
@@ -177,6 +175,7 @@ export async function saveActiveVotingState(voters: Voter[], gamesMap: Record<st
         { voters, gamesMap, games, lastUpdated: Timestamp.now() },
         { merge: true }
       );
+      writeLocal(LS_KEY_ACTIVE_VOTING, { voters, gamesMap, games });
       console.log('[DataStore] Votación actual sincronizada con Firestore.');
       return { status: 'synced', message: 'Votación actual sincronizada' };
     } catch (err) {
@@ -185,10 +184,13 @@ export async function saveActiveVotingState(voters: Voter[], gamesMap: Record<st
         return { status: 'error', message: 'Permiso denegado por el servidor: requiere rol de administrador' };
       }
       console.warn('[DataStore] Error sincronizando votación actual:', err);
+      writeLocal(LS_KEY_ACTIVE_VOTING, { voters, gamesMap, games });
       return { status: 'local', message: 'Votación actual guardada localmente' };
     }
   }
 
+  // Modo de desarrollo local / sin backend configurado: persistencia confinada a localStorage
+  writeLocal(LS_KEY_ACTIVE_VOTING, { voters, gamesMap, games });
   return { status: 'local', message: 'Votación actual guardada localmente' };
 }
 

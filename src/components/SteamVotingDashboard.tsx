@@ -36,7 +36,6 @@ import {
   getAdminAccessState,
   loginAdminWithPassword,
   logoutAdmin,
-  requestAdminUnlock,
   type AuthResult,
 } from '../services/accessControl';
 import { subscribeToAuthState } from '../services/firebaseConfig';
@@ -277,20 +276,6 @@ export const SteamVotingDashboard: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const state = getAdminAccessState();
-    if (state.isLocalEnvironment || state.requestedAdmin) {
-      const timer = setTimeout(() => {
-        const unlocked = requestAdminUnlock();
-        setAdminAccess(getAdminAccessState());
-        if (!unlocked) {
-          setIsEditMode(false);
-        }
-      }, 0);
-      return () => clearTimeout(timer);
-    }
-  }, []);
-
-  useEffect(() => {
     if (!canManageContent && isEditMode) {
       Promise.resolve().then(() => {
         setIsEditMode(false);
@@ -464,8 +449,8 @@ export const SteamVotingDashboard: React.FC = () => {
   // ─── Desbloqueo de admin vía modal BottomSheet ───
   const requestAdminUnlockViaModal = useCallback((forceOpen = false): Promise<boolean> => {
     const state = getAdminAccessState();
-    // Si ya está autenticado y no se fuerza abrir el modal, no necesita volver a identificarse
-    if (state.isAuthenticated && !forceOpen) {
+    // Si ya posee privilegios de administrador y no se fuerza abrir el modal, no necesita volver a identificarse
+    if (state.isAdmin && !forceOpen) {
       return Promise.resolve(true);
     }
 
@@ -475,6 +460,15 @@ export const SteamVotingDashboard: React.FC = () => {
       setShowPinModal(true);
     });
   }, []);
+
+  // Si la URL contiene el parámetro ?admin=true y el usuario no tiene privilegios de admin,
+  // solicitar automáticamente el desbloqueo mediante el modal
+  useEffect(() => {
+    const state = getAdminAccessState();
+    if (state.requestedAdmin && !state.isAdmin) {
+      void requestAdminUnlockViaModal(true);
+    }
+  }, [requestAdminUnlockViaModal]);
 
   // Handler cuando el usuario envía la contraseña en el modal
   const handlePinSubmit = useCallback(
@@ -515,11 +509,11 @@ export const SteamVotingDashboard: React.FC = () => {
         event.stopPropagation();
 
         const state = getAdminAccessState();
-        if (state.isAuthenticated) {
-          // Si ya está autenticado, alternar modo edición
+        if (state.isAdmin) {
+          // Si ya es administrador, alternar modo edición
           setIsEditMode((prev) => !prev);
         } else {
-          // Si no está autenticado, abrir inmediatamente el modal
+          // Si no es administrador, abrir inmediatamente el modal de identificación
           void requestAdminUnlockViaModal(true);
         }
       }
@@ -830,16 +824,22 @@ export const SteamVotingDashboard: React.FC = () => {
             alignItems: 'center',
             gap: 8,
             background: 'rgba(23, 26, 33, 0.94)',
-            border: '1px solid rgba(168, 85, 247, 0.5)',
-            boxShadow: '0 0 15px rgba(168, 85, 247, 0.25)',
+            border: adminAccess.isAdmin
+              ? '1px solid rgba(168, 85, 247, 0.5)'
+              : '1px solid rgba(156, 163, 175, 0.3)',
+            boxShadow: adminAccess.isAdmin
+              ? '0 0 15px rgba(168, 85, 247, 0.25)'
+              : 'none',
             borderRadius: 20,
             padding: '6px 12px',
             fontSize: '12px',
-            color: '#c084fc',
+            color: adminAccess.isAdmin ? '#c084fc' : '#9ca3af',
             backdropFilter: 'blur(8px)',
           }}
         >
-          <span>🛡️ {adminAccess.adminEmail || 'Admin'}</span>
+          <span>
+            {adminAccess.isAdmin ? '🛡️ Admin' : '👤 Usuario'}: {adminAccess.adminEmail || 'Sesión activa'}
+          </span>
           <button
             type="button"
             onClick={handleLogoutAdmin}
@@ -853,7 +853,7 @@ export const SteamVotingDashboard: React.FC = () => {
               padding: '2px 6px',
               borderRadius: 4,
             }}
-            title="Cerrar sesión de Administrador (Volver a solo lectura)"
+            title="Cerrar sesión (Volver a solo lectura)"
           >
             Cerrar sesión
           </button>

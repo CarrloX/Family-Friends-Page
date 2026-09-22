@@ -68,6 +68,16 @@ interface PinModalError {
   type: AuthErrorCode | 'validation';
 }
 
+/**
+ * Mapea el `errorCode` de `AuthResult` al tipo interno de error del modal.
+ * Función pura extraída para eliminar el ternario anidado (SonarLint S3358).
+ */
+function resolveErrorType(errorCode: AuthErrorCode | undefined): PinModalError['type'] {
+  if (errorCode === 'unauthorized') return 'unauthorized';
+  if (errorCode === 'unknown-error') return 'unknown-error';
+  return 'invalid-credentials';
+}
+
 export const AdminPinModal = ({
   onCancel,
   onAuthenticate,
@@ -142,8 +152,59 @@ export const AdminPinModal = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []); // montado una sola vez; estado leído desde refs
 
+  /**
+   * Gestiona la respuesta de rate-limit del proveedor de autenticación.
+   * Extrae la rama más profunda de handleSubmit para reducir complejidad cognitiva (SonarLint S3776).
+   */
+  const handleRateLimited = (retryAfterSeconds: number | undefined, errorMessage: string | undefined) => {
+    if (retryAfterSeconds && retryAfterSeconds > 0) {
+      setLockoutRemaining(retryAfterSeconds);
+      setError({
+        message: `Demasiados intentos fallidos. Por seguridad, espera ${retryAfterSeconds}s antes de reintentar.`,
+        type: 'rate-limited',
+      });
+    } else {
+      setError({
+        message:
+          errorMessage ??
+          'Demasiados intentos fallidos. Por seguridad, el acceso ha sido bloqueado temporalmente. Espera un momento antes de volver a intentarlo.',
+        type: 'rate-limited',
+      });
+    }
+    triggerShake();
+    setPassword('');
+  };
+
+  /**
+   * Gestiona cualquier fallo de autenticación que no sea rate-limit.
+   * Extrae la lógica de error de handleSubmit para reducir complejidad cognitiva (SonarLint S3776).
+   */
+  const handleAuthFailure = (errorCode: AuthErrorCode | undefined, errorMessage: string | undefined) => {
+    if (errorCode === 'network-error') {
+      // Ante fallo de red no se borra la contraseña para no obligar a reescribirla
+      setError({
+        message: 'Error de conexión con el servidor. Verifica tu red e intenta nuevamente.',
+        type: 'network-error',
+      });
+      triggerShake();
+      inputRef.current?.focus();
+      return;
+    }
+
+    // Credenciales erróneas, falta de autorización (rol admin) o error no clasificado
+    setError({
+      message: errorMessage ?? 'Credenciales incorrectas. Intenta nuevamente.',
+      type: resolveErrorType(errorCode),
+    });
+    triggerShake();
+    setPassword('');
+    inputRef.current?.focus();
+  };
+
   const handleSubmit = async (e: React.SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (isSubmittingRef.current) return;
+
     if (lockoutRemaining > 0) {
       setError({
         message: `Acceso bloqueado por seguridad. Espera ${lockoutRemaining}s antes de reintentar.`,
@@ -156,10 +217,7 @@ export const AdminPinModal = ({
     // Se valida que no esté vacío o solo de espacios, pero se envía password intacto
     // a onAuthenticate para respetar posibles espacios intencionales en la contraseña.
     if (!password.trim()) {
-      setError({
-        message: 'Ingresa la contraseña de administrador.',
-        type: 'validation',
-      });
+      setError({ message: 'Ingresa la contraseña de administrador.', type: 'validation' });
       triggerShake();
       return;
     }
@@ -173,37 +231,13 @@ export const AdminPinModal = ({
 
       if (!res.success) {
         if (res.errorCode === 'rate-limited') {
-          // El servicio activó protección contra fuerza bruta / rate limit
-          const waitTime = res.retryAfterSeconds ?? 60;
-          setLockoutRemaining(waitTime);
-          setError({
-            message: `Demasiados intentos fallidos. Por seguridad, el acceso ha sido bloqueado por ${waitTime}s.`,
-            type: 'rate-limited',
-          });
-          triggerShake();
-          setPassword('');
-        } else if (res.errorCode === 'network-error') {
-          // Ante fallo de red no se borra la contraseña para no obligar a reescribirla
-          setError({
-            message: 'Error de conexión con el servidor. Verifica tu red e intenta nuevamente.',
-            type: 'network-error',
-          });
-          triggerShake();
-          inputRef.current?.focus();
+          handleRateLimited(res.retryAfterSeconds, res.error);
         } else {
-          // Credenciales erróneas o error no clasificado
-          const isUnknown = res.errorCode === 'unknown-error';
-          setError({
-            message: res.error || 'Credenciales incorrectas. Intenta nuevamente.',
-            type: isUnknown ? 'unknown-error' : 'invalid-credentials',
-          });
-          triggerShake();
-          setPassword('');
-          inputRef.current?.focus();
+          handleAuthFailure(res.errorCode, res.error);
         }
       }
     } catch {
-      // Punto 16: fallo de conexión inesperado -> mantener contraseña y reenfocar el input
+      // Fallo de conexión inesperado: mantener contraseña y reenfocar el input
       setError({
         message: 'Error al conectar con el servidor de autenticación.',
         type: 'network-error',

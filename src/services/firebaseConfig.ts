@@ -5,6 +5,7 @@ import {
   signInWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
+  getIdTokenResult,
   type Auth,
   type User,
 } from 'firebase/auth';
@@ -163,32 +164,132 @@ export function isUserAuthenticated(): boolean {
 }
 
 /**
- * Obtiene el email del usuario administrador autenticado actualmente.
+ * Obtiene el email configurado para el administrador en las variables de entorno.
+ * Falla explícitamente si `VITE_ADMIN_EMAIL` no ha sido definido para prevenir configuraciones ocultas.
+ */
+export function getConfiguredAdminEmail(): string {
+  const envEmail = (
+    import.meta.env.VITE_ADMIN_EMAIL ||
+    import.meta.env.ADMIN_EMAIL ||
+    ''
+  ) as string;
+
+  const email = envEmail.trim();
+  if (!email) {
+    throw new Error('VITE_ADMIN_EMAIL no está configurado en las variables de entorno.');
+  }
+
+  return email;
+}
+
+/**
+ * Obtiene el email del usuario autenticado actualmente.
  */
 export function getCurrentAdminEmail(): string | null {
   const user = getCurrentUser();
   return user ? user.email : null;
 }
 
+// ─── Estado en memoria de autorización (Custom Claims) ───────────────
+let cachedIsAdmin = false;
+let cachedClaims: Record<string, unknown> = {};
+
 /**
- * Permite suscribirse a cambios de estado de autenticación de Firebase.
+ * Evalúa si un usuario posee privilegios de administrador basándose en:
+ * 1. Prioridad: Custom Claim `request.auth.token.admin == true` (recomendación oficial de Firebase).
+ * 2. Criterio de respaldo/transición: Correo de administrador configurado (alineado con firestore.rules).
+ */
+export function evaluateUserIsAdmin(user: User | null, claims?: Record<string, unknown>): boolean {
+  if (!user || user.isAnonymous) return false;
+
+  const currentClaims = claims ?? cachedClaims;
+  if (currentClaims.admin === true) {
+    return true;
+  }
+
+  try {
+    const configuredEmail = getConfiguredAdminEmail();
+    if (user.email?.toLowerCase() === configuredEmail.toLowerCase()) {
+      return true;
+    }
+  } catch {
+    // Si VITE_ADMIN_EMAIL no está configurado, la autorización depende exclusivamente del Custom Claim
+  }
+
+  return false;
+}
+
+/**
+ * Verifica de forma síncrona si el usuario actual posee autorización de administrador
+ * según los claims validados en memoria.
+ */
+export function isCurrentUserAdmin(): boolean {
+  return cachedIsAdmin;
+}
+
+/**
+ * Retorna los claims actuales del usuario autenticado almacenados en memoria.
+ */
+export function getCurrentUserClaims(): Record<string, unknown> {
+  return { ...cachedClaims };
+}
+
+/**
+ * Refresca de forma asíncrona los claims del token del usuario actual mediante Firebase Auth.
+ * Permite forzar la revalidación contra Google Identity Toolkit (BaaS) con `forceRefresh = true`.
+ */
+export async function refreshCurrentUserClaims(forceRefresh = false): Promise<boolean> {
+  const user = getCurrentUser();
+  if (!user || user.isAnonymous) {
+    cachedIsAdmin = false;
+    cachedClaims = {};
+    return false;
+  }
+
+  try {
+    const tokenResult = await getIdTokenResult(user, forceRefresh);
+    cachedClaims = (tokenResult.claims ?? {}) as Record<string, unknown>;
+    cachedIsAdmin = evaluateUserIsAdmin(user, cachedClaims);
+  } catch (err) {
+    if (import.meta.env.DEV) {
+      console.warn('[Firebase] Error al obtener claims del token:', err);
+    }
+    cachedIsAdmin = evaluateUserIsAdmin(user, cachedClaims);
+  }
+
+  return cachedIsAdmin;
+}
+
+/**
+ * Permite suscribirse a cambios de estado de autenticación y autorización de Firebase.
+ * Resuelve y almacena los claims del token ANTES de invocar el callback, evitando condiciones
+ * de carrera o flashes de estado desautorizado en la UI.
  * Retorna una función para cancelar la suscripción.
  */
-export function subscribeToAuthState(callback: (user: User | null) => void): () => void {
+export function subscribeToAuthState(
+  callback: (user: User | null, isAdmin: boolean) => void
+): () => void {
   const authInstance = getAuthInstance();
   if (!authInstance) {
-    callback(null);
+    callback(null, false);
     return () => {};
   }
-  return onAuthStateChanged(authInstance, (user) => {
-    callback(user && !user.isAnonymous ? user : null);
+  return onAuthStateChanged(authInstance, async (user) => {
+    if (user && !user.isAnonymous) {
+      await refreshCurrentUserClaims(false);
+      callback(user, cachedIsAdmin);
+    } else {
+      cachedIsAdmin = false;
+      cachedClaims = {};
+      callback(null, false);
+    }
   });
 }
 
 /**
  * Inicia sesión de administrador mediante el SDK cliente de Firebase Auth.
- * La autenticación se resuelve directamente contra la API de Google Identity Toolkit (BaaS),
- * sin servidores propios intermedios de aplicación.
+ * La autenticación se resuelve directamente contra la API de Google Identity Toolkit (BaaS).
+ * Tras autenticar, fuerza la lectura inmediata de los Custom Claims emitidos en el token.
  */
 export async function signInAdmin(email: string, password: string): Promise<User> {
   const authInstance = getAuthInstance();
@@ -197,14 +298,18 @@ export async function signInAdmin(email: string, password: string): Promise<User
   }
 
   const credential = await signInWithEmailAndPassword(authInstance, email.trim(), password);
+  // Refrescar claims inmediatamente tras iniciar sesión para reflejar rol de forma instantánea
+  await refreshCurrentUserClaims(true);
   return credential.user;
 }
 
 /**
- * Cierra la sesión activa de Firebase Auth.
+ * Cierra la sesión activa de Firebase Auth y limpia la caché de autorización en memoria.
  */
 export async function signOutAdmin(): Promise<void> {
   const authInstance = getAuthInstance();
+  cachedIsAdmin = false;
+  cachedClaims = {};
   if (authInstance) {
     await signOut(authInstance);
   }

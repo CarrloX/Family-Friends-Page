@@ -1,6 +1,8 @@
 import {
   isUserAuthenticated,
+  isCurrentUserAdmin,
   getCurrentAdminEmail,
+  getConfiguredAdminEmail,
   signInAdmin,
   signOutAdmin,
   isFirebaseReady,
@@ -27,19 +29,30 @@ export function isLocalEnvironment(hostname = getHostname()): boolean {
 }
 
 /**
- * Obtiene el correo por defecto de administrador configurado, o un valor seguro sugerido.
+ * Modo de desarrollo local activo (entorno local sin backend Firebase configurado).
+ * En este modo, todas las mutaciones quedan confinadas exclusivamente a localStorage.
  */
-export function getDefaultAdminEmail(): string {
-  const envEmail = (import.meta.env.VITE_ADMIN_EMAIL as string | undefined)?.trim();
-  return envEmail || 'admin@familyandfriendssteam.firebaseapp.com';
+export function isLocalDevelopmentMode(
+  hostname = getHostname(),
+  firebaseReady = isFirebaseReady()
+): boolean {
+  return isLocalEnvironment(hostname) && !firebaseReady;
 }
 
 /**
- * Códigos de error de autenticación normalizados a nivel de dominio.
+ * Obtiene el correo por defecto de administrador configurado, o un valor seguro sugerido.
+ */
+export function getDefaultAdminEmail(): string {
+  return getConfiguredAdminEmail();
+}
+
+/**
+ * Códigos de error de autenticación y autorización normalizados a nivel de dominio.
  * Desacoplan la capa de presentación (UI) de cualquier proveedor de autenticación subyacente (Firebase, Supabase, Auth0, backend propio, etc.).
  */
 export type AuthErrorCode =
   | 'invalid-credentials'
+  | 'unauthorized'
   | 'rate-limited'
   | 'network-error'
   | 'unknown-error';
@@ -52,11 +65,31 @@ export interface AuthResult {
 }
 
 export interface AdminAccessState {
+  /** Permiso efectivo para mutar y gestionar contenido en la interfaz */
   canManageContent: boolean;
-  isLocalEnvironment: boolean;
-  isReadOnly: boolean;
+  /** Autorización: ¿Posee el usuario el rol/claim de administrador verificado? */
+  isAdmin: boolean;
+  /** Autenticación: ¿Existe una sesión válida de Firebase Auth? (No anónimo) */
   isAuthenticated: boolean;
+  /** Correo electrónico de la sesión activa de Firebase Auth */
   adminEmail: string | null;
+  /** Modo de solo lectura activo cuando el usuario carece de privilegios de gestión */
+  isReadOnly: boolean;
+  /** Indica si se ejecuta en un entorno de desarrollo local (localhost, 127.0.0.1) */
+  isLocalEnvironment: boolean;
+  /**
+   * Modo de desarrollo local activo (localhost sin backend Firebase).
+   * La persistencia en este modo queda confinada exclusivamente a localStorage del cliente.
+   */
+  isLocalDevelopmentMode: boolean;
+  /**
+   * Intención del usuario (UI / Navegación):
+   * Indica si el usuario solicitó acceder o identificarse como admin vía parámetro de URL (`?admin=true` o `?admin=1`).
+   *
+   * NOTA ARQUITECTÓNICA:
+   * Este valor representa exclusivamente una SEÑAL DE INTENCIÓN para que la UI despliegue
+   * el diálogo de autenticación. NUNCA confiere autorización por sí mismo.
+   */
   requestedAdmin: boolean;
 }
 
@@ -64,10 +97,10 @@ export interface AdminAccessState {
  * Obtiene el estado actual de acceso administrativo para la interfaz de usuario (UI).
  *
  * NOTA DE SEGURIDAD:
- * Los valores aquí expuestos (`canManageContent`, `isReadOnly`) controlan únicamente la
+ * Los valores aquí expuestos (`canManageContent`, `isReadOnly`, `isAdmin`) controlan la
  * experiencia de usuario en el frontend (renderizado condicional de botones y edición).
  * La autorización real e inquebrantable reside en las reglas del servidor (`firestore.rules`),
- * que exigen un token de Firebase Auth válido con privilegios de administrador para cualquier mutación.
+ * que exigen un token de Firebase Auth válido con privilegios de administrador (`request.auth.token.admin == true`) para cualquier mutación.
  */
 export function getAdminAccessState(options?: {
   hostname?: string;
@@ -77,21 +110,26 @@ export function getAdminAccessState(options?: {
   const search = options?.search ?? getSearch();
   const localEnvironment = isLocalEnvironment(hostname);
   const authenticated = isUserAuthenticated();
+  const admin = isCurrentUserAdmin();
   const adminEmail = getCurrentAdminEmail();
   const firebaseReady = isFirebaseReady();
+  const localDevelopmentMode = isLocalDevelopmentMode(hostname, firebaseReady);
 
   const params = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
   const requestedAdmin = params.get('admin') === 'true' || params.get('admin') === '1';
 
-  // Si Firebase no está configurado (modo offline/desarrollo sin backend), se permite edición local.
-  // En producción o con Firebase activo, SOLAMENTE un usuario autenticado puede escribir.
-  const canManage = authenticated || (localEnvironment && !firebaseReady);
+  // Separación explícita de modos de autorización:
+  // 1. En producción o con Firebase activo: SOLAMENTE un usuario con rol de administrador verificado puede gestionar contenido.
+  // 2. Modo local sin backend (localDevelopmentMode): se permite gestión confinada a localStorage para desarrollo offline.
+  const canManage = admin || localDevelopmentMode;
 
   return {
     canManageContent: canManage,
     isLocalEnvironment: localEnvironment,
+    isLocalDevelopmentMode: localDevelopmentMode,
     isReadOnly: !canManage,
     isAuthenticated: authenticated,
+    isAdmin: admin,
     adminEmail,
     requestedAdmin,
   };
@@ -129,10 +167,11 @@ function mapAuthError(err: unknown): MappedAuthError {
         code: 'invalid-credentials',
       };
     case 'auth/too-many-requests':
+      // Firebase no comunica la duración exacta del bloqueo por rate limit / anti-abuso.
+      // No asumimos una duración fija en el cliente.
       return {
-        message: 'Demasiados intentos fallidos. Por seguridad, el acceso ha sido bloqueado temporalmente.',
+        message: 'Demasiados intentos fallidos. Por seguridad, el acceso ha sido bloqueado temporalmente. Espera un momento antes de volver a intentarlo.',
         code: 'rate-limited',
-        retryAfterSeconds: 60,
       };
     case 'auth/network-request-failed':
       return {
@@ -151,57 +190,64 @@ function mapAuthError(err: unknown): MappedAuthError {
 }
 
 /**
- * Inicia sesión de administrador mediante Firebase Authentication usando la contraseña ingresada.
- * Resuelve el correo de administrador internamente desde las variables de entorno.
- * La solicitud se despacha directamente a Google Identity Toolkit mediante el SDK de cliente.
+ * Inicia sesión del administrador usando la contraseña ingresada.
+ * Punto de entrada público único: el correo se resuelve internamente desde las variables de entorno.
  */
 export async function loginAdminWithPassword(
   password: string
 ): Promise<AuthResult> {
-  return loginAdminWithCredentials(getDefaultAdminEmail(), password);
+  return authenticateAdminAccount(password);
 }
 
 /**
- * Cerrojo a nivel de servicio (In-Flight Mutex).
- * Evita condiciones de carrera y peticiones concurrentes en el runtime de JavaScript
- * si múltiples eventos asíncronos se disparan antes de que el estado de React actualice la UI.
+ * Implementación interna de autenticación y verificación de autorización.
+ * Resuelve el correo administrativo desde las variables de entorno; el llamador
+ * nunca manipula la identidad de la cuenta. No se exporta para evitar que código
+ * externo pueda sustituir el correo y ampliar la superficie de ataque.
  */
-let activeAuthPromise: Promise<AuthResult> | null = null;
+async function authenticateAdminAccount(password: string): Promise<AuthResult> {
+  try {
+    const email = getDefaultAdminEmail();
+    await signInAdmin(email, password);
 
-/**
- * Inicia sesión de administrador mediante el SDK cliente de Firebase Auth (BaaS).
- * Las credenciales viajan directamente a la API de Google, que emite un ID Token criptográfico.
- * Implementa deduplicación de peticiones en vuelo (in-flight singleton).
- */
-export async function loginAdminWithCredentials(
-  email: string,
-  password: string
-): Promise<AuthResult> {
-  // Si ya hay una verificación en curso en este runtime, reutilizar la misma promesa
-  if (activeAuthPromise) {
-    return activeAuthPromise;
-  }
-
-  activeAuthPromise = (async () => {
-    try {
-      const targetEmail = email.trim() || getDefaultAdminEmail();
-      await signInAdmin(targetEmail, password);
-      return { success: true };
-    } catch (err) {
-      console.warn('[AccessControl] Error al autenticar administrador:', err);
-      const mapped = mapAuthError(err);
+    // Verificación estricta de autorización:
+    // La autenticación exitosa no equivale a tener privilegios de administrador.
+    // Se comprueba la señal confiable de autorización (custom claim admin == true o email oficial).
+    if (!isCurrentUserAdmin()) {
+      if (import.meta.env.DEV) {
+        console.warn(
+          '[AccessControl] Acceso denegado: la cuenta autenticada carece de privilegios de administrador:',
+          email
+        );
+      }
+      await signOutAdmin();
       return {
         success: false,
-        error: mapped.message,
-        errorCode: mapped.code,
-        retryAfterSeconds: mapped.retryAfterSeconds,
+        error: 'No fue posible autorizar el acceso.',
+        errorCode: 'unauthorized',
       };
-    } finally {
-      activeAuthPromise = null;
     }
-  })();
 
-  return activeAuthPromise;
+    return { success: true };
+  } catch (err) {
+    if (import.meta.env.DEV) {
+      console.warn('[AccessControl] Error al autenticar administrador:', err);
+    }
+    if (err instanceof Error && err.message.includes('VITE_ADMIN_EMAIL')) {
+      return {
+        success: false,
+        error: err.message,
+        errorCode: 'unknown-error',
+      };
+    }
+    const mapped = mapAuthError(err);
+    return {
+      success: false,
+      error: mapped.message,
+      errorCode: mapped.code,
+      retryAfterSeconds: mapped.retryAfterSeconds,
+    };
+  }
 }
 
 /**
@@ -212,15 +258,13 @@ export async function logoutAdmin(): Promise<void> {
 }
 
 /**
- * Desbloquea la sesión de administrador validando credenciales mediante Firebase Auth.
- * Admite pasar correo opcional; si no se provee, utiliza el correo de administrador configurado.
+ * Desbloquea la sesión de administrador validando la contraseña ingresada por el usuario.
+ * El correo administrativo se resuelve internamente; el llamador nunca lo manipula.
+ *
+ * Flujo: contraseña → loginAdminWithPassword → correo interno → Firebase Auth
  */
-export async function unlockWithPin(
-  enteredPin: string,
-  email?: string
-): Promise<AuthResult> {
-  const targetEmail = email?.trim() || getDefaultAdminEmail();
-  return loginAdminWithCredentials(targetEmail, enteredPin);
+export async function unlockWithPin(enteredPin: string): Promise<AuthResult> {
+  return loginAdminWithPassword(enteredPin);
 }
 
 /**
@@ -230,10 +274,22 @@ export async function clearAdminSession(): Promise<void> {
   await logoutAdmin();
 }
 
-export function requestAdminUnlock(options?: {
+/**
+ * Determina si el entorno o usuario actual cuenta con permisos para gestionar y modificar contenido
+ * (es decir, usuario con rol de administrador verificado o entorno local sin backend).
+ * Proporciona una consulta booleana directa sin necesidad de desestructurar `getAdminAccessState()`.
+ */
+export function canManageContent(options?: {
   hostname?: string;
   search?: string;
 }): boolean {
-  const state = getAdminAccessState(options);
-  return state.canManageContent;
+  return getAdminAccessState(options).canManageContent;
 }
+
+/**
+ * @deprecated Utiliza `canManageContent()` para reflejar con precisión que se trata de una comprobación booleana de permisos.
+ */
+export const requestAdminUnlock = canManageContent;
+
+export { isCurrentUserAdmin };
+export { refreshCurrentUserClaims, getCurrentUserClaims } from './firebaseConfig';
