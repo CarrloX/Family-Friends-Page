@@ -1,7 +1,7 @@
 import {
   isUserAuthenticated,
   isCurrentUserAdmin,
-  getCurrentAdminEmail,
+  getCurrentUserEmail,
   getConfiguredAdminEmail,
   signInAdmin,
   signOutAdmin,
@@ -111,7 +111,7 @@ export function getAdminAccessState(options?: {
   const localEnvironment = isLocalEnvironment(hostname);
   const authenticated = isUserAuthenticated();
   const admin = isCurrentUserAdmin();
-  const adminEmail = getCurrentAdminEmail();
+  const adminEmail = getCurrentUserEmail();
   const firebaseReady = isFirebaseReady();
   const localDevelopmentMode = isLocalDevelopmentMode(hostname, firebaseReady);
 
@@ -151,6 +151,14 @@ function mapAuthError(err: unknown): MappedAuthError {
     return {
       message: 'Credenciales incorrectas o error al autenticar.',
       code: 'invalid-credentials',
+    };
+  }
+
+  // Error de autorización atómica (credenciales válidas pero cuenta sin privilegios de admin)
+  if (err instanceof Error && err.message === 'AUTHORIZATION_FAILED') {
+    return {
+      message: 'No fue posible autorizar el acceso.',
+      code: 'unauthorized',
     };
   }
 
@@ -210,9 +218,9 @@ async function authenticateAdminAccount(password: string): Promise<AuthResult> {
     const email = getDefaultAdminEmail();
     await signInAdmin(email, password);
 
-    // Verificación estricta de autorización:
-    // La autenticación exitosa no equivale a tener privilegios de administrador.
-    // Se comprueba la señal confiable de autorización (custom claim admin == true o email oficial).
+    // Verificación de defensa en profundidad:
+    // signInAdmin() garantiza la autorización atómica (autenticación + claims),
+    // pero verificamos el estado sincronizado en memoria como salvaguarda adicional.
     if (!isCurrentUserAdmin()) {
       if (import.meta.env.DEV) {
         console.warn(
@@ -238,6 +246,13 @@ async function authenticateAdminAccount(password: string): Promise<AuthResult> {
         success: false,
         error: err.message,
         errorCode: 'unknown-error',
+      };
+    }
+    if (err instanceof Error && err.message === 'AUTHORIZATION_FAILED') {
+      return {
+        success: false,
+        error: 'No fue posible autorizar el acceso.',
+        errorCode: 'unauthorized',
       };
     }
     const mapped = mapAuthError(err);

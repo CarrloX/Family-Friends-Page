@@ -3,15 +3,12 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Función de autorización en el servidor.
-    // La seguridad NO depende del cliente (React/modal), sino de esta verificación en cada petición.
-    // Requiere una sesión válida de Firebase Auth con el rol de admin (custom claims)
-    // o el correo de administrador autorizado.
+    // Función de autorización estricta en el servidor.
+    // La seguridad y el control de acceso residen en las reglas del servidor (BaaS),
+    // no en la interfaz del cliente. Se exige de forma obligatoria que el token
+    // de autenticación contenga el Custom Claim verificado: admin == true.
     function isAdmin() {
-      return request.auth != null && (
-        request.auth.token.admin == true ||
-        request.auth.token.email == "admin@familyandfriendssteam.firebaseapp.com"
-      );
+      return request.auth != null && request.auth.token.admin == true;
     }
 
     // Configuración del grupo y miembros
