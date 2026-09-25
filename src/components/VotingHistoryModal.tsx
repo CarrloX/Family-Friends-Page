@@ -12,7 +12,7 @@ const ITEMS_PER_PAGE = 5;
 interface VotingHistoryModalProps {
   history: VotingHistoryRecord[];
   onClearHistory: () => void;
-  onDeleteRecord: (recordId: string) => void;
+  onDeleteRecord: (recordId: string) => Promise<void>;
   onClose: () => void;
   canManageContent?: boolean;
 }
@@ -387,8 +387,8 @@ export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = React.memo(
             <DeleteHistoryRecordConfirmModal
               record={recordToDelete}
               onCancel={() => setRecordToDelete(null)}
-              onConfirm={() => {
-                onDeleteRecord(recordToDelete.id);
+              onConfirm={async () => {
+                await onDeleteRecord(recordToDelete.id);
                 setRecordToDelete(null);
               }}
             />

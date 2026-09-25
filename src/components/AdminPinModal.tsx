@@ -6,61 +6,12 @@ import type { AuthResult, AuthErrorCode } from '../services/accessControl';
 
 export type { AuthResult, AuthErrorCode };
 
+import { useModalFocusTrap } from '../hooks/useModalFocusTrap';
+
 interface AdminPinModalProps {
   onCancel: () => void;
   /** Función que intenta autenticar la contraseña ingresada en el servidor */
   onAuthenticate: (password: string) => Promise<AuthResult>;
-}
-
-/**
- * Modal de autenticación de administrador (BottomSheet animado).
- * La autenticación se delega mediante `onAuthenticate`.
- * La autorización efectiva debe validarse del lado servidor/reglas.
- */
-const FOCUSABLE_SELECTOR =
-  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
-/**
- * Determina si un elemento es visible en pantalla y accesible para el foco.
- *
- * Utiliza `getClientRects().length > 0` en lugar de `offsetParent !== null` para evitar
- * falsos negativos en elementos con `position: fixed`, SVG o contextos de CSS modernos.
- * Excluye además elementos que contengan o hereden el atributo `aria-hidden="true"`.
- */
-function isFocusableVisible(el: HTMLElement): boolean {
-  if (el.getAttribute('aria-hidden') === 'true' || el.closest('[aria-hidden="true"]')) {
-    return false;
-  }
-  return el.getClientRects().length > 0;
-}
-
-/**
- * Controla el ciclo de tabulación para mantener el foco dentro del diálogo modal (Focus Trap).
- */
-function trapFocus(e: KeyboardEvent, modal: HTMLElement) {
-  const focusableElements = Array.from(
-    modal.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)
-  ).filter(isFocusableVisible);
-
-  if (focusableElements.length === 0) {
-    e.preventDefault();
-    return;
-  }
-
-  const firstElement = focusableElements[0];
-  const lastElement = focusableElements.at(-1);
-
-  if (e.shiftKey) {
-    // Shift + Tab: si estamos en el primer elemento o fuera del modal, ir al último
-    if (document.activeElement === firstElement || !modal.contains(document.activeElement)) {
-      e.preventDefault();
-      lastElement?.focus();
-    }
-  } else if (document.activeElement === lastElement || !modal.contains(document.activeElement)) {
-    // Tab: si estamos en el último elemento o fuera del modal, ir al primero
-    e.preventDefault();
-    firstElement?.focus();
-  }
 }
 
 interface PinModalError {
@@ -87,10 +38,13 @@ export const AdminPinModal = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [lockoutRemaining, setLockoutRemaining] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
-  const modalRef = useRef<HTMLDivElement>(null);
-  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
-  // Refs estables para listeners globales de eventos (evitan recrear listeners en cada render)
-  // isSubmittingRef se sincroniza de forma síncrona e inmediata en handleSubmit/finally
+  const modalRef = useModalFocusTrap<HTMLDivElement>({
+    initialFocusRef: inputRef,
+    onEscape: onCancel,
+    disabled: isSubmitting,
+    initialFocusDelay: 150,
+  });
+  // Ref síncrono para prevenir clics o envíos simultáneos en el backdrop y submit
   const isSubmittingRef = useRef(false);
   const onCancelRef = useRef(onCancel);
   const inputControls = useAnimationControls();
@@ -121,36 +75,6 @@ export const AdminPinModal = ({
       transition: { duration: 0.4, ease: 'easeInOut' },
     });
   };
-
-  // Capturar el elemento activo previo al abrir y restaurar el foco al cerrar/desmontar
-  useEffect(() => {
-    previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
-    const timer = setTimeout(() => inputRef.current?.focus(), 150);
-
-    return () => {
-      clearTimeout(timer);
-      previouslyFocusedRef.current?.focus();
-    };
-  }, []);
-
-  // Manejo de teclado: Escape para cerrar y Focus Trap con Tab / Shift+Tab.
-  // Array de deps vacío: el listener se monta una sola vez; los estados se leen
-  // desde los refs estables para evitar desmontajes/remontajes en cada submit.
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !isSubmittingRef.current) {
-        onCancelRef.current();
-        return;
-      }
-
-      if (e.key === 'Tab' && modalRef.current) {
-        trapFocus(e, modalRef.current);
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []); // montado una sola vez; estado leído desde refs
 
   /**
    * Gestiona la respuesta de rate-limit del proveedor de autenticación.

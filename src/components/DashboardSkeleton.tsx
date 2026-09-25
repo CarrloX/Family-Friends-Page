@@ -1,5 +1,3 @@
-import React from 'react';
-
 /**
  * DashboardSkeleton
  * Skeleton loader animado que imita la estructura del dashboard
@@ -7,16 +5,20 @@ import React from 'react';
  * mientras se realiza la lectura inicial de Firestore.
  * Usa el estilo oscuro y neón de la app con animación shimmer.
  */
-export const DashboardSkeleton: React.FC = () => {
-  // Identificadores estáticos únicos para las tarjetas skeleton para evitar usar índices de array como key
-  const skeletonCards = ['card-skeleton-1', 'card-skeleton-2', 'card-skeleton-3', 'card-skeleton-4'];
+export const DashboardSkeleton = () => {
+  // Cantidad de tarjetas skeleton; el índice como key es válido porque la lista es estática y nunca se reordena
+  const skeletonCardCount = 4;
 
   return (
-    <div className="steam-dashboard-container">
-      <div className="bg-gradient-overlay"></div>
-      <div className="bg-grid-lines"></div>
+    <div className="steam-dashboard-container" aria-busy="true">
+      <span className="sr-only">Cargando dashboard...</span>
 
-      <div className="dashboard-content">
+      {/* Todo el contenido visual es puramente decorativo: los lectores de pantalla lo ignoran */}
+      <div aria-hidden="true">
+        <div className="bg-gradient-overlay"></div>
+        <div className="bg-grid-lines"></div>
+
+        <div className="dashboard-content">
         {/* ─── Header Skeleton ─── */}
         <header className="steam-header skeleton-header">
           <div className="skeleton skeleton-badge"></div>
@@ -33,8 +35,8 @@ export const DashboardSkeleton: React.FC = () => {
           </div>
 
           <div className="user-cards-grid">
-            {skeletonCards.map((cardKey) => (
-              <div key={cardKey} className="user-card skeleton-card">
+            {Array.from({ length: skeletonCardCount }, (_, index) => (
+              <div key={index} className="user-card skeleton-card">
                 {/* Card header: avatar + name + aura */}
                 <div className="card-header">
                   <div className="skeleton skeleton-avatar"></div>
@@ -84,6 +86,7 @@ export const DashboardSkeleton: React.FC = () => {
         <footer className="steam-footer">
           <div className="skeleton skeleton-footer-text"></div>
         </footer>
+        </div>
       </div>
     </div>
   );

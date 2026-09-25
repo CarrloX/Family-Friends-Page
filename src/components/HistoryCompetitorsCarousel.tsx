@@ -172,7 +172,7 @@ export const HistoryCompetitorsCarousel: React.FC<HistoryCompetitorsCarouselProp
                 key={`${recordId}-${game.id || idx}`}
                 game={game}
                 pts={pts}
-                idx={idx}
+                position={idx}
                 recordId={recordId}
               />
             );

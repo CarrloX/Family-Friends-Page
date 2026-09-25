@@ -26,7 +26,7 @@ service cloud.firestore {
     // Historial de votaciones pasadas
     match /votaciones_pasadas/{doc} {
       allow read: if true;
-      allow write, delete: if isAdmin();
+      allow write: if isAdmin();
     }
   }
 }

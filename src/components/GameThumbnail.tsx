@@ -47,7 +47,7 @@ export const GameThumbnail: React.FC<GameThumbnailProps> = React.memo(({
     <img
       key={`${recordId}-${game?.id || game?.appId || 'thumb'}-${currentFallbackIndex}`}
       src={currentSrc}
-      alt={alt || game?.title || 'Miniatura del juego'}
+      alt={alt ?? game?.title ?? 'Miniatura del juego'}
       className={className}
       loading={loading}
       style={style}

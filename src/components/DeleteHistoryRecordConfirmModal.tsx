@@ -1,19 +1,40 @@
-import React from 'react';
+import { useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import type { VotingHistoryRecord } from '../types/voting';
 import { GameThumbnail } from './GameThumbnail';
+import { useModalFocusTrap } from '../hooks/useModalFocusTrap';
 
 interface DeleteHistoryRecordConfirmModalProps {
   record: VotingHistoryRecord;
   onCancel: () => void;
-  onConfirm: () => void;
+  onConfirm: () => Promise<void>;
 }
 
-export const DeleteHistoryRecordConfirmModal: React.FC<DeleteHistoryRecordConfirmModalProps> = ({
+export const DeleteHistoryRecordConfirmModal = ({
   record,
   onCancel,
   onConfirm,
-}) => {
+}: DeleteHistoryRecordConfirmModalProps) => {
+  const [isDeleting, setIsDeleting] = useState(false);
+  const cancelButtonRef = useRef<HTMLButtonElement>(null);
+
+  const modalRef = useModalFocusTrap<HTMLDivElement>({
+    initialFocusRef: cancelButtonRef,
+    onEscape: onCancel,
+    disabled: isDeleting,
+    initialFocusDelay: 100,
+  });
+
+  const handleConfirm = async () => {
+    if (isDeleting) return;
+    setIsDeleting(true);
+    try {
+      await onConfirm();
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   return (
     <motion.div
       className="modal-backdrop bottom-sheet-backdrop"
@@ -21,9 +42,14 @@ export const DeleteHistoryRecordConfirmModal: React.FC<DeleteHistoryRecordConfir
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.25 }}
-      onClick={onCancel}
+      onClick={isDeleting ? undefined : onCancel}
     >
       <motion.div
+        ref={modalRef}
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="delete-history-title"
+        aria-describedby="delete-history-description"
         className="delete-modal-container bottom-sheet-panel"
         initial={{ y: '100%', opacity: 0, scale: 0.95 }}
         animate={{ y: 0, opacity: 1, scale: 1 }}
@@ -35,16 +61,17 @@ export const DeleteHistoryRecordConfirmModal: React.FC<DeleteHistoryRecordConfir
         <div className="bottom-sheet-handle" aria-hidden="true"></div>
         <div className="modal-header">
           <div className="modal-title-group">
-            <h2>⚠️ Eliminar Votación del Historial</h2>
-            <p>Esta acción afectará los saldos acumulados de los integrantes.</p>
+            <h2 id="delete-history-title">⚠️ Eliminar Votación del Historial</h2>
+            <p>Esta acción eliminará el registro y revertirá sus efectos sobre los integrantes.</p>
           </div>
           <motion.button
             type="button"
             className="modal-close-btn"
             onClick={onCancel}
             aria-label="Cerrar"
-            whileHover={{ scale: 1.15 }}
-            whileTap={{ scale: 0.9 }}
+            disabled={isDeleting}
+            whileHover={isDeleting ? {} : { scale: 1.15 }}
+            whileTap={isDeleting ? {} : { scale: 0.9 }}
           >
             ✕
           </motion.button>
@@ -54,47 +81,50 @@ export const DeleteHistoryRecordConfirmModal: React.FC<DeleteHistoryRecordConfir
           <div className="delete-user-preview">
             <GameThumbnail
               game={record.winningGame}
-              alt={record.winningGame?.title}
+              alt=""
               className="delete-user-avatar"
               recordId={record.id}
             />
             <div className="delete-user-info">
-              <span className="delete-user-name">🏆 {record.winningGame?.title}</span>
+              <span className="delete-user-name">🏆 {record.winningGame.title}</span>
               <span className="delete-user-id">📅 {record.date}</span>
             </div>
           </div>
 
-          <div className="delete-warning-text">
+          <div id="delete-history-description" className="delete-warning-text">
             <p>
-              ¿Estás seguro de que deseas eliminar la votación <strong>{record.winningGame?.title}</strong> del historial?
+              ¿Estás seguro de que deseas eliminar la votación <strong>{record.winningGame.title}</strong> del historial?
             </p>
             <p className="delete-warning-sub">
-              Esta votación se desvinculará del registro histórico.
+              El documento de esta votación será eliminado de la base de datos.
             </p>
             <p className="delete-warning-note">
-              📊 <strong>Nota:</strong> Se perderán los registros de cuotas pagadas y la evolución de Aura asociada a esta votación.
+              📊 <strong>Efecto colateral:</strong> El balance de cuotas y el Aura de cada integrante se revertirán al valor que tenían <em>antes</em> de esta votación, usando el snapshot almacenado en el registro.
             </p>
           </div>
         </div>
 
         <div className="modal-footer-actions delete-modal-actions">
           <motion.button
+            ref={cancelButtonRef}
             type="button"
             className="btn-modal-cancel"
             onClick={onCancel}
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.97 }}
+            disabled={isDeleting}
+            whileHover={isDeleting ? {} : { scale: 1.03 }}
+            whileTap={isDeleting ? {} : { scale: 0.97 }}
           >
             Cancelar
           </motion.button>
           <motion.button
             type="button"
             className="btn-modal-confirm-delete"
-            onClick={onConfirm}
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.97 }}
+            onClick={handleConfirm}
+            disabled={isDeleting}
+            whileHover={isDeleting ? {} : { scale: 1.03 }}
+            whileTap={isDeleting ? {} : { scale: 0.97 }}
           >
-            Confirmar Eliminación
+            {isDeleting ? 'Eliminando…' : 'Confirmar Eliminación'}
           </motion.button>
         </div>
       </motion.div>
