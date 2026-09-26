@@ -10,6 +10,7 @@ import { VotingHistoryModal } from './VotingHistoryModal';
 import { DeleteUserConfirmModal } from './DeleteUserConfirmModal';
 import { DashboardSkeleton } from './DashboardSkeleton';
 import { AdminPinModal } from './AdminPinModal';
+import { useModalFocusTrap } from '../hooks/useModalFocusTrap';
 import { calculateResults } from '../data/votingData';
 import type { Voter, Game, VotingHistoryRecord, AuraRank } from '../types/voting';
 import { getMaxVotePoints } from '../types/voting';
@@ -98,10 +99,37 @@ const resetVoterAura = (voter: Voter): Voter => ({
 });
 
 // ─── Componente auxiliar: Modal de confirmación ───────────
-const ResetAuraConfirmModal: React.FC<{
-  onConfirm: () => void;
+interface ResetAuraConfirmModalProps {
+  onConfirm: () => Promise<void> | void;
   onCancel: () => void;
-}> = ({ onConfirm, onCancel }) => {
+}
+
+const ResetAuraConfirmModal = ({
+  onConfirm,
+  onCancel,
+}: ResetAuraConfirmModalProps) => {
+  const [isResetting, setIsResetting] = useState(false);
+  const cancelButtonRef = useRef<HTMLButtonElement>(null);
+
+  const modalRef = useModalFocusTrap<HTMLDivElement>({
+    initialFocusRef: cancelButtonRef,
+    onEscape: isResetting ? undefined : onCancel,
+    disabled: isResetting,
+    initialFocusDelay: 100,
+  });
+
+  const handleConfirm = async () => {
+    if (isResetting) return;
+
+    setIsResetting(true);
+
+    try {
+      await onConfirm();
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
   return (
     <motion.div
       className="modal-backdrop bottom-sheet-backdrop"
@@ -109,47 +137,86 @@ const ResetAuraConfirmModal: React.FC<{
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.25 }}
-      onClick={onCancel}
+      onClick={() => {
+        if (!isResetting) {
+          onCancel();
+        }
+      }}
     >
       <motion.div
+        ref={modalRef}
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="reset-aura-title"
+        aria-describedby="reset-aura-description"
         className="delete-confirm-modal-container bottom-sheet-panel"
         initial={{ y: '100%', opacity: 0, scale: 0.95 }}
         animate={{ y: 0, opacity: 1, scale: 1 }}
-        exit={{ y: '100%', opacity: 0, scale: 0.95 }}
+        exit={{ y: '100%', opacity: 0, scale: 1 }}
         transition={{ type: 'spring', stiffness: 320, damping: 30 }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Handle visual superior estilo bottom sheet */}
         <div className="bottom-sheet-handle" aria-hidden="true"></div>
-        <div className="modal-header">
+        <header className="modal-header">
           <div className="modal-title-group">
-            <h2>⚠️ Restablecer Aura</h2>
+            <h2 id="reset-aura-title">
+              <span aria-hidden="true">⚠️</span> Restablecer Aura
+            </h2>
             <p>Esta acción no se puede deshacer fácilmente.</p>
           </div>
-          <button
+          <motion.button
             type="button"
             className="modal-close-btn"
-            onClick={onCancel}
+            onClick={() => {
+              if (!isResetting) {
+                onCancel();
+              }
+            }}
             aria-label="Cerrar"
-          >✕</button>
-        </div>
+            disabled={isResetting}
+            whileHover={isResetting ? {} : { scale: 1.15 }}
+            whileTap={isResetting ? {} : { scale: 0.9 }}
+          >✕</motion.button>
+        </header>
 
         <div className="delete-warning-content">
-          <div className="delete-warning-text">
+          <section id="reset-aura-description" className="delete-warning-text">
             <p>¿Estás seguro de que deseas restablecer el <strong>Aura de todos los integrantes</strong>?</p>
             <p className="delete-warning-sub">
               Todos los integrantes volverán a ser <strong>Socio Regular</strong> con <strong>0 Cuotas</strong> y multiplicador <strong>1.0x</strong>.
             </p>
             <p className="delete-warning-note">
-              📊 <strong>Nota:</strong> Esta acción no afectará el historial de votaciones ni los juegos guardados. Solo se modificarán los niveles de Aura.
+              <span aria-hidden="true">📊</span> <strong>Nota:</strong> Esta acción no afectará el historial de votaciones ni los juegos guardados. Solo se modificarán los niveles de Aura.
             </p>
-          </div>
+          </section>
         </div>
 
-        <div className="modal-footer-actions delete-modal-actions">
-          <button type="button" className="btn-modal-cancel" onClick={onCancel}>Cancelar</button>
-          <button type="button" className="btn-modal-confirm-delete" onClick={onConfirm}>Confirmar Restablecimiento</button>
-        </div>
+        <footer className="modal-footer-actions delete-modal-actions">
+          <motion.button
+            ref={cancelButtonRef}
+            type="button"
+            className="btn-modal-cancel"
+            onClick={() => {
+              if (!isResetting) {
+                onCancel();
+              }
+            }}
+            disabled={isResetting}
+            whileHover={isResetting ? {} : { scale: 1.03 }}
+            whileTap={isResetting ? {} : { scale: 0.97 }}
+          >Cancelar</motion.button>
+          <motion.button
+            type="button"
+            className="btn-modal-confirm-delete"
+            onClick={handleConfirm}
+            disabled={isResetting}
+            whileHover={isResetting ? {} : { scale: 1.03 }}
+            whileTap={isResetting ? {} : { scale: 0.97 }}
+          >
+            {isResetting ? 'Restableciendo…' : 'Confirmar Restablecimiento'}
+          </motion.button>
+        </footer>
       </motion.div>
     </motion.div>
   );
@@ -355,6 +422,7 @@ export const SteamVotingDashboard: React.FC = () => {
 
   // ─── Calcular resultados ─────────────────────────────────
   const results = useMemo(() => calculateResults(voters, gamesMap), [voters, gamesMap]);
+  const hasWinner = results.length > 0 && Boolean(results[0]?.game);
 
   // ─── Calcular total de puntos asignados para determinar estado de votación ───
   const totalAssignedPoints = useMemo(() => {
@@ -543,13 +611,13 @@ export const SteamVotingDashboard: React.FC = () => {
     updatedVoters: Voter[],
     historyRecord: VotingHistoryRecord
   ) => {
-    setVoters(updatedVoters);
-    setHistory((prev) => [historyRecord, ...prev]);
-    setShowFinishModal(false);
-
     setSyncState({ status: 'saving', message: 'Guardando...' });
     const result = await addHistoryRecord(historyRecord);
     setSyncState(result);
+
+    setVoters(updatedVoters);
+    setHistory((prev) => [historyRecord, ...prev]);
+    setShowFinishModal(false);
   }, []);
 
   /**
@@ -666,7 +734,7 @@ export const SteamVotingDashboard: React.FC = () => {
     setVoterToDelete(voter);
   };
 
-  const handleConfirmDeleteVoter = () => {
+  const handleConfirmDeleteVoter = async () => {
     if (!voterToDelete) return;
     if (voters.length <= MIN_VOTERS) {
       setVoterToDelete(null);
@@ -872,9 +940,15 @@ export const SteamVotingDashboard: React.FC = () => {
           <motion.button
             type="button"
             className="btn-action-primary btn-finish-voting"
-            onClick={() => setShowFinishModal(true)}
-            whileHover={{ scale: 1.04, y: -2 }}
-            whileTap={{ scale: 0.95 }}
+            onClick={() => {
+              if (hasWinner) {
+                setShowFinishModal(true);
+              }
+            }}
+            disabled={!hasWinner}
+            title={hasWinner ? 'Finalizar votación y asignar cuotas' : 'No hay un juego ganador disponible para finalizar la votación'}
+            whileHover={hasWinner ? { scale: 1.04, y: -2 } : {}}
+            whileTap={hasWinner ? { scale: 0.95 } : {}}
           >
             🏆 Finalizar Votación
           </motion.button>
@@ -1074,7 +1148,7 @@ export const SteamVotingDashboard: React.FC = () => {
 
       {/* Modales */}
       <AnimatePresence>
-        {showFinishModal && results.length > 0 && (
+        {showFinishModal && hasWinner && (
           <FinishVotingModal
             key="finish-modal"
             allResults={results}

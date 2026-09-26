@@ -7,12 +7,14 @@ interface VoterPaymentRowProps {
   voter: Voter;
   paid: boolean;
   onTogglePayment: (voterId: string, paid: boolean) => void;
+  disabled?: boolean;
 }
 
 export const VoterPaymentRow: React.FC<VoterPaymentRowProps> = React.memo(({
   voter,
   paid,
   onTogglePayment,
+  disabled = false,
 }) => {
   const currentBal = voter.auraQuotaBalance ?? 0;
   const preview = calculateAuraStatus(currentBal, paid, voter.auraRank);
@@ -21,8 +23,8 @@ export const VoterPaymentRow: React.FC<VoterPaymentRowProps> = React.memo(({
   return (
     <motion.div
       key={voter.id}
-      className={`voter-payment-row ${paid ? 'paid-yes' : 'paid-no'}`}
-      whileHover={{ scale: 1.01 }}
+      className={`voter-payment-row ${paid ? 'paid-yes' : 'paid-no'} ${disabled ? 'row-disabled' : ''}`}
+      whileHover={disabled ? {} : { scale: 1.01 }}
       transition={{ duration: 0.2 }}
     >
       <div className="voter-pay-user">
@@ -41,8 +43,9 @@ export const VoterPaymentRow: React.FC<VoterPaymentRowProps> = React.memo(({
           type="button"
           className={`toggle-choice-btn btn-yes ${paid ? 'active' : ''}`}
           onClick={() => onTogglePayment(voter.id, true)}
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
+          disabled={disabled}
+          whileHover={disabled ? {} : { scale: 1.05 }}
+          whileTap={disabled ? {} : { scale: 0.95 }}
         >
           ✓ SÍ (+1)
         </motion.button>
@@ -50,8 +53,9 @@ export const VoterPaymentRow: React.FC<VoterPaymentRowProps> = React.memo(({
           type="button"
           className={`toggle-choice-btn btn-no ${!paid ? 'active' : ''}`}
           onClick={() => onTogglePayment(voter.id, false)}
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
+          disabled={disabled}
+          whileHover={disabled ? {} : { scale: 1.05 }}
+          whileTap={disabled ? {} : { scale: 0.95 }}
         >
           ✕ NO (-1)
         </motion.button>

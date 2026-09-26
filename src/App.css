@@ -2835,9 +2835,17 @@ background: #3b0764;
   animation: fadeInScale 0.6s ease-out 0.5s both;
 }
 
-.btn-action-primary:hover {
+.btn-action-primary:hover:not(:disabled) {
   transform: translateY(-4px) scale(1.08);
   box-shadow: 0 0 35px rgba(168, 85, 247, 0.9);
+}
+
+.btn-action-primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+  filter: grayscale(0.5);
 }
 
 .btn-action-secondary {
@@ -3645,9 +3653,20 @@ background: #3b0764;
   transition: all 0.3s ease;
 }
 
-.toggle-choice-btn:hover {
+.toggle-choice-btn:hover:not(:disabled) {
   transform: scale(1.1);
   border-color: var(--neon-purple-bright);
+}
+
+.toggle-choice-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.voter-payment-row.row-disabled {
+  opacity: 0.7;
 }
 
 .toggle-choice-btn.btn-yes.active {
@@ -3723,11 +3742,19 @@ background: #3b0764;
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.btn-modal-cancel:hover {
+.btn-modal-cancel:hover:not(:disabled) {
   background: rgba(49, 46, 129, 0.85);
   border-color: rgba(168, 85, 247, 0.4);
   color: #ffffff;
   transform: translateY(-1px);
+}
+
+.btn-modal-cancel:disabled,
+.btn-modal-confirm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
 }
 
 .btn-modal-confirm {
@@ -3743,7 +3770,7 @@ background: #3b0764;
   transition: all 0.2s;
 }
 
-.btn-modal-confirm:hover {
+.btn-modal-confirm:hover:not(:disabled) {
   transform: translateY(-1px);
   box-shadow: 0 0 25px rgba(168, 85, 247, 0.8);
 }

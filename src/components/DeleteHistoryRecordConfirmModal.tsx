@@ -42,7 +42,11 @@ export const DeleteHistoryRecordConfirmModal = ({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.25 }}
-      onClick={isDeleting ? undefined : onCancel}
+      onClick={() => {
+        if (!isDeleting) {
+          onCancel();
+        }
+      }}
     >
       <motion.div
         ref={modalRef}
@@ -59,15 +63,22 @@ export const DeleteHistoryRecordConfirmModal = ({
       >
         {/* Handle visual superior estilo bottom sheet */}
         <div className="bottom-sheet-handle" aria-hidden="true"></div>
-        <div className="modal-header">
+        <header className="modal-header">
           <div className="modal-title-group">
-            <h2 id="delete-history-title">⚠️ Eliminar Votación del Historial</h2>
+            <h2 id="delete-history-title">
+              <span aria-hidden="true">⚠️</span>{' '}
+              Eliminar Votación del Historial
+            </h2>
             <p>Esta acción eliminará el registro y revertirá sus efectos sobre los integrantes.</p>
           </div>
           <motion.button
             type="button"
             className="modal-close-btn"
-            onClick={onCancel}
+            onClick={() => {
+              if (!isDeleting) {
+                onCancel();
+              }
+            }}
             aria-label="Cerrar"
             disabled={isDeleting}
             whileHover={isDeleting ? {} : { scale: 1.15 }}
@@ -75,7 +86,7 @@ export const DeleteHistoryRecordConfirmModal = ({
           >
             ✕
           </motion.button>
-        </div>
+        </header>
 
         <div className="delete-warning-content">
           <div className="delete-user-preview">
@@ -86,12 +97,16 @@ export const DeleteHistoryRecordConfirmModal = ({
               recordId={record.id}
             />
             <div className="delete-user-info">
-              <span className="delete-user-name">🏆 {record.winningGame.title}</span>
-              <span className="delete-user-id">📅 {record.date}</span>
+              <span className="delete-user-name">
+                <span aria-hidden="true">🏆</span> {record.winningGame.title}
+              </span>
+              <span className="delete-user-id">
+                <span aria-hidden="true">📅</span> {record.date}
+              </span>
             </div>
           </div>
 
-          <div id="delete-history-description" className="delete-warning-text">
+          <section id="delete-history-description" className="delete-warning-text">
             <p>
               ¿Estás seguro de que deseas eliminar la votación <strong>{record.winningGame.title}</strong> del historial?
             </p>
@@ -99,17 +114,22 @@ export const DeleteHistoryRecordConfirmModal = ({
               El documento de esta votación será eliminado de la base de datos.
             </p>
             <p className="delete-warning-note">
-              📊 <strong>Efecto colateral:</strong> El balance de cuotas y el Aura de cada integrante se revertirán al valor que tenían <em>antes</em> de esta votación, usando el snapshot almacenado en el registro.
+              <span aria-hidden="true">📊</span>{' '}
+              <strong>Efecto colateral:</strong> El balance de cuotas y el Aura de cada integrante se revertirán al valor que tenían <em>antes</em> de esta votación, usando el snapshot almacenado en el registro.
             </p>
-          </div>
+          </section>
         </div>
 
-        <div className="modal-footer-actions delete-modal-actions">
+        <footer className="modal-footer-actions delete-modal-actions">
           <motion.button
             ref={cancelButtonRef}
             type="button"
             className="btn-modal-cancel"
-            onClick={onCancel}
+            onClick={() => {
+              if (!isDeleting) {
+                onCancel();
+              }
+            }}
             disabled={isDeleting}
             whileHover={isDeleting ? {} : { scale: 1.03 }}
             whileTap={isDeleting ? {} : { scale: 0.97 }}
@@ -124,9 +144,9 @@ export const DeleteHistoryRecordConfirmModal = ({
             whileHover={isDeleting ? {} : { scale: 1.03 }}
             whileTap={isDeleting ? {} : { scale: 0.97 }}
           >
-            {isDeleting ? 'Eliminando…' : 'Confirmar Eliminación'}
+            {isDeleting ? 'Eliminando…' : 'Eliminar votación'}
           </motion.button>
-        </div>
+        </footer>
       </motion.div>
     </motion.div>
   );

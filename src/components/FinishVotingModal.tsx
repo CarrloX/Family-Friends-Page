@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import type { Voter, GameResult, Game, VotingHistoryRecord, VoterSnapshotInHistory } from '../types/voting';
 import { calculateAuraStatus } from '../types/voting';
@@ -12,7 +12,7 @@ interface FinishVotingModalProps {
   onConfirmFinish: (
     updatedVoters: Voter[],
     historyRecord: VotingHistoryRecord
-  ) => void;
+  ) => Promise<void>;
   onClose: () => void;
 }
 
@@ -24,6 +24,8 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
   onClose,
 }) => {
   const winningResult = allResults[0];
+  const [isSaving, setIsSaving] = useState(false);
+
   // Map of voterId -> boolean (true = SÍ pagó cuota, false = NO pagó cuota)
   const [quotaPayments, setQuotaPayments] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {};
@@ -34,58 +36,86 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
   });
 
   const handleTogglePayment = useCallback((voterId: string, paid: boolean) => {
+    if (isSaving) return;
     setQuotaPayments((prev) => ({
       ...prev,
       [voterId]: paid,
     }));
-  }, []);
+  }, [isSaving]);
 
-  const handleConfirm = () => {
-    const snapshots: VoterSnapshotInHistory[] = [];
+  // Manejo de la tecla Escape: no cerrar si la operación de guardado está en curso
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !isSaving) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isSaving, onClose]);
 
-    const updatedVoters = voters.map((voter) => {
-      const paid = quotaPayments[voter.id] ?? true;
-      const currentBalance = voter.auraQuotaBalance ?? 0;
-      const status = calculateAuraStatus(currentBalance, paid, voter.auraRank);
+  const handleConfirm = async () => {
+    if (isSaving || !winningResult || !winningResult.game) return;
 
-      snapshots.push({
-        voterId: voter.id,
-        name: voter.name,
-        avatar: voter.avatar,
-        paidQuota: paid,
-        previousBalance: currentBalance,
-        newBalance: status.newBalance,
-        previousRank: voter.auraRank,
-        newRank: status.newRank,
-        previousMultiplier: voter.multiplier,
-        newMultiplier: status.newMultiplier,
-        votes: [...voter.votes],
+    setIsSaving(true);
+    try {
+      const snapshots: VoterSnapshotInHistory[] = [];
+
+      const updatedVoters = voters.map((voter) => {
+        const paid = quotaPayments[voter.id] ?? true;
+        const currentBalance = voter.auraQuotaBalance ?? 0;
+        const status = calculateAuraStatus(currentBalance, paid, voter.auraRank);
+
+        snapshots.push({
+          voterId: voter.id,
+          name: voter.name,
+          avatar: voter.avatar,
+          paidQuota: paid,
+          previousBalance: currentBalance,
+          newBalance: status.newBalance,
+          previousRank: voter.auraRank,
+          newRank: status.newRank,
+          previousMultiplier: voter.multiplier,
+          newMultiplier: status.newMultiplier,
+          votes: [...voter.votes],
+        });
+
+        return {
+          ...voter,
+          auraQuotaBalance: status.newBalance,
+          auraRank: status.newRank,
+          multiplier: status.newMultiplier,
+        };
       });
 
-      return {
-        ...voter,
-        auraQuotaBalance: status.newBalance,
-        auraRank: status.newRank,
-        multiplier: status.newMultiplier,
+      const now = new Date();
+      const historyRecord: VotingHistoryRecord = {
+        id: `voting_${Date.now()}`,
+        date: now.toLocaleString('es-CO', {
+          dateStyle: 'medium',
+          timeStyle: 'short',
+        }),
+        winningGame: winningResult.game,
+        gamesMap: { ...gamesMap },
+        games: Object.values(gamesMap),
+        votersSnapshots: snapshots,
+        resultsSnapshot: allResults,
       };
-    });
 
-    const now = new Date();
-    const historyRecord: VotingHistoryRecord = {
-      id: `voting_${Date.now()}`,
-      date: now.toLocaleString('es-CO', {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-      }),
-      winningGame: winningResult.game,
-      gamesMap: { ...gamesMap },
-      games: Object.values(gamesMap),
-      votersSnapshots: snapshots,
-      resultsSnapshot: allResults,
-    };
-
-    onConfirmFinish(updatedVoters, historyRecord);
+      await onConfirmFinish(updatedVoters, historyRecord);
+    } catch (error) {
+      console.error('[FinishVotingModal] Error al confirmar finalización de votación:', error);
+    } finally {
+      setIsSaving(false);
+    }
   };
+
+  // Precondición explícita: si allResults está vacío o no hay juego ganador válido, el modal no se renderiza
+  if (!winningResult || !winningResult.game) {
+    return null;
+  }
+
+  const winningGame = winningResult.game;
 
   return (
     <motion.div
@@ -94,7 +124,11 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.25 }}
-      onClick={onClose}
+      onClick={() => {
+        if (!isSaving) {
+          onClose();
+        }
+      }}
     >
       <motion.div
         className="finish-modal-container bottom-sheet-panel"
@@ -114,9 +148,14 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
           <motion.button
             type="button"
             className="modal-close-btn"
-            onClick={onClose}
-            whileHover={{ scale: 1.15 }}
-            whileTap={{ scale: 0.9 }}
+            onClick={() => {
+              if (!isSaving) {
+                onClose();
+              }
+            }}
+            disabled={isSaving}
+            whileHover={isSaving ? {} : { scale: 1.15 }}
+            whileTap={isSaving ? {} : { scale: 0.9 }}
           >
             ✕
           </motion.button>
@@ -125,19 +164,19 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
         {/* WINNING GAME PREVIEW */}
         <div className="modal-winner-card">
           <GameThumbnail
-            game={winningResult.game}
-            alt={winningResult.game?.title}
+            game={winningGame}
+            alt={winningGame.title}
             className="winner-modal-thumb"
           />
           <div className="winner-modal-info">
             <span className="winner-tag">1º LUGAR GANADOR</span>
-            <h4>{winningResult.game?.title}</h4>
+            <h4>{winningGame.title}</h4>
             <div className="winner-modal-meta-row">
               <span className="winner-points">{winningResult.weightedPoints} Puntos Ponderados</span>
-              {winningResult.game?.price?.finalFormatted && (
+              {winningGame.price?.finalFormatted && (
                 <span className="winner-modal-price">
-                  🏷️ {winningResult.game.price.finalFormatted}
-                  {winningResult.game.price.discountPercent ? ` (-${winningResult.game.price.discountPercent}%)` : ''}
+                  🏷️ {winningGame.price.finalFormatted}
+                  {winningGame.price.discountPercent ? ` (-${winningGame.price.discountPercent}%)` : ''}
                 </span>
               )}
             </div>
@@ -157,6 +196,7 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
                   voter={voter}
                   paid={paid}
                   onTogglePayment={handleTogglePayment}
+                  disabled={isSaving}
                 />
               );
             })}
@@ -168,9 +208,14 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
           <motion.button
             type="button"
             className="btn-modal-cancel"
-            onClick={onClose}
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.97 }}
+            onClick={() => {
+              if (!isSaving) {
+                onClose();
+              }
+            }}
+            disabled={isSaving}
+            whileHover={isSaving ? {} : { scale: 1.03 }}
+            whileTap={isSaving ? {} : { scale: 0.97 }}
           >
             Cancelar
           </motion.button>
@@ -178,10 +223,11 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
             type="button"
             className="btn-modal-confirm"
             onClick={handleConfirm}
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.97 }}
+            disabled={isSaving}
+            whileHover={isSaving ? {} : { scale: 1.03 }}
+            whileTap={isSaving ? {} : { scale: 0.97 }}
           >
-            ✓ Confirmar y Guardar Votación
+            {isSaving ? 'Guardando votación…' : '✓ Confirmar y Guardar Votación'}
           </motion.button>
         </div>
       </motion.div>
