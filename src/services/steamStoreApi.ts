@@ -111,8 +111,8 @@ export async function searchSteamStore(query: string): Promise<SteamSearchResult
             initial,
             final,
             discountPercent,
-            initialFormatted: discountPercent > 0 ? initialFormatted : undefined,
             finalFormatted,
+            ...(discountPercent > 0 && initialFormatted ? { initialFormatted } : {}),
           };
         }
 
@@ -122,7 +122,7 @@ export async function searchSteamStore(query: string): Promise<SteamSearchResult
           tiny_image: tinyImg,
           header_image: headerImg,
           price_formatted: formattedPrice,
-          price: priceInfo,
+          ...(priceInfo ? { price: priceInfo } : {}),
         };
       });
 
@@ -160,8 +160,8 @@ function parseSteamPriceInfo(
       initial,
       final,
       discountPercent,
-      initialFormatted: discountPercent > 0 ? initialFormatted : undefined,
       finalFormatted,
+      ...(discountPercent > 0 && initialFormatted ? { initialFormatted } : {}),
     };
   }
 
@@ -210,11 +210,14 @@ export async function fetchSteamGameDetails(appId: number): Promise<{
 
       const priceInfo = parseSteamPriceInfo(appInfo.price_overview, appInfo.is_free);
 
-      const result = {
-        description: cleanDesc,
-        genres: genresList,
-        price: priceInfo,
-      };
+      const result: {
+        description?: string;
+        genres?: string;
+        price?: SteamPriceInfo;
+      } = {};
+      if (cleanDesc) result.description = cleanDesc;
+      if (genresList) result.genres = genresList;
+      if (priceInfo) result.price = priceInfo;
 
       appDetailsCache.set(appId, result);
       return result;

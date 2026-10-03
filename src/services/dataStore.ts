@@ -118,6 +118,33 @@ interface ActiveVotingDocument {
   lastUpdated: Timestamp;
 }
 
+/**
+ * Remueve recursivamente todas las propiedades con valor `undefined` de objetos y arrays
+ * antes de enviarlos a Firestore, ya que Firebase rechaza cualquier documento con `undefined`:
+ * "Unsupported field value: undefined".
+ */
+export function removeUndefinedDeep<T>(value: T): T {
+  if (value === null || value === undefined) {
+    return value;
+  }
+  if (value instanceof Timestamp) {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => removeUndefinedDeep(item)) as unknown as T;
+  }
+  if (typeof value === 'object') {
+    const cleanObj: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value)) {
+      if (v !== undefined) {
+        cleanObj[k] = removeUndefinedDeep(v);
+      }
+    }
+    return cleanObj as T;
+  }
+  return value;
+}
+
 // ============================================================
 // Servicio de Persistencia
 // ============================================================
@@ -134,11 +161,8 @@ export async function saveVoters(voters: Voter[]): Promise<SyncState> {
     try {
       const db = getFirestoreInstance()!;
       const docRef = doc(db, COLLECTION_GROUP, DOC_MIEMBROS);
-      await setDoc(
-        docRef,
-        { voters, lastUpdated: Timestamp.now() },
-        { merge: true }
-      );
+      const payload = removeUndefinedDeep({ voters, lastUpdated: Timestamp.now() });
+      await setDoc(docRef, payload, { merge: true });
       console.log('[DataStore] Votantes sincronizados con Firestore.');
       return { status: 'synced', message: 'Sincronizado con la nube' };
     } catch (err) {
@@ -170,11 +194,13 @@ export async function saveActiveVotingState(voters: Voter[], gamesMap: Record<st
     try {
       const db = getFirestoreInstance()!;
       const docRef = doc(db, COLLECTION_ACTIVE_VOTING, DOC_ACTIVE_VOTING);
-      await setDoc(
-        docRef,
-        { voters, gamesMap, games, lastUpdated: Timestamp.now() },
-        { merge: true }
-      );
+      const payload = removeUndefinedDeep({
+        voters,
+        gamesMap,
+        games,
+        lastUpdated: Timestamp.now(),
+      });
+      await setDoc(docRef, payload, { merge: true });
       writeLocal(LS_KEY_ACTIVE_VOTING, { voters, gamesMap, games });
       console.log('[DataStore] Votación actual sincronizada con Firestore.');
       return { status: 'synced', message: 'Votación actual sincronizada' };
@@ -201,11 +227,12 @@ export function sanitizeGame(game: Game): Game {
     cleanGenre = 'Juego de Steam';
   }
   const cleanCover = fixSteamCoverUrl(game.coverImage, game.appId);
-  return {
+  const base: Game = {
     ...game,
     genre: cleanGenre,
     coverImage: cleanCover || game.coverImage,
   };
+  return removeUndefinedDeep(base);
 }
 
 export function sanitizeGamesMap(map: Record<string, Game>): Record<string, Game> {
@@ -338,11 +365,12 @@ export async function saveGames(gamesMap: Record<string, Game>): Promise<SyncSta
     try {
       const db = getFirestoreInstance()!;
       const docRef = doc(db, COLLECTION_GROUP, DOC_MIEMBROS);
-      await setDoc(
-        docRef,
-        { gamesMap, games, lastUpdated: Timestamp.now() },
-        { merge: true }
-      );
+      const payload = removeUndefinedDeep({
+        gamesMap,
+        games,
+        lastUpdated: Timestamp.now(),
+      });
+      await setDoc(docRef, payload, { merge: true });
       console.log('[DataStore] Juegos sincronizados con Firestore.');
       return { status: 'synced', message: 'Sincronizado con la nube' };
     } catch (err) {
@@ -411,11 +439,12 @@ export async function addHistoryRecord(record: VotingHistoryRecord): Promise<Syn
     try {
       const db = getFirestoreInstance()!;
       const colRef = collection(db, COLLECTION_HISTORY);
-      await addDoc(colRef, {
+      const payload = removeUndefinedDeep({
         ...cleanRecord,
         date: cleanRecord.date,
         savedAt: Timestamp.now(),
       });
+      await addDoc(colRef, payload);
       console.log('[DataStore] Historial sincronizado con Firestore.');
       return { status: 'synced', message: 'Sincronizado con la nube' };
     } catch (err) {
@@ -722,20 +751,22 @@ export async function importBackup(
     try {
       const db = getFirestoreInstance()!;
       const docRef = doc(db, COLLECTION_GROUP, DOC_MIEMBROS);
-      await setDoc(docRef, {
+      const groupPayload = removeUndefinedDeep({
         voters: data.voters,
         gamesMap: data.gamesMap,
         games: data.games ?? Object.values(data.gamesMap),
         lastUpdated: Timestamp.now(),
       });
+      await setDoc(docRef, groupPayload);
 
       const activeDocRef = doc(db, COLLECTION_ACTIVE_VOTING, DOC_ACTIVE_VOTING);
-      await setDoc(activeDocRef, {
+      const activePayload = removeUndefinedDeep({
         voters: data.voters,
         gamesMap: data.gamesMap,
         games: data.games ?? Object.values(data.gamesMap),
         lastUpdated: Timestamp.now(),
       });
+      await setDoc(activeDocRef, activePayload);
 
       // Reemplazar historial: limpiar y volver a insertar
       const colRef = collection(db, COLLECTION_HISTORY);
@@ -744,10 +775,10 @@ export async function importBackup(
       await Promise.all(deletePromises);
 
       for (const record of data.history) {
-        await addDoc(colRef, {
+        await addDoc(colRef, removeUndefinedDeep({
           ...record,
           savedAt: Timestamp.now(),
-        });
+        }));
       }
 
       console.log('[DataStore] Backup importado y sincronizado con Firestore.');
