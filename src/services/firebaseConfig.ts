@@ -49,9 +49,11 @@ export function initFirebase(): { db: Firestore | null; isConfigured: boolean } 
     !firebaseConfig.projectId.includes('tu-proyecto');
 
   if (!hasRealKeys) {
-    console.warn(
-      '[Firebase] Credenciales no configuradas. Usando localStorage como respaldo.'
-    );
+    if (import.meta.env.DEV) {
+      console.warn(
+        '[System] Servicios remotos no configurados. Operando en modo local.'
+      );
+    }
     return { db: null, isConfigured: false };
   }
 
@@ -91,16 +93,24 @@ export function initFirebase(): { db: Firestore | null; isConfigured: boolean } 
             provider: new ReCaptchaV3Provider(recaptchaSiteKey),
             isTokenAutoRefreshEnabled: true,
           });
-          console.log('[Firebase] App Check inicializado con reCAPTCHA.');
+          if (import.meta.env.DEV) {
+            console.log('[System] Verificación de integridad inicializada.');
+          }
         }
       } catch (appCheckErr) {
-        console.warn('[Firebase] No se pudo inicializar App Check (opcional):', appCheckErr);
+        if (import.meta.env.DEV) {
+          console.warn('[System] No se pudo inicializar la verificación de integridad:', appCheckErr);
+        }
       }
     }
 
-    console.log('[Firebase] Firestore y Auth inicializados correctamente.');
+    if (import.meta.env.DEV) {
+      console.log('[System] Servicios remotos listos.');
+    }
   } catch (err) {
-    console.error('[Firebase] Error al inicializar:', err);
+    if (import.meta.env.DEV) {
+      console.error('[System] Error al conectar los servicios:', err);
+    }
     app = null;
     db = null;
     auth = null;
@@ -300,7 +310,7 @@ export async function refreshCurrentUserClaims(
     cachedIsAdmin = evaluateUserIsAdmin(user, cachedClaims);
   } catch (err) {
     if (import.meta.env.DEV) {
-      console.warn('[Firebase] Error al obtener claims del token:', err);
+      console.warn('[System] No fue posible verificar la sesión:', err);
     }
     // Solo limpiar si el usuario actual sigue siendo el que falló
     if (getCurrentUser()?.uid === user.uid) {
