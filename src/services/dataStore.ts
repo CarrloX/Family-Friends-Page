@@ -9,11 +9,14 @@ import {
   orderBy,
   Timestamp,
   deleteDoc,
+  writeBatch,
+  type Firestore,
 } from 'firebase/firestore';
 import { getFirestoreInstance, isFirebaseReady } from './firebaseConfig';
 import { canManageContent } from './accessControl';
 import type { Voter, Game, VotingHistoryRecord } from '../types/voting';
 import { fixSteamCoverUrl } from '../utils/steamImages';
+import { formatHistoryDate } from '../utils/formatDate';
 
 // ============================================================
 // Constantes para localStorage (fallback)
@@ -259,13 +262,56 @@ export function sanitizeGamesMap(map: Record<string, Game>): Record<string, Game
   return result;
 }
 
-export function sanitizeVotingHistoryRecord(record: VotingHistoryRecord): VotingHistoryRecord {
+function parseExactIsoString(val: unknown): string | null {
+  if (typeof val === 'string' && !Number.isNaN(Date.parse(val))) {
+    return val;
+  }
+  return null;
+}
+
+function parseTimestampLike(val: unknown): string | null {
+  if (val && typeof (val as { toDate?: () => Date }).toDate === 'function') {
+    return (val as { toDate: () => Date }).toDate().toISOString();
+  }
+  return null;
+}
+
+function parseIdTimestamp(id?: string): string | null {
+  if (!id?.startsWith('voting_')) return null;
+  const rawSuffix = id.replace('voting_', '');
+  const timestampMs = Number.parseInt(rawSuffix, 10);
+  if (!Number.isNaN(timestampMs) && timestampMs > 0) {
+    return new Date(timestampMs).toISOString();
+  }
+  return null;
+}
+
+function parseIsoOrDateString(val: unknown): string | null {
+  if (typeof val !== 'string') return null;
+  const parsed = Date.parse(val);
+  return !Number.isNaN(parsed) ? new Date(parsed).toISOString() : null;
+}
+
+export function resolveCanonicalCreatedAt(
+  record: { id?: string; date?: string; createdAt?: unknown; savedAt?: unknown }
+): string {
+  return (
+    parseExactIsoString(record.createdAt) ??
+    parseTimestampLike(record.createdAt) ??
+    parseTimestampLike(record.savedAt) ??
+    parseIdTimestamp(record.id) ??
+    parseIsoOrDateString(record.date) ??
+    new Date().toISOString()
+  );
+}
+
+export function sanitizeVotingHistoryRecord(
+  record: VotingHistoryRecord & { createdAt?: unknown; savedAt?: unknown }
+): VotingHistoryRecord {
   if (!record) return record;
-  const winningGame = sanitizeGame(record.winningGame);
-  const gamesMap = sanitizeGamesMap(record.gamesMap || {});
-  const games = Array.isArray(record.games)
-    ? record.games.map(sanitizeGame)
-    : Object.values(gamesMap);
+  const createdAt = resolveCanonicalCreatedAt(record);
+  const formattedDate = formatHistoryDate(createdAt);
+
   const resultsSnapshot = Array.isArray(record.resultsSnapshot)
     ? record.resultsSnapshot.map((r) => ({
         ...r,
@@ -273,13 +319,28 @@ export function sanitizeVotingHistoryRecord(record: VotingHistoryRecord): Voting
       }))
     : [];
 
-  return {
+  const candidateGame = record.winningGame ?? resultsSnapshot[0]?.game ?? record.games?.[0];
+  const winningGame = sanitizeGame(candidateGame as Game);
+
+  const cleanRecord: VotingHistoryRecord = {
     ...record,
+    createdAt,
+    date: record.date || formattedDate,
     winningGame,
-    gamesMap,
-    games,
     resultsSnapshot,
+    votersSnapshots: Array.isArray(record.votersSnapshots) ? record.votersSnapshots : [],
   };
+
+  // resultsSnapshot es la única fuente de verdad para los juegos de la votación.
+  // Prescindimos de las propiedades redundantes gamesMap y games para evitar inconsistencias.
+  if (resultsSnapshot.length > 0) {
+    delete (cleanRecord as Partial<VotingHistoryRecord>).gamesMap;
+    delete (cleanRecord as Partial<VotingHistoryRecord>).games;
+  } else if (record.gamesMap) {
+    cleanRecord.gamesMap = sanitizeGamesMap(record.gamesMap);
+  }
+
+  return cleanRecord;
 }
 
 function parseActiveVotingData(data: ActiveVotingDocument): { voters: Voter[]; gamesMap: Record<string, Game>; games: Game[] } | null {
@@ -478,8 +539,69 @@ function appendLocalHistoryRecord(cleanRecord: VotingHistoryRecord): void {
   writeLocal(LS_KEY_HISTORY, history);
 }
 
+function deriveGamesMap(record: VotingHistoryRecord, gamesMap?: Record<string, Game>): Record<string, Game> {
+  if (gamesMap) {
+    return sanitizeGamesMap(gamesMap);
+  }
+  const derived: Record<string, Game> = {};
+  record.resultsSnapshot?.forEach((res) => {
+    if (res.game?.id) {
+      derived[res.game.id] = res.game;
+    }
+  });
+  return Object.keys(derived).length > 0 ? derived : record.gamesMap || {};
+}
+
+function resolveRecordId(id?: string): string {
+  if (id) return id;
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `voting_${Date.now()}`;
+}
+
+function buildHistoryDocPayload(record: VotingHistoryRecord, recordId: string) {
+  const createdDate = new Date(record.createdAt);
+  const createdAtTimestamp = !Number.isNaN(createdDate.getTime())
+    ? Timestamp.fromDate(createdDate)
+    : Timestamp.now();
+
+  return removeUndefinedDeep({
+    ...record,
+    id: recordId,
+    createdAt: createdAtTimestamp,
+    date: record.date,
+    savedAt: Timestamp.now(),
+  });
+}
+
+async function commitFinishedVotingBatch(
+  db: Firestore,
+  record: VotingHistoryRecord,
+  voters: Voter[],
+  gamesMap: Record<string, Game>,
+  games: Game[]
+): Promise<void> {
+  const batch = writeBatch(db);
+  const recordId = resolveRecordId(record.id);
+
+  // 1. Historial: guardar documento en 'votaciones_pasadas' con ID determinista (UUID) y createdAt canónico
+  const historyDocRef = doc(db, COLLECTION_HISTORY, recordId);
+  batch.set(historyDocRef, buildHistoryDocPayload(record, recordId));
+
+  // 2. Miembros: actualizar balances, rangos y multiplicadores de Aura en 'grupo/miembros'
+  const groupDocRef = doc(db, COLLECTION_GROUP, DOC_MIEMBROS);
+  batch.set(groupDocRef, removeUndefinedDeep({ voters, lastUpdated: Timestamp.now() }), { merge: true });
+
+  // 3. Votación activa: reflejar los nuevos saldos y estado en 'votacion_actual/estado'
+  const activeDocRef = doc(db, COLLECTION_ACTIVE_VOTING, DOC_ACTIVE_VOTING);
+  batch.set(activeDocRef, removeUndefinedDeep({ voters, gamesMap, games, lastUpdated: Timestamp.now() }), { merge: true });
+
+  await batch.commit();
+}
+
 /**
- * Agrega un registro al historial de votaciones. Firestore usa addDoc, localStorage usa array.
+ * Agrega un registro al historial de votaciones. Firestore usa setDoc con recordId, localStorage usa array.
  */
 export async function addHistoryRecord(record: VotingHistoryRecord): Promise<SyncState> {
   if (!canWriteToPersistence()) {
@@ -491,13 +613,10 @@ export async function addHistoryRecord(record: VotingHistoryRecord): Promise<Syn
   if (isFirebaseReady()) {
     try {
       const db = getFirestoreInstance()!;
-      const colRef = collection(db, COLLECTION_HISTORY);
-      const payload = removeUndefinedDeep({
-        ...cleanRecord,
-        date: cleanRecord.date,
-        savedAt: Timestamp.now(),
-      });
-      await addDoc(colRef, payload);
+      const recordId = resolveRecordId(cleanRecord.id);
+      const historyDocRef = doc(db, COLLECTION_HISTORY, recordId);
+      const payload = buildHistoryDocPayload(cleanRecord, recordId);
+      await setDoc(historyDocRef, payload);
       if (import.meta.env.DEV) {
         console.log('[Store] Registro archivado correctamente.');
       }
@@ -516,6 +635,57 @@ export async function addHistoryRecord(record: VotingHistoryRecord): Promise<Syn
 }
 
 /**
+ * Guarda de manera atómica el registro de historial y la actualización de miembros
+ * (junto con el estado de la sesión de votación) en un único `writeBatch` de Firestore.
+ * Esto asegura atomicidad: o se aplican todos los cambios (historial + nuevos saldos Aura) o ninguno.
+ */
+export async function saveFinishedVotingSession(
+  record: VotingHistoryRecord,
+  updatedVoters: Voter[],
+  gamesMap?: Record<string, Game>
+): Promise<SyncState> {
+  if (!canWriteToPersistence()) {
+    return buildReadOnlyState();
+  }
+
+  const cleanRecord = sanitizeVotingHistoryRecord(record);
+  const cleanVoters = removeUndefinedDeep(updatedVoters);
+  const effectiveGamesMap = deriveGamesMap(cleanRecord, gamesMap);
+  const games = Object.values(effectiveGamesMap);
+
+  const saveLocalFallback = () => {
+    writeLocal(LS_KEY_VOTERS, cleanVoters);
+    appendLocalHistoryRecord(cleanRecord);
+    writeLocal(LS_KEY_ACTIVE_VOTING, {
+      voters: cleanVoters,
+      gamesMap: effectiveGamesMap,
+      games,
+    });
+  };
+
+  if (isFirebaseReady()) {
+    try {
+      const db = getFirestoreInstance()!;
+      await commitFinishedVotingBatch(db, cleanRecord, cleanVoters, effectiveGamesMap, games);
+      saveLocalFallback();
+      if (import.meta.env.DEV) {
+        console.log('[Store] Votación archivada y miembros actualizados de forma atómica en Firestore.');
+      }
+      return { status: 'synced', message: 'Votación finalizada y sincronizada' };
+    } catch (err) {
+      return handleSyncError(
+        err,
+        saveLocalFallback,
+        'Error finalizando votación atómicamente, usando almacenamiento local'
+      );
+    }
+  }
+
+  saveLocalFallback();
+  return { status: 'local', message: 'Votación guardada localmente' };
+}
+
+/**
  * Carga completamente el historial de votaciones. Prioriza Firestore, fallback a localStorage.
  */
 export async function loadHistory(): Promise<VotingHistoryRecord[]> {
@@ -528,9 +698,11 @@ export async function loadHistory(): Promise<VotingHistoryRecord[]> {
       if (!snap.empty) {
         const records: VotingHistoryRecord[] = [];
         snap.forEach((d) => {
-          const data = d.data() as VotingHistoryRecord & { savedAt?: Timestamp };
+          const data = d.data() as VotingHistoryRecord & { savedAt?: Timestamp; createdAt?: Timestamp | string };
           records.push(sanitizeVotingHistoryRecord(data));
         });
+        // Orden canónico estricto por fecha de creación descendente
+        records.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         if (import.meta.env.DEV) {
           console.log('[Store] Registros previos recuperados.');
         }
@@ -544,7 +716,9 @@ export async function loadHistory(): Promise<VotingHistoryRecord[]> {
     }
   }
   const localHistory = readLocal<VotingHistoryRecord[]>(LS_KEY_HISTORY, []);
-  return localHistory.map(sanitizeVotingHistoryRecord);
+  const sanitizedLocal = localHistory.map(sanitizeVotingHistoryRecord);
+  sanitizedLocal.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  return sanitizedLocal;
 }
 
 async function deleteFirestoreHistoryDoc(recordId: string): Promise<SyncState | null> {
@@ -552,9 +726,22 @@ async function deleteFirestoreHistoryDoc(recordId: string): Promise<SyncState | 
 
   try {
     const db = getFirestoreInstance()!;
+
+    // 1. Intento de borrado directo si el doc ID de Firestore coincide con el UUID
+    const directDocRef = doc(db, COLLECTION_HISTORY, recordId);
+    const directSnap = await getDoc(directDocRef);
+    if (directSnap.exists()) {
+      await deleteDoc(directDocRef);
+      if (import.meta.env.DEV) {
+        console.log('[Store] Registro eliminado del almacenamiento remoto.');
+      }
+      return null;
+    }
+
+    // 2. Fallback de escaneo para registros legados insertados previamente con auto-ID
     const colRef = collection(db, COLLECTION_HISTORY);
     const snap = await getDocs(colRef);
-    const docToDelete = snap.docs.find((d) => d.data().id === recordId);
+    const docToDelete = snap.docs.find((d) => d.data().id === recordId || d.id === recordId);
     if (docToDelete) {
       await deleteDoc(docToDelete.ref);
       if (import.meta.env.DEV) {
@@ -867,12 +1054,18 @@ export async function importBackup(
       const deletePromises = snap.docs.map((d) => deleteDoc(d.ref));
       await Promise.all(deletePromises);
 
-      const insertPromises = data.history.map((record) =>
-        addDoc(colRef, removeUndefinedDeep({
-          ...record,
+      const insertPromises = data.history.map((record) => {
+        const clean = sanitizeVotingHistoryRecord(record);
+        const createdDate = new Date(clean.createdAt);
+        const createdAtTimestamp = !Number.isNaN(createdDate.getTime())
+          ? Timestamp.fromDate(createdDate)
+          : Timestamp.now();
+        return addDoc(colRef, removeUndefinedDeep({
+          ...clean,
+          createdAt: createdAtTimestamp,
           savedAt: Timestamp.now(),
-        }))
-      );
+        }));
+      });
       await Promise.all(insertPromises);
 
       if (import.meta.env.DEV) {

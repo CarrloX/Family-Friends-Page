@@ -19,7 +19,7 @@ import {
   saveVoters,
   saveGames,
   saveActiveVotingState,
-  addHistoryRecord,
+  saveFinishedVotingSession,
   loadVoters,
   loadGames,
   loadHistory,
@@ -289,6 +289,8 @@ export const SteamVotingDashboard: React.FC = () => {
    const gamesDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
    const activeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
    const apiKeyDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+   const skipNextVotersSaveRef = useRef<boolean>(false);
+   const skipNextActiveSaveRef = useRef<boolean>(false);
    const importFileInputRef = useRef<HTMLInputElement | null>(null);
    // Ref para resolver la Promise del modal de PIN
    const pinModalResolveRef = useRef<((value: boolean) => void) | null>(null);
@@ -355,6 +357,10 @@ export const SteamVotingDashboard: React.FC = () => {
     if (votersDebounceRef.current) {
       clearTimeout(votersDebounceRef.current);
     }
+    if (skipNextVotersSaveRef.current) {
+      skipNextVotersSaveRef.current = false;
+      return;
+    }
     void Promise.resolve().then(() => {
       setSyncState({ status: 'saving', message: 'Guardando...' });
     });
@@ -380,6 +386,10 @@ export const SteamVotingDashboard: React.FC = () => {
   const debouncedSaveActiveVoting = useCallback((votersToSave: Voter[], gamesToSave: Record<string, Game>) => {
     if (activeDebounceRef.current) {
       clearTimeout(activeDebounceRef.current);
+    }
+    if (skipNextActiveSaveRef.current) {
+      skipNextActiveSaveRef.current = false;
+      return;
     }
     activeDebounceRef.current = setTimeout(async () => {
       const result = await saveActiveVotingState(votersToSave, gamesToSave);
@@ -611,14 +621,31 @@ export const SteamVotingDashboard: React.FC = () => {
     updatedVoters: Voter[],
     historyRecord: VotingHistoryRecord
   ) => {
-    setSyncState({ status: 'saving', message: 'Guardando...' });
-    const result = await addHistoryRecord(historyRecord);
+    // 1. Cancelar cualquier guardado debounce pendiente para evitar sobreescritura con estado previo
+    if (votersDebounceRef.current) {
+      clearTimeout(votersDebounceRef.current);
+    }
+    if (activeDebounceRef.current) {
+      clearTimeout(activeDebounceRef.current);
+    }
+
+    setSyncState({ status: 'saving', message: 'Guardando votación...' });
+
+    // 2. Guardado atómico unificado: historial + nuevos saldos Aura en un solo writeBatch de Firestore
+    const result = await saveFinishedVotingSession(historyRecord, updatedVoters, gamesMap);
     setSyncState(result);
 
-    setVoters(updatedVoters);
-    setHistory((prev) => [historyRecord, ...prev]);
-    setShowFinishModal(false);
-  }, []);
+    // 3. Si la persistencia fue exitosa (remota o fallback local), reflejar el nuevo estado en la interfaz
+    if (result.status === 'synced' || result.status === 'local') {
+      // Evitar que el setState de React dispare un re-guardado redundante por debounce
+      skipNextVotersSaveRef.current = true;
+      skipNextActiveSaveRef.current = true;
+
+      setVoters(updatedVoters);
+      setHistory((prev) => [historyRecord, ...prev]);
+      setShowFinishModal(false);
+    }
+  }, [gamesMap]);
 
   /**
    * Revierte los cambios de Aura acumulados de múltiples votaciones,
@@ -1152,7 +1179,6 @@ export const SteamVotingDashboard: React.FC = () => {
           <FinishVotingModal
             key="finish-modal"
             allResults={results}
-            gamesMap={gamesMap}
             voters={voters}
             onConfirmFinish={handleConfirmFinishVoting}
             onClose={() => setShowFinishModal(false)}

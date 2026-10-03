@@ -38,12 +38,18 @@ export const VoterPaymentRow: React.FC<VoterPaymentRowProps> = React.memo(({
       </div>
 
       {/* SÍ / NO TOGGLE BUTTONS */}
-      <div className="toggle-btn-group">
+      <div
+        className="toggle-btn-group"
+        role="group"
+        aria-label={`Registro de cuota para ${voter.name}`}
+      >
         <motion.button
           type="button"
           className={`toggle-choice-btn btn-yes ${paid ? 'active' : ''}`}
           onClick={() => onTogglePayment(voter.id, true)}
           disabled={disabled}
+          aria-pressed={paid}
+          aria-label={`${voter.name}: Sí pagó cuota (+1)`}
           whileHover={disabled ? {} : { scale: 1.05 }}
           whileTap={disabled ? {} : { scale: 0.95 }}
         >
@@ -54,6 +60,8 @@ export const VoterPaymentRow: React.FC<VoterPaymentRowProps> = React.memo(({
           className={`toggle-choice-btn btn-no ${!paid ? 'active' : ''}`}
           onClick={() => onTogglePayment(voter.id, false)}
           disabled={disabled}
+          aria-pressed={!paid}
+          aria-label={`${voter.name}: No pagó cuota (-1)`}
           whileHover={disabled ? {} : { scale: 1.05 }}
           whileTap={disabled ? {} : { scale: 0.95 }}
         >

@@ -70,13 +70,51 @@ export interface VoterSnapshotInHistory {
 
 export interface VotingHistoryRecord {
   id: string;
-  date: string;
+  /** Fecha canónica en formato ISO 8601 (ej. '2026-10-03T14:01:22.000Z') */
+  createdAt: string;
+  /** Fecha preformateada (mantenida como fallback de presentación/retrocompatibilidad) */
+  date?: string;
+  /** Juego ganador de la votación */
   winningGame: Game;
-  gamesMap: Record<string, Game>;
-  /** Array dinámico de juegos propuestos en orden de la votación */
-  games?: Game[];
-  votersSnapshots: VoterSnapshotInHistory[];
+  /** Snapshot canónico con los resultados de todos los juegos competidores */
   resultsSnapshot: GameResult[];
+  /** Snapshot de los votantes y su saldo/rango Aura al momento de finalizar */
+  votersSnapshots: VoterSnapshotInHistory[];
+  /** Campos legados opcionales para retrocompatibilidad con registros antiguos */
+  gamesMap?: Record<string, Game>;
+  games?: Game[];
+}
+
+/**
+ * Clona de forma profunda la entidad Game para desacoplarla de referencias vivas en memoria.
+ */
+export function cloneGameSnapshot(game: Game): Game {
+  return {
+    ...game,
+    price: game.price ? { ...game.price } : undefined,
+  };
+}
+
+/**
+ * Materializa un snapshot inmutable de los resultados competitivos de la votación,
+ * clonando cada GameResult y su objeto Game anidado para evitar mutaciones compartidas.
+ */
+export function createResultsSnapshot(allResults: GameResult[]): GameResult[] {
+  return allResults.map((result) => ({
+    ...result,
+    game: cloneGameSnapshot(result.game),
+  }));
+}
+
+/**
+ * Clona profundamente el arreglo de votos para evitar referencias compartidas
+ * entre los snapshots del historial y el estado reactivo de la sesión activa.
+ */
+export function cloneGameVotes(votes: GameVote[]): GameVote[] {
+  return votes.map((vote) => ({
+    gameId: vote.gameId,
+    points: vote.points,
+  }));
 }
 
 /**

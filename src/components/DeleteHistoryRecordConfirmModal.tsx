@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import type { VotingHistoryRecord } from '../types/voting';
 import { GameThumbnail } from './GameThumbnail';
 import { useModalFocusTrap } from '../hooks/useModalFocusTrap';
+import { formatHistoryDate } from '../utils/formatDate';
 
 interface DeleteHistoryRecordConfirmModalProps {
   record: VotingHistoryRecord;
@@ -101,7 +102,7 @@ export const DeleteHistoryRecordConfirmModal = ({
                 <span aria-hidden="true">🏆</span> {record.winningGame.title}
               </span>
               <span className="delete-user-id">
-                <span aria-hidden="true">📅</span> {record.date}
+                <span aria-hidden="true">📅</span> {formatHistoryDate(record)}
               </span>
             </div>
           </div>

@@ -6,6 +6,7 @@ import { HistoryListItem } from './HistoryListItem';
 import { HistoryCompetitorsCarousel } from './HistoryCompetitorsCarousel';
 import { VoterSnapshotRow } from './VoterSnapshotRow';
 import { GameThumbnail } from './GameThumbnail';
+import { formatHistoryDate } from '../utils/formatDate';
 
 const ITEMS_PER_PAGE = 5;
 
@@ -251,7 +252,7 @@ export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = React.memo(
                     <div className="winner-details-badge">
                       <span className="trophy-tag">🏆 JUEGO GANADOR</span>
                       <h3>{selectedRecord.winningGame?.title}</h3>
-                      <span className="record-date-tag">🗓️ {selectedRecord.date}</span>
+                      <span className="record-date-tag">🗓️ {formatHistoryDate(selectedRecord)}</span>
                     </div>
                   </div>
                 </div>

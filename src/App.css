@@ -3531,6 +3531,24 @@ background: #3b0764;
   display: flex;
   flex-direction: column;
   gap: 14px;
+  border: none;
+  padding: 0;
+  margin: 0;
+  min-inline-size: 0;
+}
+
+.voters-payment-header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.voters-payment-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .voters-payment-section h3 {
@@ -3545,6 +3563,102 @@ background: #3b0764;
 .voters-payment-section h3:hover {
   letter-spacing: 1px;
   text-shadow: 0 0 10px rgba(167, 243, 208, 0.5);
+}
+
+.voters-payment-subtitle {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.6);
+  margin: 0;
+}
+
+.voters-payment-controls-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.voters-payment-summary-chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.summary-chip {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.25s ease;
+}
+
+.summary-chip.chip-all-paid {
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.45);
+  color: #34d399;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.25);
+}
+
+.summary-chip.chip-paid {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  color: #6ee7b7;
+}
+
+.summary-chip.chip-unpaid {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #fca5a5;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.2);
+}
+
+.payment-bulk-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-bulk-payment {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-bulk-payment:hover:not(:disabled) {
+  background: rgba(168, 85, 247, 0.25);
+  border-color: rgba(168, 85, 247, 0.5);
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+.btn-bulk-payment:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.payment-unpaid-warning {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #fecaca;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.payment-unpaid-warning strong {
+  color: #ffffff;
 }
 
 .voters-payment-grid {
@@ -3721,13 +3835,54 @@ background: #3b0764;
   box-shadow: 0 0 8px rgba(251, 191, 36, 0.6);
 }
 
+.modal-footer-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 16px;
+}
+
+.payment-confirmation-checkbox-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  cursor: pointer;
+  background: rgba(168, 85, 247, 0.07);
+  border: 1px solid rgba(168, 85, 247, 0.25);
+  padding: 10px 14px;
+  border-radius: 10px;
+  transition: all 0.25s ease;
+  user-select: none;
+}
+
+.payment-confirmation-checkbox-label:hover {
+  background: rgba(168, 85, 247, 0.12);
+  border-color: rgba(168, 85, 247, 0.5);
+  box-shadow: 0 0 15px rgba(168, 85, 247, 0.2);
+}
+
+.payment-confirmation-checkbox-label input[type="checkbox"] {
+  accent-color: #a855f7;
+  width: 17px;
+  height: 17px;
+  margin-top: 2px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.payment-confirmation-checkbox-label .checkbox-text {
+  font-size: 12px;
+  color: #f1f5f9;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
 .modal-footer-actions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  padding-top: 16px;
 }
 
 .btn-modal-cancel {

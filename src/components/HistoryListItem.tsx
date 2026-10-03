@@ -2,6 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import type { VotingHistoryRecord } from '../types/voting';
 import { GameThumbnail } from './GameThumbnail';
+import { formatHistoryDate } from '../utils/formatDate';
 
 interface HistoryListItemProps {
   rec: VotingHistoryRecord;
@@ -43,7 +44,7 @@ export const HistoryListItem: React.FC<HistoryListItemProps> = React.memo(({
         />
         <div className="history-item-info">
           <span className="history-item-winner">🏆 {rec.winningGame?.title}</span>
-          <span className="history-item-date">{rec.date}</span>
+          <span className="history-item-date">{formatHistoryDate(rec)}</span>
         </div>
       </motion.button>
       {canManageContent && (

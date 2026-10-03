@@ -1,13 +1,14 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import type { Voter, GameResult, Game, VotingHistoryRecord, VoterSnapshotInHistory } from '../types/voting';
-import { calculateAuraStatus } from '../types/voting';
+import type { Voter, GameResult, VotingHistoryRecord, VoterSnapshotInHistory } from '../types/voting';
+import { calculateAuraStatus, cloneGameSnapshot, createResultsSnapshot, cloneGameVotes } from '../types/voting';
 import { VoterPaymentRow } from './VoterPaymentRow';
 import { GameThumbnail } from './GameThumbnail';
+import { formatHistoryDate } from '../utils/formatDate';
+import { useModalFocusTrap } from '../hooks/useModalFocusTrap';
 
 interface FinishVotingModalProps {
   allResults: GameResult[];
-  gamesMap: Record<string, Game>;
   voters: Voter[];
   onConfirmFinish: (
     updatedVoters: Voter[],
@@ -18,13 +19,20 @@ interface FinishVotingModalProps {
 
 export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
   allResults,
-  gamesMap,
   voters,
   onConfirmFinish,
   onClose,
 }) => {
   const winningResult = allResults[0];
   const [isSaving, setIsSaving] = useState(false);
+  const [hasConfirmedReview, setHasConfirmedReview] = useState(false);
+
+  // Focus trap y accesibilidad por teclado (Tab, Shift+Tab y Escape)
+  const modalRef = useModalFocusTrap<HTMLDivElement>({
+    onEscape: onClose,
+    disabled: isSaving,
+    initialFocusDelay: 120,
+  });
 
   // Map of voterId -> boolean (true = SÍ pagó cuota, false = NO pagó cuota)
   const [quotaPayments, setQuotaPayments] = useState<Record<string, boolean>>(() => {
@@ -43,30 +51,40 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
     }));
   }, [isSaving]);
 
-  // Manejo de la tecla Escape: no cerrar si la operación de guardado está en curso
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !isSaving) {
-        onClose();
+  const handleSetAllPayments = useCallback((paid: boolean) => {
+    if (isSaving) return;
+    setQuotaPayments(() => {
+      const next: Record<string, boolean> = {};
+      voters.forEach((v) => {
+        next[v.id] = paid;
+      });
+      return next;
+    });
+  }, [isSaving, voters]);
+
+  const paymentStats = useMemo(() => {
+    let paidCount = 0;
+    voters.forEach((v) => {
+      if (quotaPayments[v.id]) {
+        paidCount++;
       }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isSaving, onClose]);
+    });
+    const unpaidCount = voters.length - paidCount;
+    return { paidCount, unpaidCount, total: voters.length };
+  }, [voters, quotaPayments]);
 
   const handleConfirm = async () => {
-    if (isSaving || !winningResult?.game) return;
+    if (isSaving || !hasConfirmedReview || !winningResult?.game) return;
 
     setIsSaving(true);
     try {
-      const snapshots: VoterSnapshotInHistory[] = [];
-
-      const updatedVoters = voters.map((voter) => {
+      // 1. Materializar snapshots inmutables de los votantes y sus votos
+      const snapshots: VoterSnapshotInHistory[] = voters.map((voter) => {
         const paid = quotaPayments[voter.id] ?? true;
         const currentBalance = voter.auraQuotaBalance ?? 0;
         const status = calculateAuraStatus(currentBalance, paid, voter.auraRank);
 
-        snapshots.push({
+        return {
           voterId: voter.id,
           name: voter.name,
           avatar: voter.avatar,
@@ -77,30 +95,35 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
           newRank: status.newRank,
           previousMultiplier: voter.multiplier,
           newMultiplier: status.newMultiplier,
-          votes: [...voter.votes],
-        });
-
-        return {
-          ...voter,
-          auraQuotaBalance: status.newBalance,
-          auraRank: status.newRank,
-          multiplier: status.newMultiplier,
+          votes: cloneGameVotes(voter.votes),
         };
       });
 
+      // 2. Materializar snapshot inmutable de los resultados competitivos
+      const resultsSnapshot = createResultsSnapshot(allResults);
+
+      // 3. Materializar snapshot del juego ganador desacoplado
+      const winningGame = cloneGameSnapshot(winningResult.game);
+
       const now = new Date();
+      const createdAt = now.toISOString();
       const historyRecord: VotingHistoryRecord = {
-        id: `voting_${Date.now()}`,
-        date: now.toLocaleString('es-CO', {
-          dateStyle: 'medium',
-          timeStyle: 'short',
-        }),
-        winningGame: winningResult.game,
-        gamesMap: { ...gamesMap },
-        games: Object.values(gamesMap),
+        id: crypto.randomUUID(),
+        createdAt,
+        date: formatHistoryDate(createdAt),
+        winningGame,
+        resultsSnapshot,
         votersSnapshots: snapshots,
-        resultsSnapshot: allResults,
       };
+
+      // 4. Actualizar votantes para el estado activo de la aplicación
+      const updatedVoters = voters.map((voter, index) => ({
+        ...voter,
+        auraQuotaBalance: snapshots[index].newBalance,
+        auraRank: snapshots[index].newRank,
+        multiplier: snapshots[index].newMultiplier,
+        votes: cloneGameVotes(voter.votes),
+      }));
 
       await onConfirmFinish(updatedVoters, historyRecord);
     } catch (error) {
@@ -131,6 +154,11 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
       }}
     >
       <motion.div
+        ref={modalRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="finish-voting-title"
+        aria-describedby="finish-voting-description"
         className="finish-modal-container bottom-sheet-panel"
         initial={{ y: '100%', opacity: 0, scale: 0.95 }}
         animate={{ y: 0, opacity: 1, scale: 1 }}
@@ -142,8 +170,10 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
         <div className="bottom-sheet-handle" aria-hidden="true"></div>
         <div className="modal-header">
           <div className="modal-title-group">
-            <h2>🏆 FINALIZAR VOTACIÓN Y ASIGNAR CUOTAS</h2>
-            <p>Registra quiénes pagaron la cuota del juego ganador para actualizar el sistema de Aura.</p>
+            <h2 id="finish-voting-title">🏆 FINALIZAR VOTACIÓN Y ASIGNAR CUOTAS</h2>
+            <p id="finish-voting-description">
+              Registra quiénes pagaron la cuota del juego ganador para actualizar el sistema de Aura.
+            </p>
           </div>
           <motion.button
             type="button"
@@ -154,6 +184,7 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
               }
             }}
             disabled={isSaving}
+            aria-label="Cerrar modal de finalización"
             whileHover={isSaving ? {} : { scale: 1.15 }}
             whileTap={isSaving ? {} : { scale: 0.9 }}
           >
@@ -184,8 +215,65 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
         </div>
 
         {/* VOTERS PAYMENT TOGGLE LIST */}
-        <div className="voters-payment-section">
-          <h3>👥 ¿CADA INTEGRANTE PAGÓ SU CUOTA DEL JUEGO GANADOR?</h3>
+        <fieldset className="voters-payment-section" aria-labelledby="voters-payment-heading">
+          <legend className="sr-only">
+            ¿Cada integrante pagó su cuota del juego ganador para el cálculo de Aura?
+          </legend>
+
+          <div className="voters-payment-header-row">
+            <div className="voters-payment-title-group">
+              <h3 id="voters-payment-heading">👥 ¿CADA INTEGRANTE PAGÓ SU CUOTA DEL JUEGO GANADOR?</h3>
+              <p className="voters-payment-subtitle">
+                Los pagos modifican el saldo de cuotas y el rango de Aura de cada integrante.
+              </p>
+            </div>
+
+            <div className="voters-payment-controls-row">
+              <div className="voters-payment-summary-chips">
+                {paymentStats.unpaidCount === 0 ? (
+                  <span className="summary-chip chip-all-paid">
+                    ✨ Todos al día ({paymentStats.total}/{paymentStats.total})
+                  </span>
+                ) : (
+                  <>
+                    <span className="summary-chip chip-paid">
+                      ✓ {paymentStats.paidCount} pagaron (+1)
+                    </span>
+                    <span className="summary-chip chip-unpaid">
+                      ✕ {paymentStats.unpaidCount} pendiente{paymentStats.unpaidCount > 1 ? 's' : ''} (-1)
+                    </span>
+                  </>
+                )}
+              </div>
+
+              <div className="payment-bulk-actions">
+                <button
+                  type="button"
+                  className="btn-bulk-payment"
+                  onClick={() => handleSetAllPayments(true)}
+                  disabled={isSaving || paymentStats.paidCount === paymentStats.total}
+                  title="Marcar que todos los integrantes pagaron la cuota"
+                >
+                  Todos Sí
+                </button>
+                <button
+                  type="button"
+                  className="btn-bulk-payment"
+                  onClick={() => handleSetAllPayments(false)}
+                  disabled={isSaving || paymentStats.unpaidCount === paymentStats.total}
+                  title="Marcar que ningún integrante pagó la cuota"
+                >
+                  Todos No
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {paymentStats.unpaidCount > 0 && (
+            <div className="payment-unpaid-warning" role="status">
+              ⚠️ <strong>Atención operacional:</strong> {paymentStats.unpaidCount} integrante{paymentStats.unpaidCount > 1 ? 's' : ''} se registrará{paymentStats.unpaidCount > 1 ? 'n' : ''} como impago{paymentStats.unpaidCount > 1 ? 's' : ''} y recibirá{paymentStats.unpaidCount > 1 ? 'n' : ''} <strong>-1 cuota</strong> de penalización de Aura.
+            </div>
+          )}
 
           <div className="voters-payment-grid">
             {voters.map((voter) => {
@@ -201,34 +289,57 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
               );
             })}
           </div>
-        </div>
+        </fieldset>
 
-        {/* MODAL ACTIONS */}
-        <div className="modal-footer-actions">
-          <motion.button
-            type="button"
-            className="btn-modal-cancel"
-            onClick={() => {
-              if (!isSaving) {
-                onClose();
+        {/* OPERATIONAL VERIFICATION CHECKBOX & MODAL ACTIONS */}
+        <div className="modal-footer-wrapper">
+          <label className="payment-confirmation-checkbox-label">
+            <input
+              type="checkbox"
+              id="confirm-aura-payments-checkbox"
+              checked={hasConfirmedReview}
+              onChange={(e) => setHasConfirmedReview(e.target.checked)}
+              disabled={isSaving}
+            />
+            <span className="checkbox-text">
+              He verificado el estado de pago de todos los integrantes y confirmo aplicar los cambios de Aura ({paymentStats.paidCount} pagados, {paymentStats.unpaidCount} pendientes).
+            </span>
+          </label>
+
+          <div className="modal-footer-actions">
+            <motion.button
+              type="button"
+              className="btn-modal-cancel"
+              onClick={() => {
+                if (!isSaving) {
+                  onClose();
+                }
+              }}
+              disabled={isSaving}
+              whileHover={isSaving ? {} : { scale: 1.03 }}
+              whileTap={isSaving ? {} : { scale: 0.97 }}
+            >
+              Cancelar
+            </motion.button>
+            <motion.button
+              type="button"
+              className="btn-modal-confirm"
+              onClick={handleConfirm}
+              disabled={isSaving || !hasConfirmedReview}
+              aria-busy={isSaving}
+              title={
+                !hasConfirmedReview
+                  ? 'Debes marcar la casilla de verificación antes de registrar los pagos'
+                  : undefined
               }
-            }}
-            disabled={isSaving}
-            whileHover={isSaving ? {} : { scale: 1.03 }}
-            whileTap={isSaving ? {} : { scale: 0.97 }}
-          >
-            Cancelar
-          </motion.button>
-          <motion.button
-            type="button"
-            className="btn-modal-confirm"
-            onClick={handleConfirm}
-            disabled={isSaving}
-            whileHover={isSaving ? {} : { scale: 1.03 }}
-            whileTap={isSaving ? {} : { scale: 0.97 }}
-          >
-            {isSaving ? 'Guardando votación…' : '✓ Confirmar y Guardar Votación'}
-          </motion.button>
+              whileHover={isSaving || !hasConfirmedReview ? {} : { scale: 1.03 }}
+              whileTap={isSaving || !hasConfirmedReview ? {} : { scale: 0.97 }}
+            >
+              {isSaving
+                ? 'Guardando votación y pagos…'
+                : `✓ Confirmar y registrar pagos de Aura (${paymentStats.paidCount} de ${paymentStats.total})`}
+            </motion.button>
+          </div>
         </div>
       </motion.div>
     </motion.div>
