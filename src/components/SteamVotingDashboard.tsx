@@ -339,12 +339,12 @@ export const SteamVotingDashboard: React.FC = () => {
       }
     };
 
-    loadAllData();
+    void loadAllData();
   }, []);
 
   useEffect(() => {
     if (!canManageContent && isEditMode) {
-      Promise.resolve().then(() => {
+      void Promise.resolve().then(() => {
         setIsEditMode(false);
       });
     }
@@ -355,7 +355,7 @@ export const SteamVotingDashboard: React.FC = () => {
     if (votersDebounceRef.current) {
       clearTimeout(votersDebounceRef.current);
     }
-    Promise.resolve().then(() => {
+    void Promise.resolve().then(() => {
       setSyncState({ status: 'saving', message: 'Guardando...' });
     });
     votersDebounceRef.current = setTimeout(async () => {
@@ -368,7 +368,7 @@ export const SteamVotingDashboard: React.FC = () => {
     if (gamesDebounceRef.current) {
       clearTimeout(gamesDebounceRef.current);
     }
-    Promise.resolve().then(() => {
+    void Promise.resolve().then(() => {
       setSyncState({ status: 'saving', message: 'Guardando...' });
     });
     gamesDebounceRef.current = setTimeout(async () => {
@@ -439,7 +439,7 @@ export const SteamVotingDashboard: React.FC = () => {
     const { changed, updatedVoters } = reconcileVoterVotes(voters, gameIds);
 
     if (changed) {
-      Promise.resolve().then(() => {
+      void Promise.resolve().then(() => {
         setVoters(updatedVoters);
       });
     }
@@ -595,7 +595,7 @@ export const SteamVotingDashboard: React.FC = () => {
   const handleToggleEditMode = useCallback(() => {
     if (!canManageContent) {
       // Desbloqueo asíncrono vía modal BottomSheet
-      requestAdminUnlockViaModal().then((unlocked) => {
+      void requestAdminUnlockViaModal().then((unlocked) => {
         setAdminAccess(getAdminAccessState());
         if (unlocked) {
           setIsEditMode((prev) => !prev);
@@ -671,7 +671,7 @@ export const SteamVotingDashboard: React.FC = () => {
     }
   };
 
-  const handleResetAllAura = async () => {
+  const handleResetAllAura = () => {
     setVoters((prev) => prev.map(resetVoterAura));
     setSyncState({ status: 'synced', message: 'Aura restablecido para todos' });
     setShowResetAuraConfirm(false);
@@ -734,7 +734,7 @@ export const SteamVotingDashboard: React.FC = () => {
     setVoterToDelete(voter);
   };
 
-  const handleConfirmDeleteVoter = async () => {
+  const handleConfirmDeleteVoter = () => {
     if (!voterToDelete) return;
     if (voters.length <= MIN_VOTERS) {
       setVoterToDelete(null);

@@ -36,19 +36,63 @@ let appCheck: AppCheck | null = null;
 let isConfigured = false;
 
 /**
+ * Comprueba si las credenciales de Firebase configuradas son válidas (no de ejemplo ni vacías).
+ */
+function hasValidFirebaseConfig(): boolean {
+  return (
+    Boolean(firebaseConfig.apiKey) &&
+    !firebaseConfig.apiKey.includes('XXXXXXXX') &&
+    Boolean(firebaseConfig.projectId) &&
+    !firebaseConfig.projectId.includes('tu-proyecto')
+  );
+}
+
+/**
+ * Inicializa Firebase App Check si se encuentra en entorno de navegador.
+ */
+function setupAppCheck(firebaseApp: FirebaseApp): AppCheck | null {
+  if (typeof window === 'undefined') return null;
+
+  const recaptchaSiteKey = (
+    import.meta.env.VITE_RECAPTCHA_SITE_KEY ||
+    import.meta.env.VITE_FIREBASE_APPCHECK_KEY ||
+    ''
+  ) as string;
+
+  try {
+    if (import.meta.env.DEV && !recaptchaSiteKey) {
+      // Permite token de depuración para desarrollo local
+      // @ts-expect-error - Flag global de depuración para App Check en desarrollo
+      self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+    }
+
+    if (recaptchaSiteKey) {
+      const instance = initializeAppCheck(firebaseApp, {
+        provider: new ReCaptchaV3Provider(recaptchaSiteKey),
+        isTokenAutoRefreshEnabled: true,
+      });
+      if (import.meta.env.DEV) {
+        console.log('[System] Verificación de integridad inicializada.');
+      }
+      return instance;
+    }
+  } catch (appCheckErr) {
+    if (import.meta.env.DEV) {
+      console.warn('[System] No se pudo inicializar la verificación de integridad:', appCheckErr);
+    }
+  }
+
+  return null;
+}
+
+/**
  * Inicializa Firebase si las credenciales han sido configuradas.
  * Detecta automáticamente si las llaves siguen siendo las de ejemplo.
  */
 export function initFirebase(): { db: Firestore | null; isConfigured: boolean } {
   if (app) return { db, isConfigured };
 
-  const hasRealKeys =
-    Boolean(firebaseConfig.apiKey) &&
-    !firebaseConfig.apiKey.includes('XXXXXXXX') &&
-    Boolean(firebaseConfig.projectId) &&
-    !firebaseConfig.projectId.includes('tu-proyecto');
-
-  if (!hasRealKeys) {
+  if (!hasValidFirebaseConfig()) {
     if (import.meta.env.DEV) {
       console.warn(
         '[System] Servicios remotos no configurados. Operando en modo local.'
@@ -66,43 +110,7 @@ export function initFirebase(): { db: Firestore | null; isConfigured: boolean } 
     });
     auth = getAuth(app);
     isConfigured = true;
-
-    // Inicialización de Firebase App Check:
-    // 1. Mitigación de abuso automatizado: adjunta un token de atestación a las peticiones hacia Firestore.
-    //    NOTA OPERATIVA: El backend solo rechazará clientes no verificados una vez activado el modo "Enforcement"
-    //    en la consola de Firebase (Firestore > App Check > Enforce).
-    // 2. MEJORA FUTURA: Evaluar la transición de ReCaptchaV3Provider a ReCaptchaEnterpriseProvider
-    //    conforme a las recomendaciones actuales de Firebase para integraciones web modernas.
-    // 3. No sustituye Firebase Auth ni las Security Rules (la autorización reside exclusivamente en las reglas).
-    const recaptchaSiteKey = (
-      import.meta.env.VITE_RECAPTCHA_SITE_KEY ||
-      import.meta.env.VITE_FIREBASE_APPCHECK_KEY ||
-      ''
-    ) as string;
-
-    if (typeof window !== 'undefined') {
-      try {
-        if (import.meta.env.DEV && !recaptchaSiteKey) {
-          // Permite token de depuración para desarrollo local
-          // @ts-expect-error - Flag global de depuración para App Check en desarrollo
-          self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
-        }
-
-        if (recaptchaSiteKey) {
-          appCheck = initializeAppCheck(app, {
-            provider: new ReCaptchaV3Provider(recaptchaSiteKey),
-            isTokenAutoRefreshEnabled: true,
-          });
-          if (import.meta.env.DEV) {
-            console.log('[System] Verificación de integridad inicializada.');
-          }
-        }
-      } catch (appCheckErr) {
-        if (import.meta.env.DEV) {
-          console.warn('[System] No se pudo inicializar la verificación de integridad:', appCheckErr);
-        }
-      }
-    }
+    appCheck = setupAppCheck(app);
 
     if (import.meta.env.DEV) {
       console.log('[System] Servicios remotos listos.');

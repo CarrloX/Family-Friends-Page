@@ -55,7 +55,7 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
   }, [isSaving, onClose]);
 
   const handleConfirm = async () => {
-    if (isSaving || !winningResult || !winningResult.game) return;
+    if (isSaving || !winningResult?.game) return;
 
     setIsSaving(true);
     try {
@@ -111,7 +111,7 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
   };
 
   // Precondición explícita: si allResults está vacío o no hay juego ganador válido, el modal no se renderiza
-  if (!winningResult || !winningResult.game) {
+  if (!winningResult?.game) {
     return null;
   }
 

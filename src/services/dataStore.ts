@@ -152,6 +152,28 @@ export function removeUndefinedDeep<T>(value: T): T {
 // ============================================================
 
 /**
+ * Maneja errores ocurridos durante la sincronización con Firestore.
+ * Si es error de permisos retorna error informativo; de lo contrario ejecuta el guardado local y retorna estado offline.
+ */
+function handleSyncError(
+  err: unknown,
+  saveFallback: () => void,
+  warnContext: string
+): SyncState {
+  if (isPermissionDeniedError(err)) {
+    if (import.meta.env.DEV) {
+      console.error('[Store] Operación denegada: permisos insuficientes.');
+    }
+    return { status: 'error', message: 'Permiso denegado por el servidor: requiere rol de administrador' };
+  }
+  if (import.meta.env.DEV) {
+    console.warn(`[Store] ${warnContext}:`, err);
+  }
+  saveFallback();
+  return { status: 'local', message: 'Guardado localmente (sin conexión)' };
+}
+
+/**
  * Guarda la lista de votantes. Prioriza Firestore, fallback a localStorage.
  */
 export async function saveVoters(voters: Voter[]): Promise<SyncState> {
@@ -170,17 +192,7 @@ export async function saveVoters(voters: Voter[]): Promise<SyncState> {
       }
       return { status: 'synced', message: 'Sincronizado con la nube' };
     } catch (err) {
-      if (isPermissionDeniedError(err)) {
-        if (import.meta.env.DEV) {
-          console.error('[Store] Operación denegada: permisos insuficientes.');
-        }
-        return { status: 'error', message: 'Permiso denegado por el servidor: requiere rol de administrador' };
-      }
-      if (import.meta.env.DEV) {
-        console.warn('[Store] Error de sincronización, usando almacenamiento local:', err);
-      }
-      writeLocal(LS_KEY_VOTERS, voters);
-      return { status: 'local', message: 'Guardado localmente (sin conexión)' };
+      return handleSyncError(err, () => writeLocal(LS_KEY_VOTERS, voters), 'Error de sincronización, usando almacenamiento local');
     }
   }
   writeLocal(LS_KEY_VOTERS, voters);
@@ -215,17 +227,7 @@ export async function saveActiveVotingState(voters: Voter[], gamesMap: Record<st
       }
       return { status: 'synced', message: 'Votación actual sincronizada' };
     } catch (err) {
-      if (isPermissionDeniedError(err)) {
-        if (import.meta.env.DEV) {
-          console.error('[Store] Operación denegada: permisos insuficientes.');
-        }
-        return { status: 'error', message: 'Permiso denegado por el servidor: requiere rol de administrador' };
-      }
-      if (import.meta.env.DEV) {
-        console.warn('[Store] Error de sincronización, usando almacenamiento local:', err);
-      }
-      writeLocal(LS_KEY_ACTIVE_VOTING, { voters, gamesMap, games });
-      return { status: 'local', message: 'Votación actual guardada localmente' };
+      return handleSyncError(err, () => writeLocal(LS_KEY_ACTIVE_VOTING, { voters, gamesMap, games }), 'Error de sincronización, usando almacenamiento local');
     }
   }
 
@@ -337,6 +339,32 @@ export async function loadActiveVotingState(): Promise<{ voters: Voter[]; gamesM
   return loadCachedActiveVoting();
 }
 
+async function fetchFirestoreVoters(): Promise<Voter[] | null> {
+  if (!isFirebaseReady()) return null;
+
+  try {
+    const db = getFirestoreInstance()!;
+    const docRef = doc(db, COLLECTION_GROUP, DOC_MIEMBROS);
+    const snap = await getDoc(docRef);
+    if (!snap.exists()) return null;
+
+    const data = snap.data() as GrupoDocument;
+    if (Array.isArray(data.voters) && data.voters.length > 0) {
+      if (import.meta.env.DEV) {
+        console.log('[Store] Datos de participantes recuperados.');
+      }
+      writeLocal(LS_KEY_VOTERS, data.voters);
+      return data.voters;
+    }
+  } catch (err) {
+    if (import.meta.env.DEV) {
+      console.warn('[Store] Error recuperando participantes remotos:', err);
+    }
+  }
+
+  return null;
+}
+
 /**
  * Carga la lista de votantes. Prioriza la votación activa en Firestore, fallback a la colección de grupo y localStorage.
  */
@@ -346,27 +374,11 @@ export async function loadVoters(): Promise<Voter[]> {
     return activeVoting.voters;
   }
 
-  if (isFirebaseReady()) {
-    try {
-      const db = getFirestoreInstance()!;
-      const docRef = doc(db, COLLECTION_GROUP, DOC_MIEMBROS);
-      const snap = await getDoc(docRef);
-      if (snap.exists()) {
-        const data = snap.data() as GrupoDocument;
-        if (Array.isArray(data.voters) && data.voters.length > 0) {
-          if (import.meta.env.DEV) {
-            console.log('[Store] Datos de participantes recuperados.');
-          }
-          writeLocal(LS_KEY_VOTERS, data.voters);
-          return data.voters;
-        }
-      }
-    } catch (err) {
-      if (import.meta.env.DEV) {
-        console.warn('[Store] Error recuperando participantes remotos:', err);
-      }
-    }
+  const firestoreVoters = await fetchFirestoreVoters();
+  if (firestoreVoters) {
+    return firestoreVoters;
   }
+
   return readLocal<Voter[]>(LS_KEY_VOTERS, []);
 }
 
@@ -396,21 +408,51 @@ export async function saveGames(gamesMap: Record<string, Game>): Promise<SyncSta
       }
       return { status: 'synced', message: 'Sincronizado con la nube' };
     } catch (err) {
-      if (isPermissionDeniedError(err)) {
-        if (import.meta.env.DEV) {
-          console.error('[Store] Operación denegada: permisos insuficientes.');
-        }
-        return { status: 'error', message: 'Permiso denegado por el servidor: requiere rol de administrador' };
-      }
-      if (import.meta.env.DEV) {
-        console.warn('[Store] Error sincronizando catálogo, usando almacenamiento local:', err);
-      }
-      writeLocal(LS_KEY_GAMES, gamesMap);
-      return { status: 'local', message: 'Guardado localmente (sin conexión)' };
+      return handleSyncError(err, () => writeLocal(LS_KEY_GAMES, gamesMap), 'Error sincronizando catálogo, usando almacenamiento local');
     }
   }
   writeLocal(LS_KEY_GAMES, gamesMap);
   return { status: 'local', message: 'Guardado localmente' };
+}
+
+/**
+ * Carga el mapa de juegos. Prioriza la votación activa en Firestore, fallback a la colección de grupo y localStorage.
+ */
+async function fetchFirestoreGames(): Promise<Record<string, Game> | null> {
+  if (!isFirebaseReady()) return null;
+
+  try {
+    const db = getFirestoreInstance()!;
+    const docRef = doc(db, COLLECTION_GROUP, DOC_MIEMBROS);
+    const snap = await getDoc(docRef);
+    if (!snap.exists()) return null;
+
+    const data = snap.data() as GrupoDocument;
+    if (data.gamesMap && typeof data.gamesMap === 'object') {
+      if (import.meta.env.DEV) {
+        console.log('[Store] Catálogo recuperado.');
+      }
+      const cleanMap = sanitizeGamesMap(data.gamesMap);
+      writeLocal(LS_KEY_GAMES, cleanMap);
+      return cleanMap;
+    }
+    // Fallback: si solo existe el array `games`, reconstruir el mapa
+    if (Array.isArray(data.games)) {
+      const rebuiltMap: Record<string, Game> = {};
+      data.games.forEach((g) => { rebuiltMap[g.id] = sanitizeGame(g); });
+      if (import.meta.env.DEV) {
+        console.log('[Store] Estructura reconstruida desde datos existentes.');
+      }
+      writeLocal(LS_KEY_GAMES, rebuiltMap);
+      return rebuiltMap;
+    }
+  } catch (err) {
+    if (import.meta.env.DEV) {
+      console.warn('[Store] Error recuperando catálogo:', err);
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -422,39 +464,18 @@ export async function loadGames(): Promise<Record<string, Game>> {
     return activeVoting.gamesMap;
   }
 
-  if (isFirebaseReady()) {
-    try {
-      const db = getFirestoreInstance()!;
-      const docRef = doc(db, COLLECTION_GROUP, DOC_MIEMBROS);
-      const snap = await getDoc(docRef);
-      if (snap.exists()) {
-        const data = snap.data() as GrupoDocument;
-        if (data.gamesMap && typeof data.gamesMap === 'object') {
-          if (import.meta.env.DEV) {
-            console.log('[Store] Catálogo recuperado.');
-          }
-          const cleanMap = sanitizeGamesMap(data.gamesMap);
-          writeLocal(LS_KEY_GAMES, cleanMap);
-          return cleanMap;
-        }
-        // Fallback: si solo existe el array `games`, reconstruir el mapa
-        if (Array.isArray(data.games)) {
-          const rebuiltMap: Record<string, Game> = {};
-          data.games.forEach((g) => { rebuiltMap[g.id] = sanitizeGame(g); });
-          if (import.meta.env.DEV) {
-            console.log('[Store] Estructura reconstruida desde datos existentes.');
-          }
-          writeLocal(LS_KEY_GAMES, rebuiltMap);
-          return rebuiltMap;
-        }
-      }
-    } catch (err) {
-      if (import.meta.env.DEV) {
-        console.warn('[Store] Error recuperando catálogo:', err);
-      }
-    }
+  const firestoreGames = await fetchFirestoreGames();
+  if (firestoreGames) {
+    return firestoreGames;
   }
+
   return sanitizeGamesMap(readLocal<Record<string, Game>>(LS_KEY_GAMES, {}));
+}
+
+function appendLocalHistoryRecord(cleanRecord: VotingHistoryRecord): void {
+  const history = readLocal<VotingHistoryRecord[]>(LS_KEY_HISTORY, []);
+  history.unshift(cleanRecord);
+  writeLocal(LS_KEY_HISTORY, history);
 }
 
 /**
@@ -482,24 +503,15 @@ export async function addHistoryRecord(record: VotingHistoryRecord): Promise<Syn
       }
       return { status: 'synced', message: 'Sincronizado con la nube' };
     } catch (err) {
-      if (isPermissionDeniedError(err)) {
-        if (import.meta.env.DEV) {
-          console.error('[Store] Operación denegada: permisos insuficientes.');
-        }
-        return { status: 'error', message: 'Permiso denegado por el servidor: requiere rol de administrador' };
-      }
-      if (import.meta.env.DEV) {
-        console.warn('[Store] Error archivando registro, usando almacenamiento local:', err);
-      }
-      const history = readLocal<VotingHistoryRecord[]>(LS_KEY_HISTORY, []);
-      history.unshift(cleanRecord);
-      writeLocal(LS_KEY_HISTORY, history);
-      return { status: 'local', message: 'Guardado localmente (sin conexión)' };
+      return handleSyncError(
+        err,
+        () => appendLocalHistoryRecord(cleanRecord),
+        'Error archivando registro, usando almacenamiento local'
+      );
     }
   }
-  const history = readLocal<VotingHistoryRecord[]>(LS_KEY_HISTORY, []);
-  history.unshift(cleanRecord);
-  writeLocal(LS_KEY_HISTORY, history);
+
+  appendLocalHistoryRecord(cleanRecord);
   return { status: 'local', message: 'Guardado localmente' };
 }
 
@@ -535,6 +547,35 @@ export async function loadHistory(): Promise<VotingHistoryRecord[]> {
   return localHistory.map(sanitizeVotingHistoryRecord);
 }
 
+async function deleteFirestoreHistoryDoc(recordId: string): Promise<SyncState | null> {
+  if (!isFirebaseReady()) return null;
+
+  try {
+    const db = getFirestoreInstance()!;
+    const colRef = collection(db, COLLECTION_HISTORY);
+    const snap = await getDocs(colRef);
+    const docToDelete = snap.docs.find((d) => d.data().id === recordId);
+    if (docToDelete) {
+      await deleteDoc(docToDelete.ref);
+      if (import.meta.env.DEV) {
+        console.log('[Store] Registro eliminado del almacenamiento remoto.');
+      }
+    }
+    return null;
+  } catch (err) {
+    if (isPermissionDeniedError(err)) {
+      if (import.meta.env.DEV) {
+        console.error('[Store] Operación denegada: permisos insuficientes.');
+      }
+      return { status: 'error', message: 'Permiso denegado por el servidor: requiere rol de administrador' };
+    }
+    if (import.meta.env.DEV) {
+      console.warn('[Store] Error eliminando registro remoto:', err);
+    }
+    return null;
+  }
+}
+
 /**
  * Elimina un registro específico del historial por su ID.
  */
@@ -543,35 +584,42 @@ export async function deleteHistoryRecord(recordId: string): Promise<SyncState> 
     return buildReadOnlyState();
   }
 
-  if (isFirebaseReady()) {
-    try {
-      const db = getFirestoreInstance()!;
-      const colRef = collection(db, COLLECTION_HISTORY);
-      const snap = await getDocs(colRef);
-      const docToDelete = snap.docs.find((d) => d.data().id === recordId);
-      if (docToDelete) {
-        await deleteDoc(docToDelete.ref);
-        if (import.meta.env.DEV) {
-          console.log('[Store] Registro eliminado del almacenamiento remoto.');
-        }
-      }
-    } catch (err) {
-      if (isPermissionDeniedError(err)) {
-        if (import.meta.env.DEV) {
-          console.error('[Store] Operación denegada: permisos insuficientes.');
-        }
-        return { status: 'error', message: 'Permiso denegado por el servidor: requiere rol de administrador' };
-      }
-      if (import.meta.env.DEV) {
-        console.warn('[Store] Error eliminando registro remoto:', err);
-      }
-    }
+  const firestoreError = await deleteFirestoreHistoryDoc(recordId);
+  if (firestoreError) {
+    return firestoreError;
   }
 
   const history = readLocal<VotingHistoryRecord[]>(LS_KEY_HISTORY, []);
   const updated = history.filter((r) => r.id !== recordId);
   writeLocal(LS_KEY_HISTORY, updated);
   return { status: 'synced', message: 'Registro eliminado' };
+}
+
+async function deleteFirestoreHistoryCollection(): Promise<SyncState | null> {
+  if (!isFirebaseReady()) return null;
+
+  try {
+    const db = getFirestoreInstance()!;
+    const colRef = collection(db, COLLECTION_HISTORY);
+    const snap = await getDocs(colRef);
+    const deletePromises = snap.docs.map((d) => deleteDoc(d.ref));
+    await Promise.all(deletePromises);
+    if (import.meta.env.DEV) {
+      console.log('[Store] Registros archivados depurados.');
+    }
+    return null;
+  } catch (err) {
+    if (isPermissionDeniedError(err)) {
+      if (import.meta.env.DEV) {
+        console.error('[Store] Operación denegada: permisos insuficientes.');
+      }
+      return { status: 'error', message: 'Permiso denegado por el servidor: requiere rol de administrador' };
+    }
+    if (import.meta.env.DEV) {
+      console.warn('[Store] Error depurando registros remotos:', err);
+    }
+    return null;
+  }
 }
 
 /**
@@ -582,28 +630,11 @@ export async function clearHistory(): Promise<SyncState> {
     return buildReadOnlyState();
   }
 
-  if (isFirebaseReady()) {
-    try {
-      const db = getFirestoreInstance()!;
-      const colRef = collection(db, COLLECTION_HISTORY);
-      const snap = await getDocs(colRef);
-      const deletePromises = snap.docs.map((d) => deleteDoc(d.ref));
-      await Promise.all(deletePromises);
-      if (import.meta.env.DEV) {
-        console.log('[Store] Registros archivados depurados.');
-      }
-    } catch (err) {
-      if (isPermissionDeniedError(err)) {
-        if (import.meta.env.DEV) {
-          console.error('[Store] Operación denegada: permisos insuficientes.');
-        }
-        return { status: 'error', message: 'Permiso denegado por el servidor: requiere rol de administrador' };
-      }
-      if (import.meta.env.DEV) {
-        console.warn('[Store] Error depurando registros remotos:', err);
-      }
-    }
+  const firestoreError = await deleteFirestoreHistoryCollection();
+  if (firestoreError) {
+    return firestoreError;
   }
+
   removeLocal(LS_KEY_HISTORY);
   return { status: 'synced', message: 'Historial limpiado' };
 }
@@ -836,12 +867,13 @@ export async function importBackup(
       const deletePromises = snap.docs.map((d) => deleteDoc(d.ref));
       await Promise.all(deletePromises);
 
-      for (const record of data.history) {
-        await addDoc(colRef, removeUndefinedDeep({
+      const insertPromises = data.history.map((record) =>
+        addDoc(colRef, removeUndefinedDeep({
           ...record,
           savedAt: Timestamp.now(),
-        }));
-      }
+        }))
+      );
+      await Promise.all(insertPromises);
 
       if (import.meta.env.DEV) {
         console.log('[Store] Respaldo sincronizado.');

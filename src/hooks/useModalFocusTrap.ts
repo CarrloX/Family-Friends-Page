@@ -134,8 +134,8 @@ export function useModalFocusTrap<T extends HTMLElement = HTMLDivElement>(
       } else if (containerRef.current) {
         const focusable = Array.from(
           containerRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)
-        ).filter(isFocusableVisible);
-        focusable[0]?.focus();
+        ).find(isFocusableVisible);
+        focusable?.focus();
       }
     }, initialFocusDelay);
 
@@ -145,7 +145,7 @@ export function useModalFocusTrap<T extends HTMLElement = HTMLDivElement>(
         const targetElement = returnFocusRefSync.current?.current ?? previouslyFocusedRef.current;
         // Se ejecuta en el siguiente frame para permitir que AnimatePresence / React concluyan el desmontaje
         requestAnimationFrame(() => {
-          if (targetElement && targetElement.isConnected) {
+          if (targetElement?.isConnected) {
             targetElement.focus();
           }
         });
