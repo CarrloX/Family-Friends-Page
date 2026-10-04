@@ -174,6 +174,15 @@ export const UserCard: React.FC<UserCardProps> = React.memo(({
     });
   };
 
+  const handleClearUserVotes = () => {
+    if (!onUpdateVoter) return;
+    const clearedVotes = voter.votes.map((v) => ({ ...v, points: 0 }));
+    onUpdateVoter({
+      ...voter,
+      votes: clearedVotes,
+    });
+  };
+
   return (
     <motion.div
       layout
@@ -322,7 +331,17 @@ export const UserCard: React.FC<UserCardProps> = React.memo(({
           </div>
 
           <div className="edit-field-group">
-            <span className="edit-label">🎮 Asignación de Puntos por Juego:</span>
+            <div className="edit-votes-header-row">
+              <span className="edit-label">🎮 Asignación de Puntos por Juego:</span>
+              <button
+                type="button"
+                className="btn-clear-user-votes"
+                onClick={handleClearUserVotes}
+                title="Reiniciar a 0 puntos todos los votos de este integrante"
+              >
+                🧹 Limpiar votos
+              </button>
+            </div>
             <div className="game-votes-editor">
               {displayVotes.map((vote) => {
                 const game = gamesMap[vote.gameId];

@@ -5,11 +5,16 @@ import { calculateAuraStatus, cloneGameSnapshot, createResultsSnapshot, cloneGam
 import { VoterPaymentRow } from './VoterPaymentRow';
 import { GameThumbnail } from './GameThumbnail';
 import { formatHistoryDate } from '../utils/formatDate';
+import { formatCopPrice } from '../services/steamStoreApi';
 import { useModalFocusTrap } from '../hooks/useModalFocusTrap';
 
 interface FinishVotingModalProps {
   allResults: GameResult[];
   voters: Voter[];
+  isPrecioCongelado?: boolean;
+  precioCongelado?: number | null;
+  descuentoCongelado?: number | null;
+  precioCongeladoFormatted?: string | null;
   onConfirmFinish: (
     updatedVoters: Voter[],
     historyRecord: VotingHistoryRecord
@@ -20,6 +25,10 @@ interface FinishVotingModalProps {
 export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
   allResults,
   voters,
+  isPrecioCongelado = false,
+  precioCongelado = null,
+  descuentoCongelado = null,
+  precioCongeladoFormatted = null,
   onConfirmFinish,
   onClose,
 }) => {
@@ -73,6 +82,45 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
     return { paidCount, unpaidCount, total: voters.length };
   }, [voters, quotaPayments]);
 
+  // Si isPrecioCongelado es true, la UI y los cálculos de cobro utilizarán EXCLUSIVAMENTE los valores congelados
+  const effectivePrice = useMemo(() => {
+    if (isPrecioCongelado) {
+      const final = precioCongelado ?? 0;
+      const discount = descuentoCongelado ?? 0;
+      const isFree = final === 0;
+      const formatted = precioCongeladoFormatted || (isFree ? 'Gratis' : formatCopPrice(final));
+      return {
+        isFree,
+        currency: 'COP',
+        final,
+        discountPercent: discount,
+        finalFormatted: formatted,
+      };
+    }
+    return winningResult?.game?.price;
+  }, [isPrecioCongelado, precioCongelado, descuentoCongelado, precioCongeladoFormatted, winningResult?.game?.price]);
+
+  // Cálculo exacto de la cuota individual por integrante
+  const individualQuota = useMemo(() => {
+    if (!effectivePrice || effectivePrice.isFree || !effectivePrice.final || voters.length === 0) {
+      return null;
+    }
+    const quota = Math.ceil(effectivePrice.final / voters.length);
+    return {
+      amount: quota,
+      formatted: formatCopPrice(quota),
+    };
+  }, [effectivePrice, voters.length]);
+
+  // Snapshot del juego ganador desacoplado y con el precio congelado garantizado
+  const winningGame = useMemo(() => {
+    const base = cloneGameSnapshot(winningResult.game);
+    if (effectivePrice) {
+      base.price = { ...effectivePrice };
+    }
+    return base;
+  }, [winningResult.game, effectivePrice]);
+
   const handleConfirm = async () => {
     if (isSaving || !hasConfirmedReview || !winningResult?.game) return;
 
@@ -102,9 +150,6 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
       // 2. Materializar snapshot inmutable de los resultados competitivos
       const resultsSnapshot = createResultsSnapshot(allResults);
 
-      // 3. Materializar snapshot del juego ganador desacoplado
-      const winningGame = cloneGameSnapshot(winningResult.game);
-
       const now = new Date();
       const createdAt = now.toISOString();
       const historyRecord: VotingHistoryRecord = {
@@ -114,6 +159,10 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
         winningGame,
         resultsSnapshot,
         votersSnapshots: snapshots,
+        isPrecioCongelado: Boolean(isPrecioCongelado),
+        precioCongelado: isPrecioCongelado ? (precioCongelado ?? null) : null,
+        descuentoCongelado: isPrecioCongelado ? (descuentoCongelado ?? null) : null,
+        precioCongeladoFormatted: isPrecioCongelado ? (precioCongeladoFormatted ?? null) : null,
       };
 
       // 4. Actualizar votantes para el estado activo de la aplicación
@@ -137,8 +186,6 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
   if (!winningResult?.game) {
     return null;
   }
-
-  const winningGame = winningResult.game;
 
   return (
     <motion.div
@@ -204,10 +251,25 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
             <h4>{winningGame.title}</h4>
             <div className="winner-modal-meta-row">
               <span className="winner-points">{winningResult.weightedPoints} Puntos Ponderados</span>
-              {winningGame.price?.finalFormatted && (
-                <span className="winner-modal-price">
-                  🏷️ {winningGame.price.finalFormatted}
-                  {winningGame.price.discountPercent ? ` (-${winningGame.price.discountPercent}%)` : ''}
+              {isPrecioCongelado && effectivePrice ? (
+                <span className="winner-modal-price frozen" title="Valor congelado previamente en administración">
+                  🔒 {effectivePrice.finalFormatted}
+                  {effectivePrice.discountPercent && effectivePrice.discountPercent > 0
+                    ? ` (-${effectivePrice.discountPercent}%)`
+                    : ''}
+                  <span className="frozen-tag-pill">Precio Congelado</span>
+                </span>
+              ) : (
+                effectivePrice?.finalFormatted && (
+                  <span className="winner-modal-price">
+                    🏷️ {effectivePrice.finalFormatted}
+                    {effectivePrice.discountPercent ? ` (-${effectivePrice.discountPercent}%)` : ''}
+                  </span>
+                )
+              )}
+              {individualQuota && (
+                <span className="winner-modal-quota-split">
+                  💵 Cuota: <strong>{individualQuota.formatted}</strong> / integrante ({voters.length} miembros)
                 </span>
               )}
             </div>

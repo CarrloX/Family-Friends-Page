@@ -12,14 +12,18 @@ import { DashboardSkeleton } from './DashboardSkeleton';
 import { AdminPinModal } from './AdminPinModal';
 import { useModalFocusTrap } from '../hooks/useModalFocusTrap';
 import { calculateResults } from '../data/votingData';
-import type { Voter, Game, VotingHistoryRecord, AuraRank } from '../types/voting';
+import type { Voter, Game, VotingHistoryRecord, AuraRank, FreezePriceState, SteamPriceInfo } from '../types/voting';
 import { getMaxVotePoints } from '../types/voting';
 import { FaCog } from "react-icons/fa";
+import { formatCopPrice } from '../services/steamStoreApi';
 import {
   saveVoters,
   saveGames,
   saveActiveVotingState,
   saveFinishedVotingSession,
+  saveFreezePriceState,
+  unfreezePriceState,
+  loadActiveVotingState,
   loadVoters,
   loadGames,
   loadHistory,
@@ -31,6 +35,7 @@ import {
   createBackupData,
   downloadBackup,
   importBackup,
+  DEFAULT_FREEZE_STATE,
   type SyncState,
 } from '../services/dataStore';
 import {
@@ -252,6 +257,8 @@ export const SteamVotingDashboard: React.FC = () => {
   const [gamesMap, setGamesMap] = useState<Record<string, Game>>({});
   const [history, setHistory] = useState<VotingHistoryRecord[]>([]);
   const [steamApiKey, setSteamApiKey] = useState<string>('');
+  const [freezeState, setFreezeState] = useState<FreezePriceState>(DEFAULT_FREEZE_STATE);
+  const [isFreezingLoading, setIsFreezingLoading] = useState<boolean>(false);
 
   const [isEditMode, setIsEditMode] = useState<boolean>(false);
   const [showFinishModal, setShowFinishModal] = useState<boolean>(false);
@@ -317,18 +324,23 @@ export const SteamVotingDashboard: React.FC = () => {
     const loadAllData = async () => {
       setIsLoading(true);
       try {
-        const [loadedVoters, loadedGames, loadedHistory, loadedApiKey] =
+        const [loadedActive, loadedVoters, loadedGames, loadedHistory, loadedApiKey] =
           await Promise.all([
+            loadActiveVotingState(),
             loadVoters(),
             loadGames(),
             loadHistory(),
             Promise.resolve(loadApiKey()),
           ]);
 
-        setVoters(loadedVoters);
-        setGamesMap(loadedGames);
+        setVoters(loadedActive?.voters && loadedActive.voters.length > 0 ? loadedActive.voters : loadedVoters);
+        setGamesMap(loadedActive?.gamesMap && Object.keys(loadedActive.gamesMap).length > 0 ? loadedActive.gamesMap : loadedGames);
         setHistory(loadedHistory);
         setSteamApiKey(loadedApiKey);
+
+        if (loadedActive?.freezeState) {
+          setFreezeState(loadedActive.freezeState);
+        }
 
         if (loadedVoters.length > 0 || Object.keys(loadedGames).length > 0) {
           setSyncState({ status: 'synced', message: 'Datos cargados' });
@@ -383,19 +395,22 @@ export const SteamVotingDashboard: React.FC = () => {
     }, DEBOUNCE_MS);
   }, []);
 
-  const debouncedSaveActiveVoting = useCallback((votersToSave: Voter[], gamesToSave: Record<string, Game>) => {
-    if (activeDebounceRef.current) {
-      clearTimeout(activeDebounceRef.current);
-    }
-    if (skipNextActiveSaveRef.current) {
-      skipNextActiveSaveRef.current = false;
-      return;
-    }
-    activeDebounceRef.current = setTimeout(async () => {
-      const result = await saveActiveVotingState(votersToSave, gamesToSave);
-      setSyncState(result);
-    }, DEBOUNCE_MS);
-  }, []);
+  const debouncedSaveActiveVoting = useCallback(
+    (votersToSave: Voter[], gamesToSave: Record<string, Game>, currentFreezeState?: FreezePriceState) => {
+      if (activeDebounceRef.current) {
+        clearTimeout(activeDebounceRef.current);
+      }
+      if (skipNextActiveSaveRef.current) {
+        skipNextActiveSaveRef.current = false;
+        return;
+      }
+      activeDebounceRef.current = setTimeout(async () => {
+        const result = await saveActiveVotingState(votersToSave, gamesToSave, currentFreezeState);
+        setSyncState(result);
+      }, DEBOUNCE_MS);
+    },
+    []
+  );
 
   const debouncedSaveApiKey = useCallback((apiKey: string) => {
     if (apiKeyDebounceRef.current) {
@@ -420,9 +435,9 @@ export const SteamVotingDashboard: React.FC = () => {
 
   useEffect(() => {
     if (!isLoading && canManageContent) {
-      debouncedSaveActiveVoting(voters, gamesMap);
+      debouncedSaveActiveVoting(voters, gamesMap, freezeState);
     }
-  }, [voters, gamesMap, isLoading, canManageContent, debouncedSaveActiveVoting]);
+  }, [voters, gamesMap, freezeState, isLoading, canManageContent, debouncedSaveActiveVoting]);
 
   useEffect(() => {
     if (!isLoading) {
@@ -455,6 +470,133 @@ export const SteamVotingDashboard: React.FC = () => {
     }
   }, [gamesMap, voters]);
 
+  // ─── Descongelado automático al iniciar o modificar nuevo ciclo de votación ───
+  const autoUnfreezePrice = useCallback(async (reason: string) => {
+    if (!freezeState.isPrecioCongelado) return;
+
+    if (import.meta.env.DEV) {
+      console.log(`[Dashboard] Descongelamiento automático: ${reason}`);
+    }
+
+    const resetFreezeState: FreezePriceState = {
+      isPrecioCongelado: false,
+      precioCongelado: null,
+      descuentoCongelado: null,
+      precioCongeladoFormatted: null,
+      precioOriginalCongelado: null,
+      precioOriginalCongeladoFormatted: null,
+      congeladoAt: null,
+      gameId: null,
+    };
+
+    setFreezeState(resetFreezeState);
+    await unfreezePriceState();
+    setSyncState({ status: 'synced', message: `Precio descongelado (${reason})` });
+  }, [freezeState.isPrecioCongelado]);
+
+  // ─── Toggle interactivo de congelamiento de precio (Modo Edición) ───
+  const handleToggleFreezePrice = useCallback(async (currentLivePrice: SteamPriceInfo | null) => {
+    if (!canManageContent) return;
+
+    setIsFreezingLoading(true);
+    try {
+      if (!freezeState.isPrecioCongelado) {
+        // Capturar precio actual y porcentaje de descuento del juego ganador
+        const winningResult = results[0];
+        const priceToFreeze = currentLivePrice || winningResult?.game?.price || null;
+
+        const finalPrice = priceToFreeze?.final ?? 0;
+        const discountPercent = priceToFreeze?.discountPercent ?? 0;
+        const isFree = Boolean(priceToFreeze?.isFree || finalPrice === 0);
+        const formattedPrice = priceToFreeze?.finalFormatted || (isFree ? 'Gratis' : formatCopPrice(finalPrice));
+
+        const newFreezeState: FreezePriceState = {
+          isPrecioCongelado: true,
+          precioCongelado: finalPrice,
+          descuentoCongelado: discountPercent,
+          precioCongeladoFormatted: formattedPrice,
+          precioOriginalCongelado: priceToFreeze?.initial ?? finalPrice,
+          precioOriginalCongeladoFormatted: priceToFreeze?.initialFormatted ?? formattedPrice,
+          congeladoAt: new Date().toISOString(),
+          gameId: winningResult?.game?.id ?? null,
+        };
+
+        setFreezeState(newFreezeState);
+        setSyncState({ status: 'saving', message: 'Congelando precio...' });
+        const syncRes = await saveFreezePriceState(newFreezeState);
+        setSyncState(syncRes);
+      } else {
+        // Descongelar precio: liberar valores congelados y regresar a false
+        const resetFreezeState: FreezePriceState = {
+          isPrecioCongelado: false,
+          precioCongelado: null,
+          descuentoCongelado: null,
+          precioCongeladoFormatted: null,
+          precioOriginalCongelado: null,
+          precioOriginalCongeladoFormatted: null,
+          congeladoAt: null,
+          gameId: null,
+        };
+
+        setFreezeState(resetFreezeState);
+        setSyncState({ status: 'saving', message: 'Descongelando precio...' });
+        const syncRes = await unfreezePriceState();
+        setSyncState(syncRes);
+      }
+    } catch (err) {
+      console.error('[Dashboard] Error al alternar congelamiento de precio:', err);
+      setSyncState({ status: 'error', message: 'Error al cambiar estado de precio congelado' });
+    } finally {
+      setIsFreezingLoading(false);
+    }
+  }, [canManageContent, freezeState.isPrecioCongelado, results]);
+
+  // ─── Watcher reactivo: Descongelado automático ante cambios en el ciclo de votación ───
+  const prevGamesSignatureRef = useRef<string>('');
+  const prevWinnerIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (isLoading) return;
+
+    const gameIds = Object.keys(gamesMap).sort().join(',');
+    const winnerId = results[0]?.game?.id || null;
+
+    if (!prevGamesSignatureRef.current) {
+      prevGamesSignatureRef.current = gameIds;
+      prevWinnerIdRef.current = winnerId;
+      return;
+    }
+
+    // 1. Si la lista de juegos propuestos cambió
+    if (freezeState.isPrecioCongelado && prevGamesSignatureRef.current !== gameIds) {
+      void Promise.resolve().then(() => {
+        void autoUnfreezePrice('cambio en lista de juegos');
+      });
+    }
+
+    // 2. Si el juego ganador cambió
+    if (
+      freezeState.isPrecioCongelado &&
+      freezeState.gameId &&
+      winnerId &&
+      freezeState.gameId !== winnerId
+    ) {
+      void Promise.resolve().then(() => {
+        void autoUnfreezePrice('cambio de juego ganador');
+      });
+    }
+
+    // 3. Si se limpiaron todos los votos de la sesión
+    if (freezeState.isPrecioCongelado && totalAssignedPoints === 0) {
+      void Promise.resolve().then(() => {
+        void autoUnfreezePrice('votos reiniciados');
+      });
+    }
+
+    prevGamesSignatureRef.current = gameIds;
+    prevWinnerIdRef.current = winnerId;
+  }, [gamesMap, results, freezeState.isPrecioCongelado, freezeState.gameId, totalAssignedPoints, isLoading, autoUnfreezePrice]);
+
   // ─── Handlers ─────────────────────────────────────────────
   const handleUpdateVoter = useCallback((updatedVoter: Voter) => {
     setVoters((prev) => prev.map((v) => (v.id === updatedVoter.id ? updatedVoter : v)));
@@ -465,7 +607,8 @@ export const SteamVotingDashboard: React.FC = () => {
       ...prev,
       [gameId]: updatedGame,
     }));
-  }, []);
+    void autoUnfreezePrice('juego modificado');
+  }, [autoUnfreezePrice]);
 
   const handleAddGame = useCallback(() => {
     const currentCount = Object.keys(gamesMap).length;
@@ -492,7 +635,8 @@ export const SteamVotingDashboard: React.FC = () => {
         votes: [...voter.votes, { gameId: newGameId, points: 0 }],
       }))
     );
-  }, [gamesMap]);
+    void autoUnfreezePrice('nuevo juego agregado');
+  }, [gamesMap, autoUnfreezePrice]);
 
   const handleDeleteGame = useCallback((gameId: string) => {
     setGamesMap((prev) => {
@@ -521,7 +665,23 @@ export const SteamVotingDashboard: React.FC = () => {
           })),
       }))
     );
-  }, [gamesMap]);
+    void autoUnfreezePrice('juego eliminado');
+  }, [gamesMap, autoUnfreezePrice]);
+
+  const handleResetAllVotes = useCallback(async () => {
+    const confirmReset = window.confirm(
+      '¿Deseas reiniciar los votos de todos los integrantes para iniciar un nuevo ciclo de votación?\n\nLos puntos asignados volverán a 0 y el precio congelado se liberará automáticamente.'
+    );
+    if (!confirmReset) return;
+
+    setVoters((prev) =>
+      prev.map((voter) => ({
+        ...voter,
+        votes: voter.votes.map((v) => ({ ...v, points: 0 })),
+      }))
+    );
+    void autoUnfreezePrice('nuevo ciclo de votación / votos reiniciados');
+  }, [autoUnfreezePrice]);
 
   // ─── Desbloqueo de admin vía modal BottomSheet (reemplaza window.prompt) ───
   // ─── Desbloqueo de admin vía modal BottomSheet ───
@@ -692,6 +852,7 @@ export const SteamVotingDashboard: React.FC = () => {
       setGamesMap({});
       setSteamApiKey('');
       setHistory([]);
+      setFreezeState(DEFAULT_FREEZE_STATE);
       setSyncState({ status: 'saving', message: 'Restableciendo...' });
       await resetAllData();
       setSyncState({ status: 'synced', message: 'Datos restablecidos' });
@@ -1057,6 +1218,17 @@ export const SteamVotingDashboard: React.FC = () => {
 
               <motion.button
                 type="button"
+                className="btn-reset-votes"
+                onClick={handleResetAllVotes}
+                title="Reiniciar a 0 puntos todos los votos de los integrantes para comenzar un nuevo ciclo de votación"
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
+              >
+                🧹 Reiniciar Votos (Nuevo Ciclo)
+              </motion.button>
+
+              <motion.button
+                type="button"
                 className="btn-reset-data"
                 onClick={handleResetData}
                 whileHover={{ scale: 1.03 }}
@@ -1154,6 +1326,14 @@ export const SteamVotingDashboard: React.FC = () => {
           results={results}
           votersCount={voters.length}
           totalAssignedPoints={totalAssignedPoints}
+          isEditMode={isEditMode}
+          canManageContent={canManageContent}
+          isPrecioCongelado={freezeState.isPrecioCongelado}
+          precioCongelado={freezeState.precioCongelado}
+          descuentoCongelado={freezeState.descuentoCongelado}
+          precioCongeladoFormatted={freezeState.precioCongeladoFormatted}
+          onToggleFreezePrice={handleToggleFreezePrice}
+          isFreezingLoading={isFreezingLoading}
         />
 
         <div className="history-footer-action">
@@ -1180,6 +1360,10 @@ export const SteamVotingDashboard: React.FC = () => {
             key="finish-modal"
             allResults={results}
             voters={voters}
+            isPrecioCongelado={freezeState.isPrecioCongelado}
+            precioCongelado={freezeState.precioCongelado}
+            descuentoCongelado={freezeState.descuentoCongelado}
+            precioCongeladoFormatted={freezeState.precioCongeladoFormatted}
             onConfirmFinish={handleConfirmFinishVoting}
             onClose={() => setShowFinishModal(false)}
           />

@@ -68,6 +68,17 @@ export interface VoterSnapshotInHistory {
   votes: GameVote[];
 }
 
+export interface FreezePriceState {
+  isPrecioCongelado: boolean;
+  precioCongelado: number | null;
+  descuentoCongelado: number | null;
+  precioCongeladoFormatted?: string | null;
+  precioOriginalCongelado?: number | null;
+  precioOriginalCongeladoFormatted?: string | null;
+  congeladoAt?: string | null;
+  gameId?: string | null;
+}
+
 export interface VotingHistoryRecord {
   id: string;
   /** Fecha canónica en formato ISO 8601 (ej. '2026-10-03T14:01:22.000Z') */
@@ -80,6 +91,11 @@ export interface VotingHistoryRecord {
   resultsSnapshot: GameResult[];
   /** Snapshot de los votantes y su saldo/rango Aura al momento de finalizar */
   votersSnapshots: VoterSnapshotInHistory[];
+  /** Estado de congelamiento de precio en el momento del cierre */
+  isPrecioCongelado?: boolean;
+  precioCongelado?: number | null;
+  descuentoCongelado?: number | null;
+  precioCongeladoFormatted?: string | null;
   /** Campos legados opcionales para retrocompatibilidad con registros antiguos */
   gamesMap?: Record<string, Game>;
   games?: Game[];

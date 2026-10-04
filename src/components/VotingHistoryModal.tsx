@@ -252,7 +252,26 @@ export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = React.memo(
                     <div className="winner-details-badge">
                       <span className="trophy-tag">🏆 JUEGO GANADOR</span>
                       <h3>{selectedRecord.winningGame?.title}</h3>
-                      <span className="record-date-tag">🗓️ {formatHistoryDate(selectedRecord)}</span>
+                      <div className="history-winner-tags-row">
+                        <span className="record-date-tag">🗓️ {formatHistoryDate(selectedRecord)}</span>
+                        {selectedRecord.isPrecioCongelado ? (
+                          <span className="record-frozen-price-tag" title="Precio congelado preservado permanentemente al momento del cierre">
+                            🔒 {selectedRecord.precioCongeladoFormatted || selectedRecord.winningGame?.price?.finalFormatted || 'Precio Congelado'}
+                            {selectedRecord.descuentoCongelado && selectedRecord.descuentoCongelado > 0
+                              ? ` (-${selectedRecord.descuentoCongelado}%)`
+                              : ''}
+                          </span>
+                        ) : (
+                          selectedRecord.winningGame?.price?.finalFormatted && (
+                            <span className="record-price-tag">
+                              🏷️ {selectedRecord.winningGame.price.finalFormatted}
+                              {selectedRecord.winningGame.price.discountPercent
+                                ? ` (-${selectedRecord.winningGame.price.discountPercent}%)`
+                                : ''}
+                            </span>
+                          )
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>

@@ -1078,6 +1078,248 @@
   box-shadow: 0 4px 18px rgba(164, 208, 7, 0.4);
 }
 
+/* Agrupador de precio y botón de congelar en WinnerBanner */
+.winner-price-actions-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* Insignia prominente de Precio Congelado (Modo Lectura y WinnerCard) */
+.frozen-price-prominent-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, rgba(6, 182, 212, 0.22) 0%, rgba(15, 23, 42, 0.9) 100%);
+  border: 1.5px solid #22d3ee;
+  border-radius: 10px;
+  padding: 8px 16px;
+  box-shadow: 0 0 16px rgba(34, 211, 238, 0.35), inset 0 0 8px rgba(34, 211, 238, 0.15);
+  backdrop-filter: blur(8px);
+  animation: frozenGlowPulse 2.5s ease-in-out infinite;
+  transition: all 0.25s ease;
+}
+
+.frozen-price-prominent-badge:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 0 24px rgba(34, 211, 238, 0.5), inset 0 0 12px rgba(34, 211, 238, 0.25);
+}
+
+.frozen-badge-icon {
+  font-size: 18px;
+  filter: drop-shadow(0 0 4px #22d3ee);
+}
+
+.frozen-badge-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #7dd3fc;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.frozen-badge-value {
+  font-size: 16px;
+  font-weight: 800;
+  color: #a4d007;
+  text-shadow: 0 0 10px rgba(164, 208, 7, 0.45);
+}
+
+@keyframes frozenGlowPulse {
+  0%, 100% {
+    box-shadow: 0 0 14px rgba(34, 211, 238, 0.3);
+    border-color: #22d3ee;
+  }
+  50% {
+    box-shadow: 0 0 22px rgba(34, 211, 238, 0.55);
+    border-color: #67e8f9;
+  }
+}
+
+/* Botón Dinámico Único de Congelar / Descongelar Precio */
+.btn-freeze-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(8px);
+  font-family: inherit;
+  outline: none;
+}
+
+/* Estado Descongelado (isPrecioCongelado === false) */
+.btn-freeze-toggle.is-unfrozen {
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.22) 0%, rgba(30, 41, 59, 0.85) 100%);
+  border: 1.5px solid rgba(56, 189, 248, 0.6);
+  color: #38bdf8;
+  box-shadow: 0 2px 10px rgba(56, 189, 248, 0.2);
+}
+
+.btn-freeze-toggle.is-unfrozen:hover {
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.35) 0%, rgba(30, 41, 59, 0.95) 100%);
+  border-color: #38bdf8;
+  color: #ffffff;
+  box-shadow: 0 4px 18px rgba(56, 189, 248, 0.45);
+}
+
+/* Estado Congelado (isPrecioCongelado === true) - Estilo de advertencia/reversión */
+.btn-freeze-toggle.is-frozen {
+  background: linear-gradient(135deg, rgba(234, 88, 12, 0.28) 0%, rgba(185, 28, 28, 0.2) 100%);
+  border: 1.5px solid rgba(249, 115, 22, 0.85);
+  color: #fb923c;
+  box-shadow: 0 0 14px rgba(249, 115, 22, 0.35);
+  animation: freezeWarningPulse 2.5s ease-in-out infinite;
+}
+
+.btn-freeze-toggle.is-frozen:hover {
+  background: linear-gradient(135deg, rgba(234, 88, 12, 0.42) 0%, rgba(185, 28, 28, 0.35) 100%);
+  border-color: #fdba74;
+  color: #fff7ed;
+  box-shadow: 0 0 22px rgba(249, 115, 22, 0.55);
+}
+
+@keyframes freezeWarningPulse {
+  0%, 100% {
+    box-shadow: 0 0 12px rgba(249, 115, 22, 0.3);
+    border-color: rgba(249, 115, 22, 0.85);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(249, 115, 22, 0.55);
+    border-color: #fdba74;
+  }
+}
+
+.freeze-toggle-icon {
+  font-size: 15px;
+}
+
+.freeze-active-pill {
+  background: #ea580c;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 900;
+  padding: 2px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* Botón de reinicio de votos en la barra de edición superior */
+.btn-reset-votes {
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.2) 0%, rgba(30, 41, 59, 0.8) 100%);
+  border: 1px solid rgba(168, 85, 247, 0.5);
+  color: #c084fc;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  backdrop-filter: blur(6px);
+}
+
+.btn-reset-votes:hover {
+  border-color: #c084fc;
+  color: #ffffff;
+  box-shadow: 0 0 15px rgba(168, 85, 247, 0.4);
+}
+
+/* Botón de limpiar votos individuales en la tarjeta de usuario */
+.edit-votes-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.btn-clear-user-votes {
+  background: transparent;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #f87171;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-clear-user-votes:hover {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: #ef4444;
+  color: #ffffff;
+}
+
+/* Estilos de cuota y precio congelado en FinishVotingModal */
+.winner-modal-price.frozen {
+  color: #38bdf8;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.frozen-tag-pill {
+  background: rgba(6, 182, 212, 0.3);
+  border: 1px solid #22d3ee;
+  color: #67e8f9;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.winner-modal-quota-split {
+  font-size: 13px;
+  color: #4ade80;
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.35);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-weight: 600;
+}
+
+/* Etiquetas en modal de historial */
+.history-winner-tags-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.record-frozen-price-tag {
+  background: rgba(6, 182, 212, 0.2);
+  border: 1px solid rgba(34, 211, 238, 0.5);
+  color: #67e8f9;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.record-price-tag {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #e2e8f0;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
 .steam-price-icon {
   font-size: 19px;
   color: #66c0f4;

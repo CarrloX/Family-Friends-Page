@@ -1,16 +1,25 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FaGamepad, FaSteam } from 'react-icons/fa';
 import type { GameResult, SteamPriceInfo } from '../types/voting';
 import { getMaxVotePoints } from '../types/voting';
-import { fetchSteamGameDetails } from '../services/steamStoreApi';
+import { fetchSteamGameDetails, formatCopPrice } from '../services/steamStoreApi';
 import { GameThumbnail } from './GameThumbnail';
 import { getGameImageFallbacks } from '../utils/steamImages';
+import { FreezePriceButton } from './FreezePriceButton';
 
 interface WinnerBannerProps {
   results: GameResult[];
   votersCount?: number;
   totalAssignedPoints?: number;
+  isEditMode?: boolean;
+  canManageContent?: boolean;
+  isPrecioCongelado?: boolean;
+  precioCongelado?: number | null;
+  descuentoCongelado?: number | null;
+  precioCongeladoFormatted?: string | null;
+  onToggleFreezePrice?: (currentLivePrice: SteamPriceInfo | null) => Promise<void> | void;
+  isFreezingLoading?: boolean;
 }
 
 const VotingInProgressView: React.FC<{ totalVoters: number; resultsCount: number }> = ({
@@ -85,9 +94,15 @@ interface WinnerCardProps {
   winnerCoverFallbacks: string[];
   displayedGenre: string;
   displayedDescription: string;
-  livePrice: SteamPriceInfo | null;
+  effectivePrice: SteamPriceInfo | null;
+  liveSteamPrice: SteamPriceInfo | null;
   maxPoints: number;
   totalVoters: number;
+  isEditMode?: boolean;
+  canManageContent?: boolean;
+  isPrecioCongelado?: boolean;
+  onToggleFreezePrice?: (livePrice: SteamPriceInfo | null) => Promise<void> | void;
+  isFreezingLoading?: boolean;
 }
 
 const WinnerCard: React.FC<WinnerCardProps> = ({
@@ -97,9 +112,15 @@ const WinnerCard: React.FC<WinnerCardProps> = ({
   winnerCoverFallbacks,
   displayedGenre,
   displayedDescription,
-  livePrice,
+  effectivePrice,
+  liveSteamPrice,
   maxPoints,
   totalVoters,
+  isEditMode = false,
+  canManageContent = false,
+  isPrecioCongelado = false,
+  onToggleFreezePrice,
+  isFreezingLoading = false,
 }) => (
   <div className="winner-banner-glow">
     <div className="winner-banner">
@@ -159,30 +180,56 @@ const WinnerCard: React.FC<WinnerCardProps> = ({
           <div className="winner-meta-header">
             {displayedGenre && <div className="winner-genre">{displayedGenre}</div>}
 
-            {livePrice && (
-              <a
-                href={appId ? `https://store.steampowered.com/app/${appId}` : undefined}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={`winner-steam-price-badge ${livePrice.discountPercent && livePrice.discountPercent > 0 ? 'has-discount' : ''}`}
-                title="Ver en la Tienda Oficial de Steam"
-              >
-                <FaSteam className="steam-price-icon" />
-                {livePrice.discountPercent && livePrice.discountPercent > 0 ? (
-                  <>
-                    <span className="price-discount-pill">-{livePrice.discountPercent}%</span>
-                    {livePrice.initialFormatted && (
-                      <span className="price-old-strikethrough">{livePrice.initialFormatted}</span>
-                    )}
-                    <span className="price-current-value">{livePrice.finalFormatted}</span>
-                  </>
-                ) : (
-                  <span className="price-current-value">
-                    {livePrice.finalFormatted || (livePrice.isFree ? 'Gratis' : 'Ver en Steam')}
+            <div className="winner-price-actions-group">
+              {isPrecioCongelado && effectivePrice ? (
+                <div
+                  className="frozen-price-prominent-badge"
+                  title="🔒 Precio Congelado: El precio y porcentaje de descuento están asegurados para la liquidación de cuotas antes del cobro"
+                >
+                  <span className="frozen-badge-icon" aria-hidden="true">🔒</span>
+                  <span className="frozen-badge-title">Precio Congelado:</span>
+                  <span className="frozen-badge-value">
+                    {effectivePrice.finalFormatted || (effectivePrice.isFree ? 'Gratis' : 'COP')}
+                    {effectivePrice.discountPercent && effectivePrice.discountPercent > 0
+                      ? ` (-${effectivePrice.discountPercent}%)`
+                      : ''}
                   </span>
-                )}
-              </a>
-            )}
+                </div>
+              ) : (
+                effectivePrice && (
+                  <a
+                    href={appId ? `https://store.steampowered.com/app/${appId}` : undefined}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`winner-steam-price-badge ${effectivePrice.discountPercent && effectivePrice.discountPercent > 0 ? 'has-discount' : ''}`}
+                    title="Ver en la Tienda Oficial de Steam"
+                  >
+                    <FaSteam className="steam-price-icon" />
+                    {effectivePrice.discountPercent && effectivePrice.discountPercent > 0 ? (
+                      <>
+                        <span className="price-discount-pill">-{effectivePrice.discountPercent}%</span>
+                        {effectivePrice.initialFormatted && (
+                          <span className="price-old-strikethrough">{effectivePrice.initialFormatted}</span>
+                        )}
+                        <span className="price-current-value">{effectivePrice.finalFormatted}</span>
+                      </>
+                    ) : (
+                      <span className="price-current-value">
+                        {effectivePrice.finalFormatted || (effectivePrice.isFree ? 'Gratis' : 'Ver en Steam')}
+                      </span>
+                    )}
+                  </a>
+                )
+              )}
+
+              {canManageContent && isEditMode && onToggleFreezePrice && (
+                <FreezePriceButton
+                  isFrozen={Boolean(isPrecioCongelado)}
+                  onToggle={() => onToggleFreezePrice(liveSteamPrice)}
+                  isLoading={isFreezingLoading}
+                />
+              )}
+            </div>
           </div>
           <h2 className="winner-title">{winner.game.title}</h2>
           <p className="winner-description">{displayedDescription}</p>
@@ -373,6 +420,14 @@ export const WinnerBanner: React.FC<WinnerBannerProps> = React.memo(({
   results,
   votersCount = 0,
   totalAssignedPoints,
+  isEditMode = false,
+  canManageContent = false,
+  isPrecioCongelado = false,
+  precioCongelado = null,
+  descuentoCongelado = null,
+  precioCongeladoFormatted = null,
+  onToggleFreezePrice,
+  isFreezingLoading = false,
 }) => {
   const winner = results[0];
   const runnersUp = results.slice(1);
@@ -413,9 +468,31 @@ export const WinnerBanner: React.FC<WinnerBannerProps> = React.memo(({
     };
   }, [appId]);
 
-  const livePrice = (fetchedDetails.appId === appId && fetchedDetails.price)
-    ? fetchedDetails.price
-    : (winner?.game?.price || null);
+  // Precio en vivo reportado actualmente por Steam
+  const liveSteamPrice = useMemo(() => {
+    if (fetchedDetails.appId === appId && fetchedDetails.price) {
+      return fetchedDetails.price;
+    }
+    return winner?.game?.price || null;
+  }, [fetchedDetails, appId, winner?.game?.price]);
+
+  // Si isPrecioCongelado es true, la UI y los cálculos de cobro utilizarán EXCLUSIVAMENTE los valores congelados
+  const effectivePrice = useMemo<SteamPriceInfo | null>(() => {
+    if (isPrecioCongelado) {
+      const final = precioCongelado ?? 0;
+      const discount = descuentoCongelado ?? 0;
+      const isFree = final === 0;
+      const formatted = precioCongeladoFormatted || (isFree ? 'Gratis' : formatCopPrice(final));
+      return {
+        isFree,
+        currency: 'COP',
+        final,
+        discountPercent: discount,
+        finalFormatted: formatted,
+      };
+    }
+    return liveSteamPrice;
+  }, [isPrecioCongelado, precioCongelado, descuentoCongelado, precioCongeladoFormatted, liveSteamPrice]);
 
   const rawGenre = (fetchedDetails.appId === appId && fetchedDetails.genre)
     ? fetchedDetails.genre
@@ -466,9 +543,15 @@ export const WinnerBanner: React.FC<WinnerBannerProps> = React.memo(({
               winnerCoverFallbacks={winnerCoverFallbacks}
               displayedGenre={displayedGenre}
               displayedDescription={displayedDescription}
-              livePrice={livePrice}
+              effectivePrice={effectivePrice}
+              liveSteamPrice={liveSteamPrice}
               maxPoints={maxPoints}
               totalVoters={totalVoters}
+              isEditMode={isEditMode}
+              canManageContent={canManageContent}
+              isPrecioCongelado={isPrecioCongelado}
+              onToggleFreezePrice={onToggleFreezePrice}
+              isFreezingLoading={isFreezingLoading}
             />
             <PodiumList runnersUp={runnersUp} />
           </motion.div>

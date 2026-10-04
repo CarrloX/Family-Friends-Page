@@ -14,7 +14,7 @@ import {
 } from 'firebase/firestore';
 import { getFirestoreInstance, isFirebaseReady } from './firebaseConfig';
 import { canManageContent } from './accessControl';
-import type { Voter, Game, VotingHistoryRecord } from '../types/voting';
+import type { Voter, Game, VotingHistoryRecord, FreezePriceState } from '../types/voting';
 import { fixSteamCoverUrl } from '../utils/steamImages';
 import { formatHistoryDate } from '../utils/formatDate';
 
@@ -115,11 +115,30 @@ interface GrupoDocument {
   lastUpdated: Timestamp;
 }
 
+export const DEFAULT_FREEZE_STATE: FreezePriceState = {
+  isPrecioCongelado: false,
+  precioCongelado: null,
+  descuentoCongelado: null,
+  precioCongeladoFormatted: null,
+  precioOriginalCongelado: null,
+  precioOriginalCongeladoFormatted: null,
+  congeladoAt: null,
+  gameId: null,
+};
+
 interface ActiveVotingDocument {
   voters: Voter[];
   gamesMap: Record<string, Game>;
   /** Array dinámico de juegos propuestos en orden */
   games?: Game[];
+  isPrecioCongelado?: boolean;
+  precioCongelado?: number | null;
+  descuentoCongelado?: number | null;
+  precioCongeladoFormatted?: string | null;
+  precioOriginalCongelado?: number | null;
+  precioOriginalCongeladoFormatted?: string | null;
+  congeladoAt?: string | null;
+  congeladoGameId?: string | null;
   lastUpdated: Timestamp;
 }
 
@@ -205,13 +224,29 @@ export async function saveVoters(voters: Voter[]): Promise<SyncState> {
 /**
  * Guarda el estado activo de la votación actual en Firestore y localStorage.
  */
-export async function saveActiveVotingState(voters: Voter[], gamesMap: Record<string, Game>): Promise<SyncState> {
+export async function saveActiveVotingState(
+  voters: Voter[],
+  gamesMap: Record<string, Game>,
+  freezeState?: FreezePriceState
+): Promise<SyncState> {
   if (!canWriteToPersistence()) {
     return buildReadOnlyState();
   }
 
   // Array dinámico de juegos derivado del mapa (preserva el orden)
   const games = Object.values(gamesMap);
+  const freezeData = freezeState
+    ? {
+        isPrecioCongelado: Boolean(freezeState.isPrecioCongelado),
+        precioCongelado: freezeState.precioCongelado ?? null,
+        descuentoCongelado: freezeState.descuentoCongelado ?? null,
+        precioCongeladoFormatted: freezeState.precioCongeladoFormatted ?? null,
+        precioOriginalCongelado: freezeState.precioOriginalCongelado ?? null,
+        precioOriginalCongeladoFormatted: freezeState.precioOriginalCongeladoFormatted ?? null,
+        congeladoAt: freezeState.congeladoAt ?? null,
+        congeladoGameId: freezeState.gameId ?? null,
+      }
+    : {};
 
   if (isFirebaseReady()) {
     try {
@@ -221,22 +256,115 @@ export async function saveActiveVotingState(voters: Voter[], gamesMap: Record<st
         voters,
         gamesMap,
         games,
+        ...freezeData,
         lastUpdated: Timestamp.now(),
       });
       await setDoc(docRef, payload, { merge: true });
-      writeLocal(LS_KEY_ACTIVE_VOTING, { voters, gamesMap, games });
+      writeLocal(LS_KEY_ACTIVE_VOTING, { voters, gamesMap, games, ...freezeData });
       if (import.meta.env.DEV) {
         console.log('[Store] Estado de sesión sincronizado.');
       }
       return { status: 'synced', message: 'Votación actual sincronizada' };
     } catch (err) {
-      return handleSyncError(err, () => writeLocal(LS_KEY_ACTIVE_VOTING, { voters, gamesMap, games }), 'Error de sincronización, usando almacenamiento local');
+      return handleSyncError(
+        err,
+        () => writeLocal(LS_KEY_ACTIVE_VOTING, { voters, gamesMap, games, ...freezeData }),
+        'Error de sincronización, usando almacenamiento local'
+      );
     }
   }
 
   // Modo de desarrollo local / sin backend configurado: persistencia confinada a localStorage
-  writeLocal(LS_KEY_ACTIVE_VOTING, { voters, gamesMap, games });
+  writeLocal(LS_KEY_ACTIVE_VOTING, { voters, gamesMap, games, ...freezeData });
   return { status: 'local', message: 'Votación actual guardada localmente' };
+}
+
+/**
+ * Guarda de forma inmediata y directa el estado de precio congelado en Firestore y localStorage.
+ */
+export async function saveFreezePriceState(freezeState: FreezePriceState): Promise<SyncState> {
+  if (!canWriteToPersistence()) {
+    return buildReadOnlyState();
+  }
+
+  const payload = removeUndefinedDeep({
+    isPrecioCongelado: freezeState.isPrecioCongelado,
+    precioCongelado: freezeState.precioCongelado ?? null,
+    descuentoCongelado: freezeState.descuentoCongelado ?? null,
+    precioCongeladoFormatted: freezeState.precioCongeladoFormatted ?? null,
+    precioOriginalCongelado: freezeState.precioOriginalCongelado ?? null,
+    precioOriginalCongeladoFormatted: freezeState.precioOriginalCongeladoFormatted ?? null,
+    congeladoAt: freezeState.congeladoAt ?? new Date().toISOString(),
+    congeladoGameId: freezeState.gameId ?? null,
+    lastUpdated: Timestamp.now(),
+  });
+
+  const saveLocal = () => {
+    const cached = readLocal<Record<string, unknown>>(LS_KEY_ACTIVE_VOTING, {});
+    writeLocal(LS_KEY_ACTIVE_VOTING, { ...cached, ...payload });
+  };
+
+  if (isFirebaseReady()) {
+    try {
+      const db = getFirestoreInstance()!;
+      const docRef = doc(db, COLLECTION_ACTIVE_VOTING, DOC_ACTIVE_VOTING);
+      await setDoc(docRef, payload, { merge: true });
+      saveLocal();
+      if (import.meta.env.DEV) {
+        console.log('[Store] Estado de precio congelado sincronizado en Firestore.');
+      }
+      return { status: 'synced', message: 'Precio congelado guardado en la nube' };
+    } catch (err) {
+      return handleSyncError(err, saveLocal, 'Error al guardar precio congelado, usando almacenamiento local');
+    }
+  }
+
+  saveLocal();
+  return { status: 'local', message: 'Precio congelado guardado localmente' };
+}
+
+/**
+ * Descongela el precio y limpia los campos de oferta congelada en Firestore y localStorage.
+ */
+export async function unfreezePriceState(): Promise<SyncState> {
+  if (!canWriteToPersistence()) {
+    return buildReadOnlyState();
+  }
+
+  const payload = {
+    isPrecioCongelado: false,
+    precioCongelado: null,
+    descuentoCongelado: null,
+    precioCongeladoFormatted: null,
+    precioOriginalCongelado: null,
+    precioOriginalCongeladoFormatted: null,
+    congeladoAt: null,
+    congeladoGameId: null,
+    lastUpdated: Timestamp.now(),
+  };
+
+  const saveLocal = () => {
+    const cached = readLocal<Record<string, unknown>>(LS_KEY_ACTIVE_VOTING, {});
+    writeLocal(LS_KEY_ACTIVE_VOTING, { ...cached, ...payload });
+  };
+
+  if (isFirebaseReady()) {
+    try {
+      const db = getFirestoreInstance()!;
+      const docRef = doc(db, COLLECTION_ACTIVE_VOTING, DOC_ACTIVE_VOTING);
+      await setDoc(docRef, payload, { merge: true });
+      saveLocal();
+      if (import.meta.env.DEV) {
+        console.log('[Store] Precio descongelado en Firestore.');
+      }
+      return { status: 'synced', message: 'Precio descongelado en la nube' };
+    } catch (err) {
+      return handleSyncError(err, saveLocal, 'Error al descongelar precio, usando almacenamiento local');
+    }
+  }
+
+  saveLocal();
+  return { status: 'local', message: 'Precio descongelado localmente' };
 }
 
 export function sanitizeGame(game: Game): Game {
@@ -343,7 +471,14 @@ export function sanitizeVotingHistoryRecord(
   return cleanRecord;
 }
 
-function parseActiveVotingData(data: ActiveVotingDocument): { voters: Voter[]; gamesMap: Record<string, Game>; games: Game[] } | null {
+export interface ActiveVotingStateResult {
+  voters: Voter[];
+  gamesMap: Record<string, Game>;
+  games?: Game[];
+  freezeState: FreezePriceState;
+}
+
+function parseActiveVotingData(data: ActiveVotingDocument): ActiveVotingStateResult | null {
   if (!Array.isArray(data.voters) || !data.gamesMap || typeof data.gamesMap !== 'object') {
     return null;
   }
@@ -351,10 +486,22 @@ function parseActiveVotingData(data: ActiveVotingDocument): { voters: Voter[]; g
   const games = Array.isArray(data.games) && data.games.length > 0
     ? data.games.map(sanitizeGame)
     : Object.values(cleanGamesMap);
-  return { voters: data.voters, gamesMap: cleanGamesMap, games };
+
+  const freezeState: FreezePriceState = {
+    isPrecioCongelado: Boolean(data.isPrecioCongelado),
+    precioCongelado: typeof data.precioCongelado === 'number' ? data.precioCongelado : null,
+    descuentoCongelado: typeof data.descuentoCongelado === 'number' ? data.descuentoCongelado : null,
+    precioCongeladoFormatted: typeof data.precioCongeladoFormatted === 'string' ? data.precioCongeladoFormatted : null,
+    precioOriginalCongelado: typeof data.precioOriginalCongelado === 'number' ? data.precioOriginalCongelado : null,
+    precioOriginalCongeladoFormatted: typeof data.precioOriginalCongeladoFormatted === 'string' ? data.precioOriginalCongeladoFormatted : null,
+    congeladoAt: typeof data.congeladoAt === 'string' ? data.congeladoAt : null,
+    gameId: typeof data.congeladoGameId === 'string' ? data.congeladoGameId : null,
+  };
+
+  return { voters: data.voters, gamesMap: cleanGamesMap, games, freezeState };
 }
 
-async function fetchFirestoreActiveVoting(): Promise<{ voters: Voter[]; gamesMap: Record<string, Game>; games: Game[] } | null> {
+async function fetchFirestoreActiveVoting(): Promise<ActiveVotingStateResult | null> {
   if (!isFirebaseReady()) return null;
 
   try {
@@ -376,23 +523,31 @@ async function fetchFirestoreActiveVoting(): Promise<{ voters: Voter[]; gamesMap
   }
 }
 
-function loadCachedActiveVoting(): { voters: Voter[]; gamesMap: Record<string, Game>; games?: Game[] } | null {
-  const cached = readLocal<{ voters: Voter[]; gamesMap: Record<string, Game>; games?: Game[] } | null>(LS_KEY_ACTIVE_VOTING, null);
-  if (!cached) return null;
+function loadCachedActiveVoting(): ActiveVotingStateResult | null {
+  const cached = readLocal<ActiveVotingDocument | null>(LS_KEY_ACTIVE_VOTING, null);
+  if (!cached || !Array.isArray(cached.voters) || !cached.gamesMap) return null;
 
-  if (cached.gamesMap) {
-    cached.gamesMap = sanitizeGamesMap(cached.gamesMap);
-  }
-  if (cached.games) {
-    cached.games = cached.games.map(sanitizeGame);
-  }
-  return cached;
+  const cleanGamesMap = sanitizeGamesMap(cached.gamesMap);
+  const games = cached.games ? cached.games.map(sanitizeGame) : Object.values(cleanGamesMap);
+
+  const freezeState: FreezePriceState = {
+    isPrecioCongelado: Boolean(cached.isPrecioCongelado),
+    precioCongelado: typeof cached.precioCongelado === 'number' ? cached.precioCongelado : null,
+    descuentoCongelado: typeof cached.descuentoCongelado === 'number' ? cached.descuentoCongelado : null,
+    precioCongeladoFormatted: typeof cached.precioCongeladoFormatted === 'string' ? cached.precioCongeladoFormatted : null,
+    precioOriginalCongelado: typeof cached.precioOriginalCongelado === 'number' ? cached.precioOriginalCongelado : null,
+    precioOriginalCongeladoFormatted: typeof cached.precioOriginalCongeladoFormatted === 'string' ? cached.precioOriginalCongeladoFormatted : null,
+    congeladoAt: typeof cached.congeladoAt === 'string' ? cached.congeladoAt : null,
+    gameId: typeof cached.congeladoGameId === 'string' ? cached.congeladoGameId : null,
+  };
+
+  return { voters: cached.voters, gamesMap: cleanGamesMap, games, freezeState };
 }
 
 /**
  * Carga el estado activo de la votación desde Firestore o localStorage.
  */
-export async function loadActiveVotingState(): Promise<{ voters: Voter[]; gamesMap: Record<string, Game>; games?: Game[] } | null> {
+export async function loadActiveVotingState(): Promise<ActiveVotingStateResult | null> {
   const firestoreState = await fetchFirestoreActiveVoting();
   if (firestoreState) {
     return firestoreState;
