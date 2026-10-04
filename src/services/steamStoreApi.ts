@@ -64,9 +64,13 @@ export function formatCopPrice(cents: number): string {
 /**
  * Busca juegos en la Steam Store API por término con precios regionales de Colombia (cc=CO).
  */
-export async function searchSteamStore(query: string): Promise<SteamSearchResultItem[]> {
+export async function searchSteamStore(query: string, signal?: AbortSignal): Promise<SteamSearchResultItem[]> {
   const cleanTerm = query.trim();
   if (!cleanTerm || cleanTerm.length < 2) {
+    return [];
+  }
+
+  if (signal?.aborted) {
     return [];
   }
 
@@ -79,6 +83,7 @@ export async function searchSteamStore(query: string): Promise<SteamSearchResult
     const data = await fetchWithCorsFallback<SteamStoreSearchResponse>(targetUrl, {
       timeoutMs: 4000,
       localProxyPrefix: '/api/steam-store',
+      signal,
     });
 
     if (data && Array.isArray(data.items) && data.items.length > 0) {
@@ -178,16 +183,41 @@ function parseSteamPriceInfo(
   return undefined;
 }
 
-/**
- * Consulta la API oficial de Steam AppDetails para obtener descripción, géneros y precio/descuentos.
- */
-export async function fetchSteamGameDetails(appId: number): Promise<{
+export type AppDetailsResult = {
   description?: string;
   genres?: string;
   price?: SteamPriceInfo;
-}> {
-  if (appDetailsCache.has(appId)) {
-    return appDetailsCache.get(appId)!;
+};
+
+function parseAppInfoDetails(
+  appInfo: NonNullable<SteamAppDetailsResponse[string]['data']>
+): AppDetailsResult {
+  const rawDesc = appInfo.short_description
+    ? appInfo.short_description.replace(/<[^>]*>?/gm, '').trim()
+    : '';
+  const cleanDesc = rawDesc.length > 0 ? rawDesc : undefined;
+
+  const genresArray = Array.isArray(appInfo.genres)
+    ? appInfo.genres.map((g) => g.description?.trim()).filter((g): g is string => Boolean(g))
+    : [];
+  const genresList = genresArray.length > 0 ? genresArray.join(' / ') : undefined;
+
+  const priceInfo = parseSteamPriceInfo(appInfo.price_overview, appInfo.is_free);
+
+  return {
+    ...(cleanDesc ? { description: cleanDesc } : {}),
+    ...(genresList ? { genres: genresList } : {}),
+    ...(priceInfo ? { price: priceInfo } : {}),
+  };
+}
+
+/**
+ * Consulta la API oficial de Steam AppDetails para obtener descripción, géneros y precio/descuentos.
+ */
+export async function fetchSteamGameDetails(appId: number): Promise<AppDetailsResult> {
+  const cached = appDetailsCache.get(appId);
+  if (cached) {
+    return cached;
   }
 
   try {
@@ -199,26 +229,7 @@ export async function fetchSteamGameDetails(appId: number): Promise<{
 
     const appInfo = data?.[appId.toString()]?.data;
     if (appInfo) {
-      // Limpiar etiquetas HTML de short_description
-      const cleanDesc = appInfo.short_description
-        ? appInfo.short_description.replace(/<[^>]*>?/gm, '').trim()
-        : undefined;
-
-      const genresList = Array.isArray(appInfo.genres)
-        ? appInfo.genres.map((g) => g.description).join(' / ')
-        : undefined;
-
-      const priceInfo = parseSteamPriceInfo(appInfo.price_overview, appInfo.is_free);
-
-      const result: {
-        description?: string;
-        genres?: string;
-        price?: SteamPriceInfo;
-      } = {};
-      if (cleanDesc) result.description = cleanDesc;
-      if (genresList) result.genres = genresList;
-      if (priceInfo) result.price = priceInfo;
-
+      const result = parseAppInfoDetails(appInfo);
       appDetailsCache.set(appId, result);
       return result;
     }

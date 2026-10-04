@@ -31,13 +31,26 @@ function resolveLocalProxyUrl(targetUrl: string): string | null {
   return null;
 }
 
-async function fetchFromLocalProxy<T>(targetUrl: string, timeoutMs: number): Promise<T | null> {
+function combineSignals(timeoutMs: number, externalSignal?: AbortSignal): AbortSignal {
+  const timeoutSignal = AbortSignal.timeout(timeoutMs);
+  if (!externalSignal) return timeoutSignal;
+  if (typeof AbortSignal.any === 'function') {
+    return AbortSignal.any([timeoutSignal, externalSignal]);
+  }
+  const controller = new AbortController();
+  const onAbort = () => controller.abort();
+  timeoutSignal.addEventListener('abort', onAbort, { once: true });
+  externalSignal.addEventListener('abort', onAbort, { once: true });
+  return controller.signal;
+}
+
+async function fetchFromLocalProxy<T>(targetUrl: string, timeoutMs: number, signal?: AbortSignal): Promise<T | null> {
   if (!isProxyCapableEnvironment()) return null;
   const localUrl = resolveLocalProxyUrl(targetUrl);
   if (!localUrl) return null;
 
   try {
-    const res = await fetch(localUrl, { signal: AbortSignal.timeout(timeoutMs) });
+    const res = await fetch(localUrl, { signal: combineSignals(timeoutMs, signal) });
     if (!res.ok) return null;
     const data = await res.json();
     return (data as T) ?? null;
@@ -59,9 +72,9 @@ async function parseProxyResponse<T>(res: Response, proxyUrl: string): Promise<T
   return (data as T) ?? null;
 }
 
-async function fetchFromProxyUrl<T>(proxyUrl: string, timeoutMs: number): Promise<T | null> {
+async function fetchFromProxyUrl<T>(proxyUrl: string, timeoutMs: number, signal?: AbortSignal): Promise<T | null> {
   try {
-    const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(timeoutMs) });
+    const res = await fetch(proxyUrl, { signal: combineSignals(timeoutMs, signal) });
     if (!res.ok) return null;
     return await parseProxyResponse<T>(res, proxyUrl);
   } catch {
@@ -75,17 +88,29 @@ async function fetchFromProxyUrl<T>(proxyUrl: string, timeoutMs: number): Promis
  */
 export async function fetchWithCorsFallback<T = unknown>(
   targetUrl: string,
-  options: { timeoutMs?: number; localProxyPrefix?: string } = {}
+  options: { timeoutMs?: number; localProxyPrefix?: string; signal?: AbortSignal } = {}
 ): Promise<T | null> {
   const timeoutMs = options.timeoutMs || 4000;
+  const signal = options.signal;
+
+  if (signal?.aborted) {
+    return null;
+  }
 
   if (options.localProxyPrefix) {
-    const localResult = await fetchFromLocalProxy<T>(targetUrl, timeoutMs);
+    const localResult = await fetchFromLocalProxy<T>(targetUrl, timeoutMs, signal);
     if (localResult !== null) return localResult;
   }
 
+  if (signal?.aborted) {
+    return null;
+  }
+
   for (const proxyFn of CORS_PROXIES) {
-    const proxyResult = await fetchFromProxyUrl<T>(proxyFn(targetUrl), timeoutMs);
+    if (signal?.aborted) {
+      return null;
+    }
+    const proxyResult = await fetchFromProxyUrl<T>(proxyFn(targetUrl), timeoutMs, signal);
     if (proxyResult !== null) return proxyResult;
   }
 

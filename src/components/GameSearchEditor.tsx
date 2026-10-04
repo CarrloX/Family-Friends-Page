@@ -83,6 +83,160 @@ export const GameSearchEditor: React.FC<GameSearchEditorProps> = ({
   );
 };
 
+const MAX_IMAGE_FILE_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB
+
+/**
+ * Optimiza y redimensiona la imagen para reducir significativamente
+ * el tamaño del Data URL antes de almacenarlo.
+ */
+function compressAndResizeImage(file: File, maxWidth = 600, maxHeight = 400, quality = 0.82): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxWidth || height > maxHeight) {
+          const ratio = Math.min(maxWidth / width, maxHeight / height);
+          width = Math.round(width * ratio);
+          height = Math.round(height * ratio);
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          reject(new Error('No se pudo inicializar el contexto 2D del Canvas.'));
+          return;
+        }
+
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, 0, 0, width, height);
+
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = () => reject(new Error('No se pudo procesar la imagen seleccionada.'));
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = () => reject(new Error('Error al leer el archivo.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * Valida que una URL introducida manualmente sea válida y use protocolos seguros (http, https o data:image).
+ */
+function isValidImageUrl(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  if (trimmed.startsWith('data:image/')) return true;
+  try {
+    const url = new URL(trimmed);
+    return url.protocol === 'https:' || url.protocol === 'http:';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Hook personalizado para aislar el estado de búsqueda de Steam, la prevención de condiciones
+ * de carrera (race conditions), la cancelación HTTP y el manejo del dropdown en cada slot.
+ */
+function useSteamSlotSearch() {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [searchResults, setSearchResults] = useState<SteamSearchResultItem[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [focusedIndex, setFocusedIndex] = useState<number>(-1);
+
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const requestIdRef = useRef(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const handleSearchTermChange = (value: string) => {
+    setSearchTerm(value);
+    setFocusedIndex(-1);
+    if (!value.trim() || value.trim().length < 2) {
+      setSearchResults([]);
+      setIsSearching(false);
+      setShowDropdown(false);
+    } else {
+      setIsSearching(true);
+    }
+  };
+
+  useEffect(() => {
+    const cleanTerm = searchTerm.trim();
+    const requestId = ++requestIdRef.current;
+
+    if (cleanTerm.length < 2) {
+      abortControllerRef.current?.abort();
+      return;
+    }
+
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    const timer = window.setTimeout(async () => {
+      try {
+        const results = await searchSteamStore(cleanTerm, controller.signal);
+        if (requestId !== requestIdRef.current) return;
+        setSearchResults(results);
+        setShowDropdown(true);
+      } catch {
+        if (requestId !== requestIdRef.current) return;
+        setSearchResults([]);
+        setShowDropdown(false);
+      } finally {
+        if (requestId === requestIdRef.current) {
+          setIsSearching(false);
+        }
+      }
+    }, 300);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [searchTerm]);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const resetSearch = () => {
+    setSearchTerm('');
+    setSearchResults([]);
+    setIsSearching(false);
+    setShowDropdown(false);
+    setFocusedIndex(-1);
+  };
+
+  return {
+    searchTerm,
+    searchResults,
+    isSearching,
+    showDropdown,
+    setShowDropdown,
+    focusedIndex,
+    setFocusedIndex,
+    dropdownRef,
+    handleSearchTermChange,
+    resetSearch,
+  };
+}
+
 interface SingleGameSlotEditorProps {
   slotIndex: number;
   gameId: string;
@@ -102,52 +256,57 @@ const SingleGameSlotEditor: React.FC<SingleGameSlotEditorProps> = ({
   canDelete,
   minGames,
 }) => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [searchResults, setSearchResults] = useState<SteamSearchResultItem[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
-  const [showDropdown, setShowDropdown] = useState(false);
+  const {
+    searchTerm,
+    searchResults,
+    isSearching,
+    showDropdown,
+    setShowDropdown,
+    focusedIndex,
+    setFocusedIndex,
+    dropdownRef,
+    handleSearchTermChange,
+    resetSearch,
+  } = useSteamSlotSearch();
+
+  const [isLoadingDetails, setIsLoadingDetails] = useState(false);
   const [customCoverUrl, setCustomCoverUrl] = useState('');
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const selectionRequestRef = useRef(0);
 
-  const handleSearchTermChange = (value: string) => {
-    setSearchTerm(value);
-    if (!value.trim() || value.trim().length < 2) {
-      setSearchResults([]);
-      setIsSearching(false);
-    } else {
-      setIsSearching(true);
-    }
-  };
-
-  // Debounced Steam Store API search
-  useEffect(() => {
-    if (!searchTerm.trim() || searchTerm.trim().length < 2) {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!showDropdown || searchResults.length === 0) {
+      if (e.key === 'ArrowDown' && searchResults.length > 0) {
+        setShowDropdown(true);
+        setFocusedIndex(0);
+        e.preventDefault();
+      }
       return;
     }
 
-    const timer = setTimeout(async () => {
-      const results = await searchSteamStore(searchTerm);
-      setSearchResults(results);
-      setIsSearching(false);
-      setShowDropdown(true);
-    }, 300);
-
-    return () => clearTimeout(timer);
-  }, [searchTerm]);
-
-  // Click outside to close dropdown
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setShowDropdown(false);
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setFocusedIndex((prev) => (prev < searchResults.length - 1 ? prev + 1 : 0));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setFocusedIndex((prev) => (prev > 0 ? prev - 1 : searchResults.length - 1));
+    } else if (e.key === 'Enter') {
+      if (focusedIndex >= 0 && focusedIndex < searchResults.length) {
+        e.preventDefault();
+        void handleSelectSteamGame(searchResults[focusedIndex]);
       }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setShowDropdown(false);
+      setFocusedIndex(-1);
+    }
+  };
 
   // Handle selecting a game from Steam Search results
   const handleSelectSteamGame = async (item: SteamSearchResultItem) => {
+    const requestId = ++selectionRequestRef.current;
+    setIsLoadingDetails(true);
+
     const baseGame: Game = {
       ...game,
       appId: item.id,
@@ -160,19 +319,29 @@ const SingleGameSlotEditor: React.FC<SingleGameSlotEditorProps> = ({
     };
 
     onUpdateGame(gameId, baseGame);
-    setSearchTerm('');
-    setSearchResults([]);
-    setIsSearching(false);
-    setShowDropdown(false);
+    resetSearch();
 
     // Fetch official details (genres, description, discount/price) from Steam AppDetails API
-    const details = await fetchSteamGameDetails(item.id);
-    onUpdateGame(gameId, {
-      ...baseGame,
-      genre: details.genres || 'Juego de Steam',
-      price: details.price || item.price,
-      description: details.description || `Juego oficial de la Tienda de Steam (${item.name}).`,
-    });
+    try {
+      const details = await fetchSteamGameDetails(item.id);
+      if (requestId !== selectionRequestRef.current) return;
+      onUpdateGame(gameId, {
+        ...baseGame,
+        genre: details.genres || 'Juego de Steam',
+        price: details.price || item.price,
+        description: details.description || `Juego oficial de la Tienda de Steam (${item.name}).`,
+      });
+    } catch {
+      if (requestId !== selectionRequestRef.current) return;
+      onUpdateGame(gameId, {
+        ...baseGame,
+        description: `Juego oficial de la Tienda de Steam (${item.name}).`,
+      });
+    } finally {
+      if (requestId === selectionRequestRef.current) {
+        setIsLoadingDetails(false);
+      }
+    }
   };
 
   // Handle manual title edit
@@ -185,28 +354,49 @@ const SingleGameSlotEditor: React.FC<SingleGameSlotEditorProps> = ({
     onUpdateGame(gameId, { ...game, description: newDesc });
   };
 
-  // Handle custom cover image URL
+  // Handle custom cover image URL with protocol validation
   const handleApplyCustomCover = () => {
-    if (customCoverUrl.trim()) {
-      onUpdateGame(gameId, { ...game, coverImage: customCoverUrl.trim() });
-      setCustomCoverUrl('');
+    const trimmedUrl = customCoverUrl.trim();
+    if (!trimmedUrl) return;
+
+    if (!isValidImageUrl(trimmedUrl)) {
+      setUploadError('Ingresá una URL de imagen válida con protocolo http:// o https://');
+      return;
     }
+
+    setUploadError(null);
+    onUpdateGame(gameId, { ...game, coverImage: trimmedUrl });
+    setCustomCoverUrl('');
   };
 
-  // Handle local file image upload
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle local file image upload with size limit and Canvas optimization
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          onUpdateGame(gameId, {
-            ...game,
-            coverImage: event.target.result as string,
-          });
-        }
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+
+    // Resetear valor para permitir volver a cargar la misma imagen si fuera necesario
+    e.target.value = '';
+
+    if (!file.type.startsWith('image/')) {
+      setUploadError('El archivo debe ser una imagen válida (JPG, PNG, WebP).');
+      return;
+    }
+
+    if (file.size > MAX_IMAGE_FILE_SIZE_BYTES) {
+      const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+      setUploadError(`La imagen (${sizeMb} MB) supera el límite máximo permitido de 2 MB.`);
+      return;
+    }
+
+    try {
+      setUploadError(null);
+      const optimizedDataUrl = await compressAndResizeImage(file);
+      onUpdateGame(gameId, {
+        ...game,
+        coverImage: optimizedDataUrl,
+      });
+    } catch {
+      setUploadError('Ocurrió un error al procesar y comprimir la imagen.');
     }
   };
 
@@ -217,12 +407,13 @@ const SingleGameSlotEditor: React.FC<SingleGameSlotEditorProps> = ({
         {canDelete ? (
           <motion.button
             type="button"
-            className="btn-delete-game-slot"
-            onClick={() => onDeleteGame(gameId)}
-            title="Quitar este juego de la votación"
-            aria-label={`Eliminar juego ${game?.title || slotIndex}`}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.92 }}
+            className={`btn-delete-game-slot ${isLoadingDetails ? 'disabled' : ''}`}
+            onClick={() => !isLoadingDetails && onDeleteGame(gameId)}
+            disabled={isLoadingDetails}
+            title={isLoadingDetails ? 'Esperá a que finalice la sincronización de detalles...' : 'Quitar este juego de la votación'}
+            aria-label={`Eliminar juego ${game.title || slotIndex}`}
+            whileHover={{ scale: isLoadingDetails ? 1 : 1.05 }}
+            whileTap={{ scale: isLoadingDetails ? 1 : 0.92 }}
           >
             🗑️ Eliminar Juego
           </motion.button>
@@ -239,53 +430,88 @@ const SingleGameSlotEditor: React.FC<SingleGameSlotEditorProps> = ({
         )}
       </div>
 
-      <div className="slot-current-preview">
+      <div className={`slot-current-preview ${isLoadingDetails ? 'loading-details' : ''}`}>
         <GameThumbnail
           game={game}
-          alt={game?.title}
+          alt={game.title}
           className="slot-cover-thumb"
         />
         <div className="slot-preview-meta">
-          <div className="slot-game-title">{game?.title || 'Seleccionar juego'}</div>
-          <div className="slot-game-desc-snippet">{game?.description || 'Sin descripción'}</div>
+          <div className="slot-game-title">
+            {game.title || 'Seleccionar juego'}
+            {isLoadingDetails && <span className="slot-loading-badge"> ⏳ Obteniendo detalles...</span>}
+          </div>
+          <div className="slot-game-desc-snippet">
+            {isLoadingDetails ? 'Sincronizando precio y descripción oficial...' : (game.description || 'Sin descripción')}
+          </div>
         </div>
       </div>
 
       <div className="slot-search-container" ref={dropdownRef}>
-        <label htmlFor="slot-search-input" className="slot-label">🔍 Buscar en Steam Store:</label>
+        <label htmlFor={`slot-search-input-${gameId}`} className="slot-label">🔍 Buscar en Steam Store:</label>
         <div className="search-input-wrapper">
           <input
-            id="slot-search-input"
+            id={`slot-search-input-${gameId}`}
             type="text"
+            role="combobox"
             className="slot-search-input"
-            placeholder="Escribe para buscar (ej: Helldivers, Elden, Rust)..."
+            placeholder={
+              isLoadingDetails
+                ? 'Obteniendo detalles del juego...'
+                : 'Escribe para buscar (ej: Helldivers, Elden, Rust)...'
+            }
             value={searchTerm}
             onChange={(e) => handleSearchTermChange(e.target.value)}
+            onKeyDown={handleKeyDown}
             onFocus={() => searchResults.length > 0 && setShowDropdown(true)}
+            disabled={isLoadingDetails}
+            aria-autocomplete="list"
+            aria-expanded={showDropdown && searchResults.length > 0}
+            aria-controls={`steam-results-${gameId}`}
+            aria-activedescendant={
+              showDropdown && focusedIndex >= 0 && searchResults[focusedIndex]
+                ? `steam-option-${gameId}-${searchResults[focusedIndex].id}`
+                : undefined
+            }
           />
-          {isSearching && <span className="search-spinner">⏳</span>}
+          {(isSearching || isLoadingDetails) && (
+            <span
+              className="search-spinner"
+              title={isLoadingDetails ? 'Obteniendo detalles de Steam...' : 'Buscando en Steam...'}
+            >
+              ⏳
+            </span>
+          )}
         </div>
 
         {/* STEAM STORE TYPEAHEAD DROPDOWN */}
         {showDropdown && searchResults.length > 0 && (
-          <div className="steam-search-dropdown">
-            {searchResults.map((item) => (
-              <motion.button
+          <div
+            id={`steam-results-${gameId}`}
+            className="steam-search-dropdown"
+            role="listbox"
+            aria-label="Resultados de búsqueda de Steam"
+          >
+            {searchResults.map((item, idx) => (
+              <motion.div
                 key={item.id}
-                type="button"
-                className="dropdown-item-row"
+                id={`steam-option-${gameId}-${item.id}`}
+                role="option"
+                tabIndex={-1}
+                className={`dropdown-item-row ${idx === focusedIndex ? 'focused' : ''}`}
+                aria-selected={idx === focusedIndex}
                 onClick={() => handleSelectSteamGame(item)}
                 whileHover={{ scale: 1.01, backgroundColor: 'rgba(102, 192, 244, 0.15)' }}
                 whileTap={{ scale: 0.98 }}
               >
-                <img src={item.tiny_image} alt={item.name} className="dropdown-item-thumb" loading="eager" />
+                <img src={item.tiny_image} alt={item.name} className="dropdown-item-thumb" loading="lazy" />
                 <div className="dropdown-item-info">
                   <span className="dropdown-item-title">{item.name}</span>
                   <span className="dropdown-item-meta">
                     AppID: {item.id} • {item.price_formatted}
                   </span>
                 </div>
-              </motion.button>
+              </motion.div>
             ))}
           </div>
         )}
@@ -294,58 +520,70 @@ const SingleGameSlotEditor: React.FC<SingleGameSlotEditorProps> = ({
       {/* MANUAL FALLBACK EDITORS */}
       <div className="slot-manual-controls">
         <div className="manual-field">
-          <label htmlFor="manual-title-input" className="manual-label">Editar Nombre Manual:</label>
+          <label htmlFor={`manual-title-input-${gameId}`} className="manual-label">Editar Nombre Manual:</label>
           <input
-            id="manual-title-input"
+            id={`manual-title-input-${gameId}`}
             type="text"
             className="manual-input"
-            value={game?.title || ''}
+            value={game.title || ''}
             onChange={(e) => handleTitleChange(e.target.value)}
+            disabled={isLoadingDetails}
           />
         </div>
 
         <div className="manual-field">
-          <label htmlFor="desc-input" className="manual-label">Editar Descripción Manual:</label>
-          <input
-            id="desc-input"
-            type="text"
-            className="manual-input"
-            value={game?.description || ''}
+          <label htmlFor={`desc-input-${gameId}`} className="manual-label">Editar Descripción Manual:</label>
+          <textarea
+            id={`desc-input-${gameId}`}
+            className="manual-input manual-textarea"
+            rows={3}
+            value={game.description || ''}
             onChange={(e) => handleDescriptionChange(e.target.value)}
             placeholder="Descripción corta del juego..."
+            disabled={isLoadingDetails}
           />
         </div>
 
         <div className="manual-field">
-          <label htmlFor="cover-url-input" className="manual-label">Portada por URL / Archivo:</label>
+          <label htmlFor={`cover-url-input-${gameId}`} className="manual-label">Portada por URL / Archivo:</label>
           <div className="manual-cover-row">
             <input
-              id="cover-url-input"
+              id={`cover-url-input-${gameId}`}
               type="text"
               className="manual-input small-input"
               placeholder="Pegar URL de portada..."
               value={customCoverUrl}
               onChange={(e) => setCustomCoverUrl(e.target.value)}
+              disabled={isLoadingDetails}
             />
             <motion.button 
               type="button" 
-              className="btn-apply-cover" 
-              onClick={handleApplyCustomCover}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
+              className={`btn-apply-cover ${isLoadingDetails ? 'disabled' : ''}`}
+              onClick={() => !isLoadingDetails && handleApplyCustomCover()}
+              disabled={isLoadingDetails}
+              whileHover={{ scale: isLoadingDetails ? 1 : 1.05 }}
+              whileTap={{ scale: isLoadingDetails ? 1 : 0.95 }}
             >
               Ok
             </motion.button>
             <motion.label 
-              className="file-cover-btn" 
-              title="Subir imagen local"
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
+              htmlFor={`file-cover-input-${gameId}`}
+              className={`file-cover-btn ${isLoadingDetails ? 'disabled' : ''}`}
+              title={isLoadingDetails ? 'Sincronizando con Steam...' : 'Subir imagen local (máx 2 MB)'}
+              whileHover={{ scale: isLoadingDetails ? 1 : 1.05 }}
+              whileTap={{ scale: isLoadingDetails ? 1 : 0.95 }}
             >
               <span>📁</span>
-              <input type="file" accept="image/*" onChange={handleFileUpload} />
+              <input
+                id={`file-cover-input-${gameId}`}
+                type="file"
+                accept="image/*"
+                onChange={handleFileUpload}
+                disabled={isLoadingDetails}
+              />
             </motion.label>
           </div>
+          {uploadError && <div className="slot-upload-error">⚠️ {uploadError}</div>}
         </div>
       </div>
     </div>
