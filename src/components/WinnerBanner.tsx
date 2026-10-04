@@ -9,6 +9,14 @@ import { getGameImageFallbacks } from '../utils/steamImages';
 import { FreezePriceButton } from './FreezePriceButton';
 
 interface WinnerBannerProps {
+  /**
+   * Colección consolidada de resultados clasificados de la votación.
+   *
+   * @contract PRECONDICIÓN DEL COMPONENTE:
+   * La lista debe suministrarse previamente ordenada en orden DESCENDENTE por clasificación
+   * (garantizado por `calculateResults`), donde `results[0]` es el 1.er lugar y `results.slice(1)`
+   * son los finalistas del podio.
+   */
   results: GameResult[];
   votersCount?: number;
   totalAssignedPoints?: number;

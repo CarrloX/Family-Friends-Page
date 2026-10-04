@@ -748,9 +748,26 @@ async function commitFinishedVotingBatch(
   const groupDocRef = doc(db, COLLECTION_GROUP, DOC_MIEMBROS);
   batch.set(groupDocRef, removeUndefinedDeep({ voters, lastUpdated: Timestamp.now() }), { merge: true });
 
-  // 3. Votación activa: reflejar los nuevos saldos y estado en 'votacion_actual/estado'
+  // 3. Votación activa: reflejar los nuevos saldos, estado y limpiar precio congelado para el nuevo ciclo en 'votacion_actual/estado'
   const activeDocRef = doc(db, COLLECTION_ACTIVE_VOTING, DOC_ACTIVE_VOTING);
-  batch.set(activeDocRef, removeUndefinedDeep({ voters, gamesMap, games, lastUpdated: Timestamp.now() }), { merge: true });
+  batch.set(
+    activeDocRef,
+    removeUndefinedDeep({
+      voters,
+      gamesMap,
+      games,
+      isPrecioCongelado: false,
+      precioCongelado: null,
+      descuentoCongelado: null,
+      precioCongeladoFormatted: null,
+      precioOriginalCongelado: null,
+      precioOriginalCongeladoFormatted: null,
+      congeladoAt: null,
+      congeladoGameId: null,
+      lastUpdated: Timestamp.now(),
+    }),
+    { merge: true }
+  );
 
   await batch.commit();
 }
@@ -815,6 +832,14 @@ export async function saveFinishedVotingSession(
       voters: cleanVoters,
       gamesMap: effectiveGamesMap,
       games,
+      isPrecioCongelado: false,
+      precioCongelado: null,
+      descuentoCongelado: null,
+      precioCongeladoFormatted: null,
+      precioOriginalCongelado: null,
+      precioOriginalCongeladoFormatted: null,
+      congeladoAt: null,
+      congeladoGameId: null,
     });
   };
 

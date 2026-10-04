@@ -141,13 +141,18 @@ function buildFinishedSessionData(
     precioCongeladoFormatted: freezeData.isPrecioCongelado ? freezeData.precioCongeladoFormatted : null,
   };
 
-  const updatedVoters = voters.map((voter, index) => ({
-    ...voter,
-    auraQuotaBalance: snapshots[index].newBalance,
-    auraRank: snapshots[index].newRank,
-    multiplier: snapshots[index].newMultiplier,
-    votes: cloneGameVotes(voter.votes),
-  }));
+  const snapshotsByVoterId = new Map(snapshots.map((s) => [s.voterId, s]));
+
+  const updatedVoters = voters.map((voter) => {
+    const snapshot = snapshotsByVoterId.get(voter.id);
+    return {
+      ...voter,
+      auraQuotaBalance: snapshot ? snapshot.newBalance : (voter.auraQuotaBalance ?? 0),
+      auraRank: snapshot ? snapshot.newRank : voter.auraRank,
+      multiplier: snapshot ? snapshot.newMultiplier : voter.multiplier,
+      votes: cloneGameVotes(voter.votes),
+    };
+  });
 
   return { historyRecord, updatedVoters };
 }
@@ -165,18 +170,18 @@ interface WinningGamePreviewProps {
   votersCount: number;
 }
 
-const WinningGamePreview: React.FC<WinningGamePreviewProps> = ({
+const WinningGamePreview = ({
   winningGame,
   weightedPoints,
   isPrecioCongelado,
   effectivePrice,
   individualQuota,
   votersCount,
-}) => (
+}: WinningGamePreviewProps) => (
   <div className="modal-winner-card">
     <GameThumbnail
       game={winningGame}
-      alt={winningGame.title}
+      alt=""
       className="winner-modal-thumb"
     />
     <div className="winner-modal-info">
@@ -186,7 +191,7 @@ const WinningGamePreview: React.FC<WinningGamePreviewProps> = ({
         <span className="winner-points">{weightedPoints} Puntos Ponderados</span>
         {isPrecioCongelado && effectivePrice ? (
           <span className="winner-modal-price frozen" title="Valor congelado previamente en administración">
-            🔒 {effectivePrice.finalFormatted}
+            <span aria-hidden="true">🔒 </span>{effectivePrice.finalFormatted}
             {effectivePrice.discountPercent && effectivePrice.discountPercent > 0
               ? ` (-${effectivePrice.discountPercent}%)`
               : ''}
@@ -195,14 +200,14 @@ const WinningGamePreview: React.FC<WinningGamePreviewProps> = ({
         ) : (
           effectivePrice?.finalFormatted && (
             <span className="winner-modal-price">
-              🏷️ {effectivePrice.finalFormatted}
+              <span aria-hidden="true">🏷️ </span>{effectivePrice.finalFormatted}
               {effectivePrice.discountPercent ? ` (-${effectivePrice.discountPercent}%)` : ''}
             </span>
           )
         )}
         {individualQuota && (
           <span className="winner-modal-quota-split">
-            💵 Cuota: <strong>{individualQuota.formatted}</strong> / integrante ({votersCount} miembros)
+            <span aria-hidden="true">💵 </span>Cuota: <strong>{individualQuota.formatted}</strong> / integrante ({votersCount} miembros)
           </span>
         )}
       </div>
@@ -216,18 +221,18 @@ interface PaymentControlsHeaderProps {
   onSetAllPayments: (paid: boolean) => void;
 }
 
-const PaymentControlsHeader: React.FC<PaymentControlsHeaderProps> = ({
+const PaymentControlsHeader = ({
   paymentStats,
   isSaving,
   onSetAllPayments,
-}) => {
+}: PaymentControlsHeaderProps) => {
   const isAllPaid = paymentStats.unpaidCount === 0;
   const pluralSuffix = paymentStats.unpaidCount > 1 ? 's' : '';
 
   return (
     <div className="voters-payment-header-row">
       <div className="voters-payment-title-group">
-        <h3 id="voters-payment-heading">👥 ¿CADA INTEGRANTE PAGÓ SU CUOTA DEL JUEGO GANADOR?</h3>
+        <h3><span aria-hidden="true">👥 </span>¿CADA INTEGRANTE PAGÓ SU CUOTA DEL JUEGO GANADOR?</h3>
         <p className="voters-payment-subtitle">
           Los pagos modifican el saldo de cuotas y el rango de Aura de cada integrante.
         </p>
@@ -237,7 +242,7 @@ const PaymentControlsHeader: React.FC<PaymentControlsHeaderProps> = ({
         <div className="voters-payment-summary-chips">
           {isAllPaid ? (
             <span className="summary-chip chip-all-paid">
-              ✨ Todos al día ({paymentStats.total}/{paymentStats.total})
+              <span aria-hidden="true">✨ </span>Todos al día ({paymentStats.total}/{paymentStats.total})
             </span>
           ) : (
             <>
@@ -276,15 +281,15 @@ const PaymentControlsHeader: React.FC<PaymentControlsHeaderProps> = ({
   );
 };
 
-const UnpaidWarning: React.FC<{ unpaidCount: number }> = ({ unpaidCount }) => {
+const UnpaidWarning = ({ unpaidCount }: { unpaidCount: number }) => {
   if (unpaidCount === 0) return null;
   const pluralSuffix = unpaidCount > 1 ? 's' : '';
   const verbPlural = unpaidCount > 1 ? 'n' : '';
 
   return (
-    <output className="payment-unpaid-warning">
-      ⚠️ <strong>Atención operacional:</strong> {unpaidCount} integrante{pluralSuffix} se registrará{verbPlural} como impago{pluralSuffix} y recibirá{verbPlural} <strong>-1 cuota</strong> de penalización de Aura.
-    </output>
+    <div role="status" aria-live="polite" className="payment-unpaid-warning">
+      <span aria-hidden="true">⚠️ </span><strong>Atención operacional:</strong> {unpaidCount} integrante{pluralSuffix} se registrará{verbPlural} como impago{pluralSuffix} y recibirá{verbPlural} <strong>-1 cuota</strong> de penalización de Aura.
+    </div>
   );
 };
 
@@ -293,6 +298,14 @@ const UnpaidWarning: React.FC<{ unpaidCount: number }> = ({ unpaidCount }) => {
 // ============================================================
 
 interface FinishVotingModalProps {
+  /**
+   * Resultados consolidados de todos los juegos evaluados en la votación.
+   *
+   * @contract PRECONDICIÓN DEL COMPONENTE:
+   * La lista debe suministrarse previamente ordenada en orden DESCENDENTE por clasificación
+   * competitiva (puntuación ponderada y criterios de desempate provistos por `calculateResults`).
+   * Por contrato, el primer elemento (`allResults[0]`) es considerado inequívocamente el 1.er lugar / juego ganador.
+   */
   allResults: GameResult[];
   voters: Voter[];
   isPrecioCongelado?: boolean;
@@ -306,7 +319,7 @@ interface FinishVotingModalProps {
   onClose: () => void;
 }
 
-export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
+export const FinishVotingModal = React.memo(({
   allResults,
   voters,
   isPrecioCongelado = false,
@@ -315,9 +328,21 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
   precioCongeladoFormatted = null,
   onConfirmFinish,
   onClose,
-}) => {
+}: FinishVotingModalProps) => {
+  // Precondición de contrato: allResults viene ordenado descendentemente desde calculateResults.
+  // El elemento [0] es el 1.er lugar ganador.
   const winningResult = allResults[0];
+
+  // Verificación defensiva en entorno de desarrollo para alertar si algún llamador viola el contrato
+  if (import.meta.env.DEV && allResults.length > 1) {
+    if (allResults[0].weightedPoints < allResults[1].weightedPoints) {
+      console.warn(
+        '[FinishVotingModal] Infracción de contrato: allResults no está ordenado descendentemente. allResults[0] tiene menor puntuación que allResults[1].'
+      );
+    }
+  }
   const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [hasConfirmedReview, setHasConfirmedReview] = useState(false);
 
   const modalRef = useModalFocusTrap<HTMLDivElement>({
@@ -332,6 +357,7 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
 
   const handleTogglePayment = useCallback((voterId: string, paid: boolean) => {
     if (isSaving) return;
+    setSaveError(null);
     setQuotaPayments((prev) => ({
       ...prev,
       [voterId]: paid,
@@ -340,6 +366,7 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
 
   const handleSetAllPayments = useCallback((paid: boolean) => {
     if (isSaving) return;
+    setSaveError(null);
     setQuotaPayments(() => {
       const next: Record<string, boolean> = {};
       for (const v of voters) {
@@ -355,35 +382,26 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
   );
 
   const fallbackPrice = winningResult?.game?.price;
-  const effectivePrice = useMemo(
-    () =>
-      resolveEffectivePrice(
-        isPrecioCongelado,
-        precioCongelado,
-        descuentoCongelado,
-        precioCongeladoFormatted,
-        fallbackPrice
-      ),
-    [isPrecioCongelado, precioCongelado, descuentoCongelado, precioCongeladoFormatted, fallbackPrice]
+  const effectivePrice = resolveEffectivePrice(
+    isPrecioCongelado,
+    precioCongelado,
+    descuentoCongelado,
+    precioCongeladoFormatted,
+    fallbackPrice
   );
 
-  const individualQuota = useMemo(
-    () => calculateIndividualQuota(effectivePrice, voters.length),
-    [effectivePrice, voters.length]
-  );
+  const individualQuota = calculateIndividualQuota(effectivePrice, voters.length);
 
-  const winningGame = useMemo(() => {
-    const base = cloneGameSnapshot(winningResult.game);
-    if (effectivePrice) {
-      base.price = { ...effectivePrice };
-    }
-    return base;
-  }, [winningResult.game, effectivePrice]);
+  const winningGame = cloneGameSnapshot(winningResult.game);
+  if (effectivePrice) {
+    winningGame.price = { ...effectivePrice };
+  }
 
   const handleConfirm = async () => {
     if (isSaving || !hasConfirmedReview || !winningResult?.game) return;
 
     setIsSaving(true);
+    setSaveError(null);
     try {
       const snapshots = buildVoterSnapshots(voters, quotaPayments);
       const { historyRecord, updatedVoters } = buildFinishedSessionData(
@@ -396,7 +414,14 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
 
       await onConfirmFinish(updatedVoters, historyRecord);
     } catch (error) {
-      console.error('[FinishVotingModal] Error al confirmar finalización de votación:', error);
+      if (import.meta.env.DEV) {
+        console.error('[FinishVotingModal] Error al confirmar finalización de votación:', error);
+      }
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : 'No se pudo guardar la votación. No se aplicaron los cambios en los datos.';
+      setSaveError(message);
     } finally {
       setIsSaving(false);
     }
@@ -404,6 +429,13 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
 
   if (!winningResult?.game) {
     return null;
+  }
+
+  let confirmButtonLabel = `✓ Confirmar y registrar pagos de Aura (${paymentStats.paidCount} de ${paymentStats.total})`;
+  if (isSaving) {
+    confirmButtonLabel = 'Guardando votación y pagos…';
+  } else if (saveError) {
+    confirmButtonLabel = `🔄 Reintentar confirmación de pagos (${paymentStats.paidCount} de ${paymentStats.total})`;
   }
 
   return (
@@ -435,7 +467,7 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
         <div className="bottom-sheet-handle" aria-hidden="true"></div>
         <div className="modal-header">
           <div className="modal-title-group">
-            <h2 id="finish-voting-title">🏆 FINALIZAR VOTACIÓN Y ASIGNAR CUOTAS</h2>
+            <h2 id="finish-voting-title"><span aria-hidden="true">🏆 </span>FINALIZAR VOTACIÓN Y ASIGNAR CUOTAS</h2>
             <p id="finish-voting-description">
               Registra quiénes pagaron la cuota del juego ganador para actualizar el sistema de Aura.
             </p>
@@ -466,7 +498,7 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
           votersCount={voters.length}
         />
 
-        <fieldset className="voters-payment-section" aria-labelledby="voters-payment-heading">
+        <fieldset className="voters-payment-section">
           <legend className="sr-only">
             ¿Cada integrante pagó su cuota del juego ganador para el cálculo de Aura?
           </legend>
@@ -509,6 +541,19 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
             </span>
           </label>
 
+          {saveError && (
+            <output className="finish-modal-error-banner" aria-live="assertive">
+              <span className="finish-modal-error-icon" aria-hidden="true">⚠️</span>
+              <div className="finish-modal-error-content">
+                <strong className="finish-modal-error-title">No se pudo finalizar la votación</strong>
+                <p className="finish-modal-error-text">{saveError}</p>
+                <span className="finish-modal-error-hint">
+                  Los saldos de Aura y el historial no fueron modificados. Revisa tu conexión o permisos y vuelve a intentar.
+                </span>
+              </div>
+            </output>
+          )}
+
           <div className="modal-footer-actions">
             <motion.button
               type="button"
@@ -538,9 +583,7 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
               whileHover={isSaving || !hasConfirmedReview ? {} : { scale: 1.03 }}
               whileTap={isSaving || !hasConfirmedReview ? {} : { scale: 0.97 }}
             >
-              {isSaving
-                ? 'Guardando votación y pagos…'
-                : `✓ Confirmar y registrar pagos de Aura (${paymentStats.paidCount} de ${paymentStats.total})`}
+              {confirmButtonLabel}
             </motion.button>
           </div>
         </div>
@@ -548,3 +591,5 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
     </motion.div>
   );
 });
+
+FinishVotingModal.displayName = 'FinishVotingModal';

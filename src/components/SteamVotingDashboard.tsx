@@ -788,7 +788,21 @@ export const SteamVotingDashboard: React.FC = () => {
 
       setVoters(updatedVoters);
       setHistory((prev) => [historyRecord, ...prev]);
+      setFreezeState({
+        isPrecioCongelado: false,
+        precioCongelado: null,
+        descuentoCongelado: null,
+        precioCongeladoFormatted: null,
+        precioOriginalCongelado: null,
+        precioOriginalCongeladoFormatted: null,
+        congeladoAt: null,
+        gameId: null,
+      });
       setShowFinishModal(false);
+    } else {
+      throw new Error(
+        result.message || 'No se pudo guardar la votación. No se aplicaron los cambios en los datos.'
+      );
     }
   }, [gamesMap]);
 

@@ -3904,6 +3904,53 @@ background: #3b0764;
   color: #ffffff;
 }
 
+.finish-modal-error-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: rgba(127, 29, 29, 0.45);
+  border: 1px solid rgba(239, 68, 68, 0.7);
+  box-shadow: 0 4px 16px rgba(220, 38, 38, 0.2);
+  color: #fee2e2;
+  padding: 12px 16px;
+  border-radius: 10px;
+  margin-top: 14px;
+  animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.finish-modal-error-icon {
+  font-size: 1.25rem;
+  line-height: 1;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.finish-modal-error-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.finish-modal-error-title {
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.finish-modal-error-text {
+  margin: 0;
+  color: #fecaca;
+}
+
+.finish-modal-error-hint {
+  font-size: 11px;
+  color: #fca5a5;
+  opacity: 0.9;
+  margin-top: 2px;
+}
+
 .voters-payment-grid {
   display: flex;
   flex-direction: column;
