@@ -28,13 +28,21 @@ export const FreezePriceButton: React.FC<FreezePriceButtonProps> = React.memo(({
     }
   };
 
+  const isInteractionDisabled = disabled || isLoading;
+
+  const frozenIcon = isFrozen ? '🔓' : '🔒';
+  const toggleIcon = isLoading ? '⏳' : frozenIcon;
+  const loadingLabel = isFrozen ? 'Descongelando…' : 'Congelando…';
+  const idleLabel = isFrozen ? 'Descongelar Precio' : 'Congelar Precio';
+  const toggleLabel = isLoading ? loadingLabel : idleLabel;
+
   return (
     <motion.button
       type="button"
       id="btn-freeze-price-toggle"
       className={`btn-freeze-toggle ${isFrozen ? 'is-frozen' : 'is-unfrozen'} ${className}`.trim()}
       onClick={handleClick}
-      disabled={disabled || isLoading}
+      disabled={isInteractionDisabled}
       aria-pressed={isFrozen}
       aria-busy={isLoading}
       title={
@@ -42,18 +50,16 @@ export const FreezePriceButton: React.FC<FreezePriceButtonProps> = React.memo(({
           ? '🔓 Descongelar Precio: Desbloquea el precio para volver a sincronizar ofertas en vivo con la API de Steam.'
           : '🔒 Congelar Precio: Captura y protege permanentemente el valor y % de descuento actual contra vencimientos en Steam.'
       }
-      whileHover={disabled || isLoading ? {} : { scale: 1.04, y: -2 }}
-      whileTap={disabled || isLoading ? {} : { scale: 0.96 }}
+      whileHover={isInteractionDisabled ? {} : { scale: 1.04, y: -2 }}
+      whileTap={isInteractionDisabled ? {} : { scale: 0.96 }}
       layout
       transition={{ type: 'spring', stiffness: 400, damping: 25 }}
     >
       <span className="freeze-toggle-icon" aria-hidden="true">
-        {isLoading ? '⏳' : isFrozen ? '🔓' : '🔒'}
+        {toggleIcon}
       </span>
       <span className="freeze-toggle-label">
-        {isLoading
-          ? (isFrozen ? 'Descongelando…' : 'Congelando…')
-          : (isFrozen ? 'Descongelar Precio' : 'Congelar Precio')}
+        {toggleLabel}
       </span>
       {isFrozen && (
         <span className="freeze-active-pill" aria-hidden="true">
@@ -63,3 +69,4 @@ export const FreezePriceButton: React.FC<FreezePriceButtonProps> = React.memo(({
     </motion.button>
   );
 });
+

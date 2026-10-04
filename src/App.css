@@ -1174,7 +1174,7 @@
 .btn-freeze-toggle.is-frozen {
   background: linear-gradient(135deg, rgba(234, 88, 12, 0.28) 0%, rgba(185, 28, 28, 0.2) 100%);
   border: 1.5px solid rgba(249, 115, 22, 0.85);
-  color: #fb923c;
+  color: #ffedd5;
   box-shadow: 0 0 14px rgba(249, 115, 22, 0.35);
   animation: freezeWarningPulse 2.5s ease-in-out infinite;
 }
@@ -1202,7 +1202,7 @@
 }
 
 .freeze-active-pill {
-  background: #ea580c;
+  background: #9a3412;
   color: #ffffff;
   font-size: 10px;
   font-weight: 900;
@@ -1253,7 +1253,7 @@
 }
 
 .btn-clear-user-votes:hover {
-  background: rgba(239, 68, 68, 0.2);
+  background: rgba(185, 28, 28, 0.9);
   border-color: #ef4444;
   color: #ffffff;
 }
@@ -1267,9 +1267,9 @@
 }
 
 .frozen-tag-pill {
-  background: rgba(6, 182, 212, 0.3);
-  border: 1px solid #22d3ee;
-  color: #67e8f9;
+  background: #155e75;
+  border: 1px solid #0891b2;
+  color: #cffafe;
   font-size: 10px;
   font-weight: 800;
   padding: 2px 6px;
@@ -1280,9 +1280,9 @@
 
 .winner-modal-quota-split {
   font-size: 13px;
-  color: #4ade80;
-  background: rgba(34, 197, 94, 0.12);
-  border: 1px solid rgba(34, 197, 94, 0.35);
+  color: #bbf7d0;
+  background: #052e16;
+  border: 1px solid rgba(34, 197, 94, 0.45);
   padding: 4px 10px;
   border-radius: 6px;
   font-weight: 600;
@@ -1298,9 +1298,9 @@
 }
 
 .record-frozen-price-tag {
-  background: rgba(6, 182, 212, 0.2);
-  border: 1px solid rgba(34, 211, 238, 0.5);
-  color: #67e8f9;
+  background: #164e63;
+  border: 1px solid #0891b2;
+  color: #cffafe;
   font-size: 12px;
   font-weight: 800;
   padding: 3px 8px;
@@ -1311,9 +1311,9 @@
 }
 
 .record-price-tag {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  color: #e2e8f0;
+  background: #334155;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: #f8fafc;
   font-size: 12px;
   font-weight: 700;
   padding: 3px 8px;
@@ -1788,9 +1788,9 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: rgba(14, 165, 233, 0.15);
+  background: #0c4a6e;
   border: 1px solid rgba(56, 189, 248, 0.6);
-  color: #38bdf8;
+  color: #bae6fd;
   padding: 6px 14px;
   border-radius: 20px;
   font-size: 12px;
@@ -1825,8 +1825,8 @@
 .voting-status-chip {
   font-size: 12px;
   font-weight: 700;
-  color: #94a3b8;
-  background: rgba(255, 255, 255, 0.05);
+  color: #cbd5e1;
+  background: #1e293b;
   padding: 5px 12px;
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -1994,12 +1994,12 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: rgba(168, 85, 247, 0.1);
-  border: 1px dashed rgba(168, 85, 247, 0.4);
+  background: #3b0764;
+  border: 1px dashed rgba(168, 85, 247, 0.6);
   padding: 8px 16px;
   border-radius: 10px;
   font-size: 12.5px;
-  color: #d8b4fe;
+  color: #e9d5ff;
   font-weight: 600;
   width: fit-content;
 }
@@ -3762,9 +3762,9 @@ background: #3b0764;
 .winner-modal-price {
   font-size: 11px;
   font-weight: 700;
-  color: #a4d007;
-  background: rgba(164, 208, 7, 0.12);
-  border: 1px solid rgba(164, 208, 7, 0.3);
+  color: #ecfccb;
+  background: #1a2e05;
+  border: 1px solid rgba(164, 208, 7, 0.5);
   padding: 1px 6px;
   border-radius: 4px;
 }
@@ -3838,22 +3838,22 @@ background: #3b0764;
 }
 
 .summary-chip.chip-all-paid {
-  background: rgba(16, 185, 129, 0.15);
-  border: 1px solid rgba(16, 185, 129, 0.45);
-  color: #34d399;
+  background: #022c22;
+  border: 1px solid rgba(16, 185, 129, 0.55);
+  color: #a7f3d0;
   box-shadow: 0 0 12px rgba(16, 185, 129, 0.25);
 }
 
 .summary-chip.chip-paid {
-  background: rgba(16, 185, 129, 0.12);
-  border: 1px solid rgba(16, 185, 129, 0.35);
-  color: #6ee7b7;
+  background: #022c22;
+  border: 1px solid rgba(16, 185, 129, 0.45);
+  color: #d1fae5;
 }
 
 .summary-chip.chip-unpaid {
-  background: rgba(239, 68, 68, 0.15);
-  border: 1px solid rgba(239, 68, 68, 0.4);
-  color: #fca5a5;
+  background: #450a0a;
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  color: #fee2e2;
   box-shadow: 0 0 10px rgba(239, 68, 68, 0.2);
 }
 
@@ -3864,9 +3864,9 @@ background: #3b0764;
 }
 
 .btn-bulk-payment {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  color: rgba(255, 255, 255, 0.85);
+  background: #1e293b;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #f1f5f9;
   font-size: 10px;
   font-weight: 700;
   padding: 3px 9px;
@@ -3876,8 +3876,8 @@ background: #3b0764;
 }
 
 .btn-bulk-payment:hover:not(:disabled) {
-  background: rgba(168, 85, 247, 0.25);
-  border-color: rgba(168, 85, 247, 0.5);
+  background: rgba(76, 29, 149, 0.95);
+  border-color: rgba(168, 85, 247, 0.7);
   color: #ffffff;
   transform: translateY(-1px);
 }
@@ -3889,9 +3889,10 @@ background: #3b0764;
 }
 
 .payment-unpaid-warning {
-  background: rgba(239, 68, 68, 0.12);
-  border: 1px solid rgba(239, 68, 68, 0.35);
-  color: #fecaca;
+  display: block;
+  background: #450a0a;
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  color: #fee2e2;
   padding: 8px 14px;
   border-radius: 8px;
   font-size: 11.5px;
@@ -3995,6 +3996,10 @@ background: #3b0764;
 .toggle-btn-group {
   display: flex;
   gap: 6px;
+  border: none;
+  padding: 0;
+  margin: 0;
+  min-inline-size: 0;
 }
 
 .toggle-choice-btn {
@@ -4785,7 +4790,7 @@ background: #3b0764;
 }
 
 .history-header-close-btn:hover {
-  background: linear-gradient(135deg, rgba(239, 68, 68, 0.35) 0%, rgba(168, 85, 247, 0.45) 100%);
+  background: linear-gradient(135deg, rgba(185, 28, 28, 0.9) 0%, rgba(109, 40, 217, 0.9) 100%);
   border-color: #f87171;
   color: #ffffff;
   box-shadow: 0 0 16px rgba(239, 68, 68, 0.6), 0 0 25px rgba(168, 85, 247, 0.4);
@@ -6788,7 +6793,7 @@ background: #3b0764;
 }
 
 .update-toast-dismiss-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(30, 41, 59, 0.9);
   color: #ffffff;
   border-color: rgba(255, 255, 255, 0.25);
   transform: scale(1.05);

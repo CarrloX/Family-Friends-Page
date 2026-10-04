@@ -38,11 +38,10 @@ export const VoterPaymentRow: React.FC<VoterPaymentRowProps> = React.memo(({
       </div>
 
       {/* SÍ / NO TOGGLE BUTTONS */}
-      <div
+      <fieldset
         className="toggle-btn-group"
-        role="group"
-        aria-label={`Registro de cuota para ${voter.name}`}
       >
+        <legend className="sr-only">Registro de cuota para {voter.name}</legend>
         <motion.button
           type="button"
           className={`toggle-choice-btn btn-yes ${paid ? 'active' : ''}`}
@@ -67,7 +66,7 @@ export const VoterPaymentRow: React.FC<VoterPaymentRowProps> = React.memo(({
         >
           ✕ NO (-1)
         </motion.button>
-      </div>
+      </fieldset>
 
       {/* PREVIEW OF NEW AURA STATUS */}
       <div className="new-aura-preview">

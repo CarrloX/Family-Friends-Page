@@ -87,6 +87,168 @@ const VotingInProgressView: React.FC<{ totalVoters: number; resultsCount: number
   </motion.div>
 );
 
+// ============================================================
+// Subcomponentes puros de WinnerCard para reducir complejidad cognitiva
+// ============================================================
+
+interface WinnerCoverImageProps {
+  src?: string;
+  alt: string;
+  fallbacks: string[];
+}
+
+const handleImgError = (
+  e: React.SyntheticEvent<HTMLImageElement>,
+  fallbacks: string[]
+) => {
+  const target = e.currentTarget;
+  const idx = Number.parseInt(target.dataset.fallbackLevel || '0', 10);
+  if (idx < fallbacks.length) {
+    target.dataset.fallbackLevel = String(idx + 1);
+    target.src = fallbacks[idx];
+  }
+};
+
+const WinnerCoverImage: React.FC<WinnerCoverImageProps> = ({ src, alt, fallbacks }) => (
+  <img
+    src={src}
+    alt={alt}
+    className="winner-image"
+    loading="eager"
+    onError={(e) => handleImgError(e, fallbacks)}
+  />
+);
+
+interface WinnerImageContainerProps {
+  appId?: number;
+  gameTitle: string;
+  winnerHdCover?: string;
+  winnerCoverFallbacks: string[];
+}
+
+const WinnerImageContainer: React.FC<WinnerImageContainerProps> = ({
+  appId,
+  gameTitle,
+  winnerHdCover,
+  winnerCoverFallbacks,
+}) => {
+  const image = (
+    <WinnerCoverImage src={winnerHdCover} alt={gameTitle} fallbacks={winnerCoverFallbacks} />
+  );
+
+  if (appId) {
+    return (
+      <a
+        href={`https://store.steampowered.com/app/${appId}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="winner-image-container winner-image-link"
+        title={`Abrir ${gameTitle} en la Tienda Oficial de Steam`}
+      >
+        {image}
+        <div className="winner-badge-overlay">1º LUGAR</div>
+      </a>
+    );
+  }
+
+  return (
+    <div className="winner-image-container">
+      {image}
+      <div className="winner-badge-overlay">1º LUGAR</div>
+    </div>
+  );
+};
+
+interface WinnerLivePriceBadgeProps {
+  price: SteamPriceInfo;
+  appId?: number;
+}
+
+const WinnerLivePriceBadge: React.FC<WinnerLivePriceBadgeProps> = ({ price, appId }) => {
+  const hasDiscount = Boolean(price.discountPercent && price.discountPercent > 0);
+
+  return (
+    <a
+      href={appId ? `https://store.steampowered.com/app/${appId}` : undefined}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={`winner-steam-price-badge ${hasDiscount ? 'has-discount' : ''}`}
+      title="Ver en la Tienda Oficial de Steam"
+    >
+      <FaSteam className="steam-price-icon" />
+      {hasDiscount ? (
+        <>
+          <span className="price-discount-pill">-{price.discountPercent}%</span>
+          {price.initialFormatted && (
+            <span className="price-old-strikethrough">{price.initialFormatted}</span>
+          )}
+          <span className="price-current-value">{price.finalFormatted}</span>
+        </>
+      ) : (
+        <span className="price-current-value">
+          {price.finalFormatted || (price.isFree ? 'Gratis' : 'Ver en Steam')}
+        </span>
+      )}
+    </a>
+  );
+};
+
+interface WinnerPriceActionsProps {
+  effectivePrice: SteamPriceInfo | null;
+  liveSteamPrice: SteamPriceInfo | null;
+  appId?: number;
+  isPrecioCongelado: boolean;
+  canManageContent: boolean;
+  isEditMode: boolean;
+  isFreezingLoading: boolean;
+  onToggleFreezePrice?: (livePrice: SteamPriceInfo | null) => Promise<void> | void;
+}
+
+const WinnerPriceActions: React.FC<WinnerPriceActionsProps> = ({
+  effectivePrice,
+  liveSteamPrice,
+  appId,
+  isPrecioCongelado,
+  canManageContent,
+  isEditMode,
+  isFreezingLoading,
+  onToggleFreezePrice,
+}) => (
+  <div className="winner-price-actions-group">
+    {isPrecioCongelado && effectivePrice ? (
+      <div
+        className="frozen-price-prominent-badge"
+        title="🔒 Precio Congelado: El precio y porcentaje de descuento están asegurados para la liquidación de cuotas antes del cobro"
+      >
+        <span className="frozen-badge-icon" aria-hidden="true">🔒</span>
+        <span className="frozen-badge-title">Precio Congelado:</span>
+        <span className="frozen-badge-value">
+          {effectivePrice.finalFormatted || (effectivePrice.isFree ? 'Gratis' : 'COP')}
+          {effectivePrice.discountPercent && effectivePrice.discountPercent > 0
+            ? ` (-${effectivePrice.discountPercent}%)`
+            : ''}
+        </span>
+      </div>
+    ) : (
+      effectivePrice && (
+        <WinnerLivePriceBadge price={effectivePrice} appId={appId} />
+      )
+    )}
+
+    {canManageContent && isEditMode && onToggleFreezePrice && (
+      <FreezePriceButton
+        isFrozen={isPrecioCongelado}
+        onToggle={() => onToggleFreezePrice(liveSteamPrice)}
+        isLoading={isFreezingLoading}
+      />
+    )}
+  </div>
+);
+
+// ============================================================
+// WinnerCard — Complejidad cognitiva reducida extrayendo subcomponentes
+// ============================================================
+
 interface WinnerCardProps {
   winner: GameResult;
   appId?: number;
@@ -130,134 +292,40 @@ const WinnerCard: React.FC<WinnerCardProps> = ({
       </div>
 
       <div className="winner-content">
-        {appId ? (
-          <a
-            href={`https://store.steampowered.com/app/${appId}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="winner-image-container winner-image-link"
-            title={`Abrir ${winner.game.title} en la Tienda Oficial de Steam`}
-          >
-            <img
-              src={winnerHdCover}
-              alt={winner.game.title}
-              className="winner-image"
-              loading="eager"
-              onError={(e) => {
-                const target = e.currentTarget;
-                const currentFallback = Number.parseInt(target.dataset.fallbackLevel || '0', 10);
-                if (currentFallback < winnerCoverFallbacks.length) {
-                  const nextUrl = winnerCoverFallbacks[currentFallback];
-                  target.dataset.fallbackLevel = String(currentFallback + 1);
-                  target.src = nextUrl;
-                }
-              }}
-            />
-            <div className="winner-badge-overlay">1º LUGAR</div>
-          </a>
-        ) : (
-          <div className="winner-image-container">
-            <img
-              src={winnerHdCover}
-              alt={winner.game.title}
-              className="winner-image"
-              loading="eager"
-              onError={(e) => {
-                const target = e.currentTarget;
-                const currentFallback = Number.parseInt(target.dataset.fallbackLevel || '0', 10);
-                if (currentFallback < winnerCoverFallbacks.length) {
-                  const nextUrl = winnerCoverFallbacks[currentFallback];
-                  target.dataset.fallbackLevel = String(currentFallback + 1);
-                  target.src = nextUrl;
-                }
-              }}
-            />
-            <div className="winner-badge-overlay">1º LUGAR</div>
-          </div>
-        )}
+        <WinnerImageContainer
+          appId={appId}
+          gameTitle={winner.game.title}
+          winnerHdCover={winnerHdCover}
+          winnerCoverFallbacks={winnerCoverFallbacks}
+        />
 
         <div className="winner-details">
           <div className="winner-meta-header">
             {displayedGenre && <div className="winner-genre">{displayedGenre}</div>}
-
-            <div className="winner-price-actions-group">
-              {isPrecioCongelado && effectivePrice ? (
-                <div
-                  className="frozen-price-prominent-badge"
-                  title="🔒 Precio Congelado: El precio y porcentaje de descuento están asegurados para la liquidación de cuotas antes del cobro"
-                >
-                  <span className="frozen-badge-icon" aria-hidden="true">🔒</span>
-                  <span className="frozen-badge-title">Precio Congelado:</span>
-                  <span className="frozen-badge-value">
-                    {effectivePrice.finalFormatted || (effectivePrice.isFree ? 'Gratis' : 'COP')}
-                    {effectivePrice.discountPercent && effectivePrice.discountPercent > 0
-                      ? ` (-${effectivePrice.discountPercent}%)`
-                      : ''}
-                  </span>
-                </div>
-              ) : (
-                effectivePrice && (
-                  <a
-                    href={appId ? `https://store.steampowered.com/app/${appId}` : undefined}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={`winner-steam-price-badge ${effectivePrice.discountPercent && effectivePrice.discountPercent > 0 ? 'has-discount' : ''}`}
-                    title="Ver en la Tienda Oficial de Steam"
-                  >
-                    <FaSteam className="steam-price-icon" />
-                    {effectivePrice.discountPercent && effectivePrice.discountPercent > 0 ? (
-                      <>
-                        <span className="price-discount-pill">-{effectivePrice.discountPercent}%</span>
-                        {effectivePrice.initialFormatted && (
-                          <span className="price-old-strikethrough">{effectivePrice.initialFormatted}</span>
-                        )}
-                        <span className="price-current-value">{effectivePrice.finalFormatted}</span>
-                      </>
-                    ) : (
-                      <span className="price-current-value">
-                        {effectivePrice.finalFormatted || (effectivePrice.isFree ? 'Gratis' : 'Ver en Steam')}
-                      </span>
-                    )}
-                  </a>
-                )
-              )}
-
-              {canManageContent && isEditMode && onToggleFreezePrice && (
-                <FreezePriceButton
-                  isFrozen={Boolean(isPrecioCongelado)}
-                  onToggle={() => onToggleFreezePrice(liveSteamPrice)}
-                  isLoading={isFreezingLoading}
-                />
-              )}
-            </div>
+            <WinnerPriceActions
+              effectivePrice={effectivePrice}
+              liveSteamPrice={liveSteamPrice}
+              appId={appId}
+              isPrecioCongelado={isPrecioCongelado}
+              canManageContent={canManageContent}
+              isEditMode={isEditMode}
+              isFreezingLoading={isFreezingLoading}
+              onToggleFreezePrice={onToggleFreezePrice}
+            />
           </div>
           <h2 className="winner-title">{winner.game.title}</h2>
           <p className="winner-description">{displayedDescription}</p>
 
           <div className="winner-stats-grid">
-            <motion.div
-              className="stat-card primary-stat"
-              whileHover={{ scale: 1.03 }}
-              whileTap={{ scale: 0.97 }}
-            >
+            <motion.div className="stat-card primary-stat" whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
               <span className="stat-label">TOTAL PUNTOS PONDERADOS</span>
               <span className="stat-value">{winner.weightedPoints} <small>PTS</small></span>
             </motion.div>
-
-            <motion.div
-              className="stat-card"
-              whileHover={{ scale: 1.03 }}
-              whileTap={{ scale: 0.97 }}
-            >
+            <motion.div className="stat-card" whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
               <span className="stat-label">VOTOS DE FAVORITO ({maxPoints} PTS)</span>
               <span className="stat-value">{winner.firstPlaceVotes} <small>/ {totalVoters} integrantes</small></span>
             </motion.div>
-
-            <motion.div
-              className="stat-card"
-              whileHover={{ scale: 1.03 }}
-              whileTap={{ scale: 0.97 }}
-            >
+            <motion.div className="stat-card" whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
               <span className="stat-label">PUNTOS BRUTOS</span>
               <span className="stat-value">{winner.rawPoints} <small>PTS</small></span>
             </motion.div>

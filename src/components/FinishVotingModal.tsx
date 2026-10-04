@@ -1,12 +1,296 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import type { Voter, GameResult, VotingHistoryRecord, VoterSnapshotInHistory } from '../types/voting';
-import { calculateAuraStatus, cloneGameSnapshot, createResultsSnapshot, cloneGameVotes } from '../types/voting';
+import type {
+  Voter,
+  Game,
+  GameResult,
+  SteamPriceInfo,
+  VotingHistoryRecord,
+  VoterSnapshotInHistory,
+} from '../types/voting';
+import {
+  calculateAuraStatus,
+  cloneGameSnapshot,
+  createResultsSnapshot,
+  cloneGameVotes,
+} from '../types/voting';
 import { VoterPaymentRow } from './VoterPaymentRow';
 import { GameThumbnail } from './GameThumbnail';
 import { formatHistoryDate } from '../utils/formatDate';
 import { formatCopPrice } from '../services/steamStoreApi';
 import { useModalFocusTrap } from '../hooks/useModalFocusTrap';
+
+// ============================================================
+// Funciones puras auxiliares para reducir complejidad cognitiva
+// ============================================================
+
+function resolveEffectivePrice(
+  isPrecioCongelado: boolean,
+  precioCongelado: number | null | undefined,
+  descuentoCongelado: number | null | undefined,
+  precioCongeladoFormatted: string | null | undefined,
+  fallbackPrice?: SteamPriceInfo
+): SteamPriceInfo | undefined {
+  if (!isPrecioCongelado) {
+    return fallbackPrice;
+  }
+  const final = precioCongelado ?? 0;
+  const discount = descuentoCongelado ?? 0;
+  const isFree = final === 0;
+  const formatted = precioCongeladoFormatted || (isFree ? 'Gratis' : formatCopPrice(final));
+  return {
+    isFree,
+    currency: 'COP',
+    final,
+    discountPercent: discount,
+    finalFormatted: formatted,
+  };
+}
+
+function calculateIndividualQuota(
+  effectivePrice: SteamPriceInfo | undefined,
+  votersCount: number
+): { amount: number; formatted: string } | null {
+  if (!effectivePrice || effectivePrice.isFree || !effectivePrice.final || votersCount === 0) {
+    return null;
+  }
+  const quota = Math.ceil(effectivePrice.final / votersCount);
+  return {
+    amount: quota,
+    formatted: formatCopPrice(quota),
+  };
+}
+
+function buildInitialQuotaPayments(voters: Voter[]): Record<string, boolean> {
+  const initial: Record<string, boolean> = {};
+  for (const v of voters) {
+    initial[v.id] = true;
+  }
+  return initial;
+}
+
+function computePaymentStats(
+  voters: Voter[],
+  quotaPayments: Record<string, boolean>
+): { paidCount: number; unpaidCount: number; total: number } {
+  let paidCount = 0;
+  for (const v of voters) {
+    if (quotaPayments[v.id]) {
+      paidCount++;
+    }
+  }
+  return {
+    paidCount,
+    unpaidCount: voters.length - paidCount,
+    total: voters.length,
+  };
+}
+
+function buildVoterSnapshots(
+  voters: Voter[],
+  quotaPayments: Record<string, boolean>
+): VoterSnapshotInHistory[] {
+  return voters.map((voter) => {
+    const paid = quotaPayments[voter.id] ?? true;
+    const currentBalance = voter.auraQuotaBalance ?? 0;
+    const status = calculateAuraStatus(currentBalance, paid, voter.auraRank);
+
+    return {
+      voterId: voter.id,
+      name: voter.name,
+      avatar: voter.avatar,
+      paidQuota: paid,
+      previousBalance: currentBalance,
+      newBalance: status.newBalance,
+      previousRank: voter.auraRank,
+      newRank: status.newRank,
+      previousMultiplier: voter.multiplier,
+      newMultiplier: status.newMultiplier,
+      votes: cloneGameVotes(voter.votes),
+    };
+  });
+}
+
+interface FreezeDataPayload {
+  isPrecioCongelado: boolean;
+  precioCongelado: number | null;
+  descuentoCongelado: number | null;
+  precioCongeladoFormatted: string | null;
+}
+
+function buildFinishedSessionData(
+  winningGame: Game,
+  allResults: GameResult[],
+  voters: Voter[],
+  snapshots: VoterSnapshotInHistory[],
+  freezeData: FreezeDataPayload
+): { historyRecord: VotingHistoryRecord; updatedVoters: Voter[] } {
+  const now = new Date();
+  const createdAt = now.toISOString();
+
+  const historyRecord: VotingHistoryRecord = {
+    id: crypto.randomUUID(),
+    createdAt,
+    date: formatHistoryDate(createdAt),
+    winningGame,
+    resultsSnapshot: createResultsSnapshot(allResults),
+    votersSnapshots: snapshots,
+    isPrecioCongelado: freezeData.isPrecioCongelado,
+    precioCongelado: freezeData.isPrecioCongelado ? freezeData.precioCongelado : null,
+    descuentoCongelado: freezeData.isPrecioCongelado ? freezeData.descuentoCongelado : null,
+    precioCongeladoFormatted: freezeData.isPrecioCongelado ? freezeData.precioCongeladoFormatted : null,
+  };
+
+  const updatedVoters = voters.map((voter, index) => ({
+    ...voter,
+    auraQuotaBalance: snapshots[index].newBalance,
+    auraRank: snapshots[index].newRank,
+    multiplier: snapshots[index].newMultiplier,
+    votes: cloneGameVotes(voter.votes),
+  }));
+
+  return { historyRecord, updatedVoters };
+}
+
+// ============================================================
+// Subcomponentes de presentación para modularizar el modal
+// ============================================================
+
+interface WinningGamePreviewProps {
+  winningGame: Game;
+  weightedPoints: number;
+  isPrecioCongelado: boolean;
+  effectivePrice?: SteamPriceInfo;
+  individualQuota: { amount: number; formatted: string } | null;
+  votersCount: number;
+}
+
+const WinningGamePreview: React.FC<WinningGamePreviewProps> = ({
+  winningGame,
+  weightedPoints,
+  isPrecioCongelado,
+  effectivePrice,
+  individualQuota,
+  votersCount,
+}) => (
+  <div className="modal-winner-card">
+    <GameThumbnail
+      game={winningGame}
+      alt={winningGame.title}
+      className="winner-modal-thumb"
+    />
+    <div className="winner-modal-info">
+      <span className="winner-tag">1º LUGAR GANADOR</span>
+      <h4>{winningGame.title}</h4>
+      <div className="winner-modal-meta-row">
+        <span className="winner-points">{weightedPoints} Puntos Ponderados</span>
+        {isPrecioCongelado && effectivePrice ? (
+          <span className="winner-modal-price frozen" title="Valor congelado previamente en administración">
+            🔒 {effectivePrice.finalFormatted}
+            {effectivePrice.discountPercent && effectivePrice.discountPercent > 0
+              ? ` (-${effectivePrice.discountPercent}%)`
+              : ''}
+            <span className="frozen-tag-pill">Precio Congelado</span>
+          </span>
+        ) : (
+          effectivePrice?.finalFormatted && (
+            <span className="winner-modal-price">
+              🏷️ {effectivePrice.finalFormatted}
+              {effectivePrice.discountPercent ? ` (-${effectivePrice.discountPercent}%)` : ''}
+            </span>
+          )
+        )}
+        {individualQuota && (
+          <span className="winner-modal-quota-split">
+            💵 Cuota: <strong>{individualQuota.formatted}</strong> / integrante ({votersCount} miembros)
+          </span>
+        )}
+      </div>
+    </div>
+  </div>
+);
+
+interface PaymentControlsHeaderProps {
+  paymentStats: { paidCount: number; unpaidCount: number; total: number };
+  isSaving: boolean;
+  onSetAllPayments: (paid: boolean) => void;
+}
+
+const PaymentControlsHeader: React.FC<PaymentControlsHeaderProps> = ({
+  paymentStats,
+  isSaving,
+  onSetAllPayments,
+}) => {
+  const isAllPaid = paymentStats.unpaidCount === 0;
+  const pluralSuffix = paymentStats.unpaidCount > 1 ? 's' : '';
+
+  return (
+    <div className="voters-payment-header-row">
+      <div className="voters-payment-title-group">
+        <h3 id="voters-payment-heading">👥 ¿CADA INTEGRANTE PAGÓ SU CUOTA DEL JUEGO GANADOR?</h3>
+        <p className="voters-payment-subtitle">
+          Los pagos modifican el saldo de cuotas y el rango de Aura de cada integrante.
+        </p>
+      </div>
+
+      <div className="voters-payment-controls-row">
+        <div className="voters-payment-summary-chips">
+          {isAllPaid ? (
+            <span className="summary-chip chip-all-paid">
+              ✨ Todos al día ({paymentStats.total}/{paymentStats.total})
+            </span>
+          ) : (
+            <>
+              <span className="summary-chip chip-paid">
+                ✓ {paymentStats.paidCount} pagaron (+1)
+              </span>
+              <span className="summary-chip chip-unpaid">
+                ✕ {paymentStats.unpaidCount} pendiente{pluralSuffix} (-1)
+              </span>
+            </>
+          )}
+        </div>
+
+        <div className="payment-bulk-actions">
+          <button
+            type="button"
+            className="btn-bulk-payment"
+            onClick={() => onSetAllPayments(true)}
+            disabled={isSaving || paymentStats.paidCount === paymentStats.total}
+            title="Marcar que todos los integrantes pagaron la cuota"
+          >
+            Todos Sí
+          </button>
+          <button
+            type="button"
+            className="btn-bulk-payment"
+            onClick={() => onSetAllPayments(false)}
+            disabled={isSaving || paymentStats.unpaidCount === paymentStats.total}
+            title="Marcar que ningún integrante pagó la cuota"
+          >
+            Todos No
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const UnpaidWarning: React.FC<{ unpaidCount: number }> = ({ unpaidCount }) => {
+  if (unpaidCount === 0) return null;
+  const pluralSuffix = unpaidCount > 1 ? 's' : '';
+  const verbPlural = unpaidCount > 1 ? 'n' : '';
+
+  return (
+    <output className="payment-unpaid-warning">
+      ⚠️ <strong>Atención operacional:</strong> {unpaidCount} integrante{pluralSuffix} se registrará{verbPlural} como impago{pluralSuffix} y recibirá{verbPlural} <strong>-1 cuota</strong> de penalización de Aura.
+    </output>
+  );
+};
+
+// ============================================================
+// Componente Principal
+// ============================================================
 
 interface FinishVotingModalProps {
   allResults: GameResult[];
@@ -36,21 +320,15 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
   const [isSaving, setIsSaving] = useState(false);
   const [hasConfirmedReview, setHasConfirmedReview] = useState(false);
 
-  // Focus trap y accesibilidad por teclado (Tab, Shift+Tab y Escape)
   const modalRef = useModalFocusTrap<HTMLDivElement>({
     onEscape: onClose,
     disabled: isSaving,
     initialFocusDelay: 120,
   });
 
-  // Map of voterId -> boolean (true = SÍ pagó cuota, false = NO pagó cuota)
-  const [quotaPayments, setQuotaPayments] = useState<Record<string, boolean>>(() => {
-    const initial: Record<string, boolean> = {};
-    voters.forEach((v) => {
-      initial[v.id] = true; // default SÍ para todos
-    });
-    return initial;
-  });
+  const [quotaPayments, setQuotaPayments] = useState<Record<string, boolean>>(() =>
+    buildInitialQuotaPayments(voters)
+  );
 
   const handleTogglePayment = useCallback((voterId: string, paid: boolean) => {
     if (isSaving) return;
@@ -64,55 +342,36 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
     if (isSaving) return;
     setQuotaPayments(() => {
       const next: Record<string, boolean> = {};
-      voters.forEach((v) => {
+      for (const v of voters) {
         next[v.id] = paid;
-      });
+      }
       return next;
     });
   }, [isSaving, voters]);
 
-  const paymentStats = useMemo(() => {
-    let paidCount = 0;
-    voters.forEach((v) => {
-      if (quotaPayments[v.id]) {
-        paidCount++;
-      }
-    });
-    const unpaidCount = voters.length - paidCount;
-    return { paidCount, unpaidCount, total: voters.length };
-  }, [voters, quotaPayments]);
+  const paymentStats = useMemo(
+    () => computePaymentStats(voters, quotaPayments),
+    [voters, quotaPayments]
+  );
 
-  // Si isPrecioCongelado es true, la UI y los cálculos de cobro utilizarán EXCLUSIVAMENTE los valores congelados
-  const effectivePrice = useMemo(() => {
-    if (isPrecioCongelado) {
-      const final = precioCongelado ?? 0;
-      const discount = descuentoCongelado ?? 0;
-      const isFree = final === 0;
-      const formatted = precioCongeladoFormatted || (isFree ? 'Gratis' : formatCopPrice(final));
-      return {
-        isFree,
-        currency: 'COP',
-        final,
-        discountPercent: discount,
-        finalFormatted: formatted,
-      };
-    }
-    return winningResult?.game?.price;
-  }, [isPrecioCongelado, precioCongelado, descuentoCongelado, precioCongeladoFormatted, winningResult?.game?.price]);
+  const fallbackPrice = winningResult?.game?.price;
+  const effectivePrice = useMemo(
+    () =>
+      resolveEffectivePrice(
+        isPrecioCongelado,
+        precioCongelado,
+        descuentoCongelado,
+        precioCongeladoFormatted,
+        fallbackPrice
+      ),
+    [isPrecioCongelado, precioCongelado, descuentoCongelado, precioCongeladoFormatted, fallbackPrice]
+  );
 
-  // Cálculo exacto de la cuota individual por integrante
-  const individualQuota = useMemo(() => {
-    if (!effectivePrice || effectivePrice.isFree || !effectivePrice.final || voters.length === 0) {
-      return null;
-    }
-    const quota = Math.ceil(effectivePrice.final / voters.length);
-    return {
-      amount: quota,
-      formatted: formatCopPrice(quota),
-    };
-  }, [effectivePrice, voters.length]);
+  const individualQuota = useMemo(
+    () => calculateIndividualQuota(effectivePrice, voters.length),
+    [effectivePrice, voters.length]
+  );
 
-  // Snapshot del juego ganador desacoplado y con el precio congelado garantizado
   const winningGame = useMemo(() => {
     const base = cloneGameSnapshot(winningResult.game);
     if (effectivePrice) {
@@ -126,53 +385,14 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
 
     setIsSaving(true);
     try {
-      // 1. Materializar snapshots inmutables de los votantes y sus votos
-      const snapshots: VoterSnapshotInHistory[] = voters.map((voter) => {
-        const paid = quotaPayments[voter.id] ?? true;
-        const currentBalance = voter.auraQuotaBalance ?? 0;
-        const status = calculateAuraStatus(currentBalance, paid, voter.auraRank);
-
-        return {
-          voterId: voter.id,
-          name: voter.name,
-          avatar: voter.avatar,
-          paidQuota: paid,
-          previousBalance: currentBalance,
-          newBalance: status.newBalance,
-          previousRank: voter.auraRank,
-          newRank: status.newRank,
-          previousMultiplier: voter.multiplier,
-          newMultiplier: status.newMultiplier,
-          votes: cloneGameVotes(voter.votes),
-        };
-      });
-
-      // 2. Materializar snapshot inmutable de los resultados competitivos
-      const resultsSnapshot = createResultsSnapshot(allResults);
-
-      const now = new Date();
-      const createdAt = now.toISOString();
-      const historyRecord: VotingHistoryRecord = {
-        id: crypto.randomUUID(),
-        createdAt,
-        date: formatHistoryDate(createdAt),
+      const snapshots = buildVoterSnapshots(voters, quotaPayments);
+      const { historyRecord, updatedVoters } = buildFinishedSessionData(
         winningGame,
-        resultsSnapshot,
-        votersSnapshots: snapshots,
-        isPrecioCongelado: Boolean(isPrecioCongelado),
-        precioCongelado: isPrecioCongelado ? (precioCongelado ?? null) : null,
-        descuentoCongelado: isPrecioCongelado ? (descuentoCongelado ?? null) : null,
-        precioCongeladoFormatted: isPrecioCongelado ? (precioCongeladoFormatted ?? null) : null,
-      };
-
-      // 4. Actualizar votantes para el estado activo de la aplicación
-      const updatedVoters = voters.map((voter, index) => ({
-        ...voter,
-        auraQuotaBalance: snapshots[index].newBalance,
-        auraRank: snapshots[index].newRank,
-        multiplier: snapshots[index].newMultiplier,
-        votes: cloneGameVotes(voter.votes),
-      }));
+        allResults,
+        voters,
+        snapshots,
+        { isPrecioCongelado, precioCongelado, descuentoCongelado, precioCongeladoFormatted }
+      );
 
       await onConfirmFinish(updatedVoters, historyRecord);
     } catch (error) {
@@ -182,7 +402,6 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
     }
   };
 
-  // Precondición explícita: si allResults está vacío o no hay juego ganador válido, el modal no se renderiza
   if (!winningResult?.game) {
     return null;
   }
@@ -213,7 +432,6 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
         transition={{ type: 'spring', stiffness: 320, damping: 30 }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Handle visual superior estilo bottom sheet */}
         <div className="bottom-sheet-handle" aria-hidden="true"></div>
         <div className="modal-header">
           <div className="modal-title-group">
@@ -239,103 +457,27 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
           </motion.button>
         </div>
 
-        {/* WINNING GAME PREVIEW */}
-        <div className="modal-winner-card">
-          <GameThumbnail
-            game={winningGame}
-            alt={winningGame.title}
-            className="winner-modal-thumb"
-          />
-          <div className="winner-modal-info">
-            <span className="winner-tag">1º LUGAR GANADOR</span>
-            <h4>{winningGame.title}</h4>
-            <div className="winner-modal-meta-row">
-              <span className="winner-points">{winningResult.weightedPoints} Puntos Ponderados</span>
-              {isPrecioCongelado && effectivePrice ? (
-                <span className="winner-modal-price frozen" title="Valor congelado previamente en administración">
-                  🔒 {effectivePrice.finalFormatted}
-                  {effectivePrice.discountPercent && effectivePrice.discountPercent > 0
-                    ? ` (-${effectivePrice.discountPercent}%)`
-                    : ''}
-                  <span className="frozen-tag-pill">Precio Congelado</span>
-                </span>
-              ) : (
-                effectivePrice?.finalFormatted && (
-                  <span className="winner-modal-price">
-                    🏷️ {effectivePrice.finalFormatted}
-                    {effectivePrice.discountPercent ? ` (-${effectivePrice.discountPercent}%)` : ''}
-                  </span>
-                )
-              )}
-              {individualQuota && (
-                <span className="winner-modal-quota-split">
-                  💵 Cuota: <strong>{individualQuota.formatted}</strong> / integrante ({voters.length} miembros)
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
+        <WinningGamePreview
+          winningGame={winningGame}
+          weightedPoints={winningResult.weightedPoints}
+          isPrecioCongelado={isPrecioCongelado}
+          effectivePrice={effectivePrice}
+          individualQuota={individualQuota}
+          votersCount={voters.length}
+        />
 
-        {/* VOTERS PAYMENT TOGGLE LIST */}
         <fieldset className="voters-payment-section" aria-labelledby="voters-payment-heading">
           <legend className="sr-only">
             ¿Cada integrante pagó su cuota del juego ganador para el cálculo de Aura?
           </legend>
 
-          <div className="voters-payment-header-row">
-            <div className="voters-payment-title-group">
-              <h3 id="voters-payment-heading">👥 ¿CADA INTEGRANTE PAGÓ SU CUOTA DEL JUEGO GANADOR?</h3>
-              <p className="voters-payment-subtitle">
-                Los pagos modifican el saldo de cuotas y el rango de Aura de cada integrante.
-              </p>
-            </div>
+          <PaymentControlsHeader
+            paymentStats={paymentStats}
+            isSaving={isSaving}
+            onSetAllPayments={handleSetAllPayments}
+          />
 
-            <div className="voters-payment-controls-row">
-              <div className="voters-payment-summary-chips">
-                {paymentStats.unpaidCount === 0 ? (
-                  <span className="summary-chip chip-all-paid">
-                    ✨ Todos al día ({paymentStats.total}/{paymentStats.total})
-                  </span>
-                ) : (
-                  <>
-                    <span className="summary-chip chip-paid">
-                      ✓ {paymentStats.paidCount} pagaron (+1)
-                    </span>
-                    <span className="summary-chip chip-unpaid">
-                      ✕ {paymentStats.unpaidCount} pendiente{paymentStats.unpaidCount > 1 ? 's' : ''} (-1)
-                    </span>
-                  </>
-                )}
-              </div>
-
-              <div className="payment-bulk-actions">
-                <button
-                  type="button"
-                  className="btn-bulk-payment"
-                  onClick={() => handleSetAllPayments(true)}
-                  disabled={isSaving || paymentStats.paidCount === paymentStats.total}
-                  title="Marcar que todos los integrantes pagaron la cuota"
-                >
-                  Todos Sí
-                </button>
-                <button
-                  type="button"
-                  className="btn-bulk-payment"
-                  onClick={() => handleSetAllPayments(false)}
-                  disabled={isSaving || paymentStats.unpaidCount === paymentStats.total}
-                  title="Marcar que ningún integrante pagó la cuota"
-                >
-                  Todos No
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {paymentStats.unpaidCount > 0 && (
-            <div className="payment-unpaid-warning" role="status">
-              ⚠️ <strong>Atención operacional:</strong> {paymentStats.unpaidCount} integrante{paymentStats.unpaidCount > 1 ? 's' : ''} se registrará{paymentStats.unpaidCount > 1 ? 'n' : ''} como impago{paymentStats.unpaidCount > 1 ? 's' : ''} y recibirá{paymentStats.unpaidCount > 1 ? 'n' : ''} <strong>-1 cuota</strong> de penalización de Aura.
-            </div>
-          )}
+          <UnpaidWarning unpaidCount={paymentStats.unpaidCount} />
 
           <div className="voters-payment-grid">
             {voters.map((voter) => {
@@ -353,7 +495,6 @@ export const FinishVotingModal: React.FC<FinishVotingModalProps> = React.memo(({
           </div>
         </fieldset>
 
-        {/* OPERATIONAL VERIFICATION CHECKBOX & MODAL ACTIONS */}
         <div className="modal-footer-wrapper">
           <label className="payment-confirmation-checkbox-label">
             <input

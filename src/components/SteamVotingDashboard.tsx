@@ -269,7 +269,6 @@ export const SteamVotingDashboard: React.FC = () => {
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [showReadOnlyBanner, setShowReadOnlyBanner] = useState<boolean>(false);
   const [showPinModal, setShowPinModal] = useState<boolean>(false);
 
   const [syncState, setSyncState] = useState<SyncState>({ status: 'idle', message: '' });
@@ -303,21 +302,7 @@ export const SteamVotingDashboard: React.FC = () => {
    const pinModalResolveRef = useRef<((value: boolean) => void) | null>(null);
 
   const canManageContent = adminAccess.canManageContent;
-  const isReadOnlyMode = adminAccess.isReadOnly;
 
-  useEffect(() => {
-    if (!isReadOnlyMode) {
-      return;
-    }
-
-    // Mostrar el banner de solo lectura con un pequeño delay y ocultarlo tras 3s
-    const showTimer = window.setTimeout(() => setShowReadOnlyBanner(true), 0);
-    const hideTimer = window.setTimeout(() => setShowReadOnlyBanner(false), 3000);
-    return () => {
-      window.clearTimeout(showTimer);
-      window.clearTimeout(hideTimer);
-    };
-  }, [isReadOnlyMode]);
 
   // ─── Carga inicial de datos ───────────────────────────────
   useEffect(() => {
@@ -558,7 +543,7 @@ export const SteamVotingDashboard: React.FC = () => {
   useEffect(() => {
     if (isLoading) return;
 
-    const gameIds = Object.keys(gamesMap).sort().join(',');
+    const gameIds = Object.keys(gamesMap).sort((a, b) => a.localeCompare(b)).join(',');
     const winnerId = results[0]?.game?.id || null;
 
     if (!prevGamesSignatureRef.current) {
@@ -668,7 +653,7 @@ export const SteamVotingDashboard: React.FC = () => {
     void autoUnfreezePrice('juego eliminado');
   }, [gamesMap, autoUnfreezePrice]);
 
-  const handleResetAllVotes = useCallback(async () => {
+  const handleResetAllVotes = useCallback(() => {
     const confirmReset = window.confirm(
       '¿Deseas reiniciar los votos de todos los integrantes para iniciar un nuevo ciclo de votación?\n\nLos puntos asignados volverán a 0 y el precio congelado se liberará automáticamente.'
     );
@@ -1116,11 +1101,6 @@ export const SteamVotingDashboard: React.FC = () => {
         </motion.div>
       )}
 
-      {showReadOnlyBanner && isReadOnlyMode && (
-        <div className="read-only-banner">
-          Modo lectura activo. Presiona <strong>Alt + Shift + A</strong> para identificarte como administrador.
-        </div>
-      )}
 
       {/* Botones de acción principales */}
       <div className="top-action-navigation">

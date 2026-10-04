@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useSyncExternalStore } from 'react';
 import { motion, AnimatePresence, useDragControls } from 'framer-motion';
 import type { VotingHistoryRecord } from '../types/voting';
 import { DeleteHistoryRecordConfirmModal } from './DeleteHistoryRecordConfirmModal';
@@ -9,6 +9,339 @@ import { GameThumbnail } from './GameThumbnail';
 import { formatHistoryDate } from '../utils/formatDate';
 
 const ITEMS_PER_PAGE = 5;
+
+function subscribeToMobileMediaQuery(callback: () => void) {
+  const mql = window.matchMedia('(max-width: 768px)');
+  mql.addEventListener('change', callback);
+  return () => mql.removeEventListener('change', callback);
+}
+
+function getMobileSnapshot(): boolean {
+  return typeof window !== 'undefined' ? window.innerWidth <= 768 : false;
+}
+
+function getMobileServerSnapshot(): boolean {
+  return false;
+}
+
+// ============================================================
+// Subcomponentes de presentación para modularizar el historial
+// ============================================================
+
+interface HistoryWinnerPriceBadgeProps {
+  record: VotingHistoryRecord;
+}
+
+const HistoryWinnerPriceBadge: React.FC<HistoryWinnerPriceBadgeProps> = ({ record }) => {
+  if (record.isPrecioCongelado) {
+    const formattedPrice =
+      record.precioCongeladoFormatted ||
+      record.winningGame?.price?.finalFormatted ||
+      'Precio Congelado';
+    const discountSuffix =
+      record.descuentoCongelado && record.descuentoCongelado > 0
+        ? ` (-${record.descuentoCongelado}%)`
+        : '';
+    return (
+      <span
+        className="record-frozen-price-tag"
+        title="Precio congelado preservado permanentemente al momento del cierre"
+      >
+        🔒 {formattedPrice}
+        {discountSuffix}
+      </span>
+    );
+  }
+
+  const price = record.winningGame?.price;
+  if (!price?.finalFormatted) return null;
+
+  return (
+    <span className="record-price-tag">
+      🏷️ {price.finalFormatted}
+      {price.discountPercent ? ` (-${price.discountPercent}%)` : ''}
+    </span>
+  );
+};
+
+interface HistoryDetailsPanelProps {
+  record: VotingHistoryRecord;
+  isMobile: boolean;
+  onBack: () => void;
+}
+
+const HistoryDetailsPanel: React.FC<HistoryDetailsPanelProps> = ({
+  record,
+  isMobile,
+  onBack,
+}) => {
+  const competitorItems =
+    record.resultsSnapshot || Object.values(record.gamesMap || {});
+
+  return (
+    <div className="history-details-panel">
+      <div className="history-record-header">
+        {/* Fondo difuminado cinematográfico del juego ganador */}
+        <div className="history-header-blur-bg" aria-hidden="true">
+          <GameThumbnail
+            game={record.winningGame}
+            alt=""
+            className="history-header-blur-img"
+            recordId={record.id}
+          />
+          <div className="history-header-blur-overlay" />
+        </div>
+
+        {isMobile && (
+          <button
+            type="button"
+            className="mobile-back-btn"
+            onClick={onBack}
+            aria-label="Volver a la lista"
+          >
+            ◀ Volver
+          </button>
+        )}
+
+        <div className="history-record-header-main">
+          <GameThumbnail
+            game={record.winningGame}
+            alt={record.winningGame?.title}
+            className="history-details-banner"
+            recordId={record.id}
+          />
+          <div className="winner-details-badge">
+            <span className="trophy-tag">🏆 JUEGO GANADOR</span>
+            <h3>{record.winningGame?.title}</h3>
+            <div className="history-winner-tags-row">
+              <span className="record-date-tag">🗓️ {formatHistoryDate(record)}</span>
+              <HistoryWinnerPriceBadge record={record} />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* PODIUM RESULTS CAROUSEL */}
+      <HistoryCompetitorsCarousel
+        items={competitorItems}
+        recordId={record.id}
+      />
+
+      {/* VOTERS BREAKDOWN TABLE */}
+      <div className="history-voters-table-container">
+        <h5>👥 DESGLOSE DE CUOTAS Y EVOLUCIÓN DE AURA:</h5>
+        <table className="history-voters-table">
+          <thead>
+            <tr>
+              <th>Integrante</th>
+              <th>¿Pagó Cuota?</th>
+              <th>Saldo de Cuotas</th>
+              <th>Nuevo Rango</th>
+            </tr>
+          </thead>
+          <tbody>
+            {record.votersSnapshots.map((snap) => (
+              <VoterSnapshotRow key={snap.voterId} snap={snap} />
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+interface HistorySidebarProps {
+  history: VotingHistoryRecord[];
+  paginatedHistory: VotingHistoryRecord[];
+  isMobile: boolean;
+  selectedRecordId: string | null;
+  canManageContent: boolean;
+  currentPage: number;
+  totalPages: number;
+  onSelectRecord: (id: string) => void;
+  onRequestDelete: (rec: VotingHistoryRecord) => void;
+  onPageChange: (page: number) => void;
+}
+
+const HistorySidebar: React.FC<HistorySidebarProps> = ({
+  history,
+  paginatedHistory,
+  isMobile,
+  selectedRecordId,
+  canManageContent,
+  currentPage,
+  totalPages,
+  onSelectRecord,
+  onRequestDelete,
+  onPageChange,
+}) => {
+  const recordsToRender = isMobile ? history : paginatedHistory;
+
+  return (
+    <div className="history-sidebar">
+      <span className="sidebar-heading">REGISTROS GUARDADOS ({history.length})</span>
+      <div className="history-items-list">
+        <AnimatePresence mode="popLayout">
+          {recordsToRender.map((rec) => (
+            <HistoryListItem
+              key={rec.id}
+              rec={rec}
+              isSelected={rec.id === selectedRecordId}
+              canManageContent={canManageContent}
+              onSelect={onSelectRecord}
+              onRequestDelete={onRequestDelete}
+            />
+          ))}
+        </AnimatePresence>
+      </div>
+      {!isMobile && totalPages > 1 && (
+        <div className="history-pagination">
+          <button
+            type="button"
+            className="pagination-btn"
+            disabled={currentPage <= 1}
+            onClick={() => onPageChange(currentPage - 1)}
+            aria-label="Página anterior"
+          >
+            ◀ Anterior
+          </button>
+          <span className="pagination-info">
+            {currentPage} / {totalPages}
+          </span>
+          <button
+            type="button"
+            className="pagination-btn"
+            disabled={currentPage >= totalPages}
+            onClick={() => onPageChange(currentPage + 1)}
+            aria-label="Página siguiente"
+          >
+            Siguiente ▶
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+interface HistoryModalFooterProps {
+  isMobile: boolean;
+  canManageContent: boolean;
+  hasHistory: boolean;
+  onClearHistoryClick: () => void;
+  onClose: () => void;
+}
+
+const HistoryModalFooter: React.FC<HistoryModalFooterProps> = ({
+  isMobile,
+  canManageContent,
+  hasHistory,
+  onClearHistoryClick,
+  onClose,
+}) => {
+  const showClearButton = canManageContent && hasHistory;
+  const showCloseButton = !isMobile;
+
+  if (!showClearButton && !showCloseButton) {
+    return null;
+  }
+
+  return (
+    <div className="modal-footer-actions">
+      {showClearButton && (
+        <button
+          type="button"
+          className="btn-clear-history"
+          onClick={onClearHistoryClick}
+        >
+          🗑️ Limpiar Historial
+        </button>
+      )}
+      {showCloseButton && (
+        <motion.button
+          type="button"
+          className="btn-modal-cancel btn-history-close"
+          onClick={onClose}
+          whileHover={{ scale: 1.04, y: -2 }}
+          whileTap={{ scale: 0.96 }}
+          aria-label="Cerrar ventana de historial"
+        >
+          <span className="btn-close-icon" aria-hidden="true">✕</span>
+          <span>Cerrar</span>
+        </motion.button>
+      )}
+    </div>
+  );
+};
+
+interface ClearHistoryConfirmModalProps {
+  onCancel: () => void;
+  onConfirm: () => void;
+}
+
+const ClearHistoryConfirmModal: React.FC<ClearHistoryConfirmModalProps> = ({
+  onCancel,
+  onConfirm,
+}) => (
+  <div className="modal-backdrop">
+    <button
+      type="button"
+      className="modal-backdrop-close"
+      onClick={onCancel}
+      aria-label="Cerrar modal"
+    />
+    <div className="delete-confirm-modal-container">
+      <div className="modal-header">
+        <div className="modal-title-group">
+          <h2>⚠️ Limpiar Historial Completo</h2>
+          <p>Esta acción no se puede deshacer fácilmente.</p>
+        </div>
+        <button
+          type="button"
+          className="modal-close-btn"
+          onClick={onCancel}
+          aria-label="Cerrar"
+        >
+          ✕
+        </button>
+      </div>
+
+      <div className="delete-warning-content">
+        <div className="delete-warning-text">
+          <p>
+            ¿Estás seguro de que deseas eliminar <strong>todo el historial de votaciones pasadas</strong>?
+          </p>
+          <p className="delete-warning-sub">
+            Se perderán permanentemente todos los registros históricos.
+          </p>
+          <p className="delete-warning-note">
+            📊 <strong>Nota:</strong> Esta acción eliminará todas las votaciones guardadas, incluyendo registros de cuotas pagadas y evolución de Aura. Esta acción no se puede deshacer.
+          </p>
+        </div>
+      </div>
+
+      <div className="modal-footer-actions delete-modal-actions">
+        <button
+          type="button"
+          className="btn-modal-cancel"
+          onClick={onCancel}
+        >
+          Cancelar
+        </button>
+        <button
+          type="button"
+          className="btn-modal-confirm-delete"
+          onClick={onConfirm}
+        >
+          Confirmar Eliminación
+        </button>
+      </div>
+    </div>
+  </div>
+);
+
+// ============================================================
+// Componente Principal
+// ============================================================
 
 interface VotingHistoryModalProps {
   history: VotingHistoryRecord[];
@@ -31,17 +364,26 @@ export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = React.memo(
     history.length > 0 ? history[0].id : null
   );
   const [currentPage, setCurrentPage] = useState(1);
-  const [isMobile, setIsMobile] = useState(() =>
-    typeof window !== 'undefined' ? window.innerWidth <= 768 : false
+  const isMobile = useSyncExternalStore(
+    subscribeToMobileMediaQuery,
+    getMobileSnapshot,
+    getMobileServerSnapshot
   );
   const [mobileShowDetails, setMobileShowDetails] = useState(false);
+  const [recordToDelete, setRecordToDelete] = useState<VotingHistoryRecord | null>(null);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
-  const totalPages = useMemo(() => Math.max(1, Math.ceil(history.length / ITEMS_PER_PAGE)), [history.length]);
+  const totalPages = useMemo(
+    () => Math.max(1, Math.ceil(history.length / ITEMS_PER_PAGE)),
+    [history.length]
+  );
+
+  const safeCurrentPage = Math.min(currentPage, totalPages);
 
   const paginatedHistory = useMemo(() => {
-    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    const start = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
     return history.slice(start, start + ITEMS_PER_PAGE);
-  }, [history, currentPage]);
+  }, [history, safeCurrentPage]);
 
   const handlePageChange = useCallback((page: number) => {
     setCurrentPage(page);
@@ -52,29 +394,39 @@ export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = React.memo(
     setMobileShowDetails(true);
   }, []);
 
-  // Reset current page if it exceeds total pages after history changes
-  useEffect(() => {
-    if (currentPage > totalPages) {
-      setCurrentPage(totalPages);
-    }
-  }, [currentPage, totalPages]);
-
-  // Detect mobile to show full list without pagination on small screens
-  useEffect(() => {
-    const mql = window.matchMedia('(max-width: 768px)');
-    const handler = (e: MediaQueryListEvent | MediaQueryList) => setIsMobile(e.matches);
-    setIsMobile(mql.matches);
-    mql.addEventListener('change', handler);
-    return () => mql.removeEventListener('change', handler);
+  const handleBackToMobileList = useCallback(() => {
+    setMobileShowDetails(false);
   }, []);
+
+  const handlePointerDownDragZone = useCallback((e: React.PointerEvent) => {
+    setIsHandlePressed(true);
+    if (isMobile) {
+      dragControls.start(e);
+    }
+  }, [isMobile, dragControls]);
+
+  const handlePointerUpDragZone = useCallback(() => {
+    setIsHandlePressed(false);
+  }, []);
+
+  const handleConfirmClear = useCallback(() => {
+    onClearHistory();
+    setShowClearConfirm(false);
+  }, [onClearHistory]);
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!recordToDelete) return;
+    await onDeleteRecord(recordToDelete.id);
+    setRecordToDelete(null);
+  }, [recordToDelete, onDeleteRecord]);
 
   const selectedRecord = useMemo(() => {
     if (!selectedRecordId) return history[0] || null;
     return history.find((r) => r.id === selectedRecordId) || history[0] || null;
   }, [history, selectedRecordId]);
-  
-  const [recordToDelete, setRecordToDelete] = useState<VotingHistoryRecord | null>(null);
-  const [showClearConfirm, setShowClearConfirm] = useState(false);
+
+  const showSidebar = !isMobile || !mobileShowDetails;
+  const showDetails = Boolean(selectedRecord) && (!isMobile || mobileShowDetails);
 
   return (
     <motion.div
@@ -110,14 +462,9 @@ export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = React.memo(
         <button
           type="button"
           className="bottom-sheet-handle-zone"
-          onPointerDown={(e) => {
-            setIsHandlePressed(true);
-            if (isMobile) {
-              dragControls.start(e);
-            }
-          }}
-          onPointerUp={() => setIsHandlePressed(false)}
-          onPointerCancel={() => setIsHandlePressed(false)}
+          onPointerDown={handlePointerDownDragZone}
+          onPointerUp={handlePointerUpDragZone}
+          onPointerCancel={handlePointerUpDragZone}
           aria-label="Deslizar hacia abajo para cerrar"
         >
           <motion.div
@@ -135,14 +482,9 @@ export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = React.memo(
 
         <div
           className="modal-header"
-          onPointerDown={(e) => {
-            setIsHandlePressed(true);
-            if (isMobile) {
-              dragControls.start(e);
-            }
-          }}
-          onPointerUp={() => setIsHandlePressed(false)}
-          onPointerCancel={() => setIsHandlePressed(false)}
+          onPointerDown={handlePointerDownDragZone}
+          onPointerUp={handlePointerUpDragZone}
+          onPointerCancel={handlePointerUpDragZone}
         >
           <div className="modal-title-group">
             <h2>📜 HISTORIAL DE VOTACIONES PASADAS</h2>
@@ -166,251 +508,58 @@ export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = React.memo(
           <div className="empty-history-box">
             <span className="empty-icon">📂</span>
             <h3>No hay votaciones registradas aún</h3>
-            <p>Cuando hagas clic en <strong>&quot;Finalizar Votación 🏆&quot;</strong>, los resultados y el historial de cuotas se guardarán aquí automáticamente.</p>
+            <p>
+              Cuando hagas clic en <strong>&quot;Finalizar Votación 🏆&quot;</strong>, los resultados y el historial de cuotas se guardarán aquí automáticamente.
+            </p>
           </div>
         ) : (
           <div className="history-content-layout">
-            {/* LEFT SIDEBAR: LIST OF PAST VOTINGS */}
-            {(!isMobile || !mobileShowDetails) && (
-              <div className="history-sidebar">
-                <span className="sidebar-heading">REGISTROS GUARDADOS ({history.length})</span>
-                <div className="history-items-list">
-                  <AnimatePresence mode="popLayout">
-                    {(isMobile ? history : paginatedHistory).map((rec) => (
-                      <HistoryListItem
-                        key={rec.id}
-                        rec={rec}
-                        isSelected={rec.id === selectedRecordId}
-                        canManageContent={canManageContent}
-                        onSelect={handleSelectRecord}
-                        onRequestDelete={setRecordToDelete}
-                      />
-                    ))}
-                  </AnimatePresence>
-                </div>
-                {!isMobile && totalPages > 1 && (
-                  <div className="history-pagination">
-                    <button
-                      type="button"
-                      className="pagination-btn"
-                      disabled={currentPage <= 1}
-                      onClick={() => handlePageChange(currentPage - 1)}
-                      aria-label="Página anterior"
-                    >
-                      ◀ Anterior
-                    </button>
-                    <span className="pagination-info">
-                      {currentPage} / {totalPages}
-                    </span>
-                    <button
-                      type="button"
-                      className="pagination-btn"
-                      disabled={currentPage >= totalPages}
-                      onClick={() => handlePageChange(currentPage + 1)}
-                      aria-label="Página siguiente"
-                    >
-                      Siguiente ▶
-                    </button>
-                  </div>
-                )}
-              </div>
+            {showSidebar && (
+              <HistorySidebar
+                history={history}
+                paginatedHistory={paginatedHistory}
+                isMobile={isMobile}
+                selectedRecordId={selectedRecordId}
+                canManageContent={canManageContent}
+                currentPage={safeCurrentPage}
+                totalPages={totalPages}
+                onSelectRecord={handleSelectRecord}
+                onRequestDelete={setRecordToDelete}
+                onPageChange={handlePageChange}
+              />
             )}
 
-            {/* RIGHT DETAILS PANEL: DETAILED BREAKDOWN OF SELECTED RECORD */}
-            {selectedRecord && (!isMobile || mobileShowDetails) && (
-              <div className="history-details-panel">
-                <div className="history-record-header">
-                {/* Fondo difuminado cinematográfico del juego ganador */}
-                  <div className="history-header-blur-bg" aria-hidden="true">
-                    <GameThumbnail
-                      game={selectedRecord.winningGame}
-                      alt=""
-                      className="history-header-blur-img"
-                      recordId={selectedRecord.id}
-                    />
-                    <div className="history-header-blur-overlay" />
-                  </div>
-
-                  {isMobile && (
-                    <button
-                      type="button"
-                      className="mobile-back-btn"
-                      onClick={() => setMobileShowDetails(false)}
-                      aria-label="Volver a la lista"
-                    >
-                      ◀ Volver
-                    </button>
-                  )}
-
-                  <div className="history-record-header-main">
-                    <GameThumbnail
-                      game={selectedRecord.winningGame}
-                      alt={selectedRecord.winningGame?.title}
-                      className="history-details-banner"
-                      recordId={selectedRecord.id}
-                    />
-                    <div className="winner-details-badge">
-                      <span className="trophy-tag">🏆 JUEGO GANADOR</span>
-                      <h3>{selectedRecord.winningGame?.title}</h3>
-                      <div className="history-winner-tags-row">
-                        <span className="record-date-tag">🗓️ {formatHistoryDate(selectedRecord)}</span>
-                        {selectedRecord.isPrecioCongelado ? (
-                          <span className="record-frozen-price-tag" title="Precio congelado preservado permanentemente al momento del cierre">
-                            🔒 {selectedRecord.precioCongeladoFormatted || selectedRecord.winningGame?.price?.finalFormatted || 'Precio Congelado'}
-                            {selectedRecord.descuentoCongelado && selectedRecord.descuentoCongelado > 0
-                              ? ` (-${selectedRecord.descuentoCongelado}%)`
-                              : ''}
-                          </span>
-                        ) : (
-                          selectedRecord.winningGame?.price?.finalFormatted && (
-                            <span className="record-price-tag">
-                              🏷️ {selectedRecord.winningGame.price.finalFormatted}
-                              {selectedRecord.winningGame.price.discountPercent
-                                ? ` (-${selectedRecord.winningGame.price.discountPercent}%)`
-                                : ''}
-                            </span>
-                          )
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* PODIUM RESULTS CAROUSEL */}
-                <HistoryCompetitorsCarousel
-                  items={selectedRecord.resultsSnapshot || Object.values(selectedRecord.gamesMap || {})}
-                  recordId={selectedRecord.id}
-                />
-
-                {/* VOTERS BREAKDOWN TABLE */}
-                <div className="history-voters-table-container">
-                  <h5>👥 DESGLOSE DE CUOTAS Y EVOLUCIÓN DE AURA:</h5>
-                  <table className="history-voters-table">
-                    <thead>
-                      <tr>
-                        <th>Integrante</th>
-                        <th>¿Pagó Cuota?</th>
-                        <th>Saldo de Cuotas</th>
-                        <th>Nuevo Rango</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {selectedRecord.votersSnapshots.map((snap) => (
-                        <VoterSnapshotRow
-                          key={snap.voterId}
-                          snap={snap}
-                        />
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+            {showDetails && selectedRecord && (
+              <HistoryDetailsPanel
+                record={selectedRecord}
+                isMobile={isMobile}
+                onBack={handleBackToMobileList}
+              />
             )}
           </div>
         )}
 
-        {/* MODAL FOOTER */}
-        {(!isMobile || (canManageContent && history.length > 0)) && (
-          <div className="modal-footer-actions">
-            {canManageContent && history.length > 0 && (
-              <button
-                type="button"
-                className="btn-clear-history"
-                onClick={() => setShowClearConfirm(true)}
-              >
-                🗑️ Limpiar Historial
-              </button>
-            )}
-            {!isMobile && (
-              <motion.button
-                type="button"
-                className="btn-modal-cancel btn-history-close"
-                onClick={onClose}
-                whileHover={{ scale: 1.04, y: -2 }}
-                whileTap={{ scale: 0.96 }}
-                aria-label="Cerrar ventana de historial"
-              >
-                <span className="btn-close-icon" aria-hidden="true">✕</span>
-                <span>Cerrar</span>
-              </motion.button>
-            )}
-          </div>
-        )}
+        <HistoryModalFooter
+          isMobile={isMobile}
+          canManageContent={canManageContent}
+          hasHistory={history.length > 0}
+          onClearHistoryClick={() => setShowClearConfirm(true)}
+          onClose={onClose}
+        />
 
-        {/* CLEAR HISTORY CONFIRM MODAL */}
         {showClearConfirm && (
-          <div className="modal-backdrop">
-            <button
-              type="button"
-              className="modal-backdrop-close"
-              onClick={() => setShowClearConfirm(false)}
-              aria-label="Cerrar modal"
-            />
-            <div
-              className="delete-confirm-modal-container"
-            >
-              <div className="modal-header">
-                <div className="modal-title-group">
-                  <h2>⚠️ Limpiar Historial Completo</h2>
-                  <p>Esta acción no se puede deshacer fácilmente.</p>
-                </div>
-                <button
-                  type="button"
-                  className="modal-close-btn"
-                  onClick={() => setShowClearConfirm(false)}
-                  aria-label="Cerrar"
-                >
-                  ✕
-                </button>
-              </div>
-
-              <div className="delete-warning-content">
-                <div className="delete-warning-text">
-                  <p>
-                    ¿Estás seguro de que deseas eliminar <strong>todo el historial de votaciones pasadas</strong>?
-                  </p>
-                  <p className="delete-warning-sub">
-                    Se perderán permanentemente todos los registros históricos.
-                  </p>
-                  <p className="delete-warning-note">
-                    📊 <strong>Nota:</strong> Esta acción eliminará todas las votaciones guardadas, incluyendo registros de cuotas pagadas y evolución de Aura. Esta acción no se puede deshacer.
-                  </p>
-                </div>
-              </div>
-
-              <div className="modal-footer-actions delete-modal-actions">
-                <button
-                  type="button"
-                  className="btn-modal-cancel"
-                  onClick={() => setShowClearConfirm(false)}
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  className="btn-modal-confirm-delete"
-                  onClick={() => {
-                    onClearHistory();
-                    setShowClearConfirm(false);
-                  }}
-                >
-                  Confirmar Eliminación
-                </button>
-              </div>
-            </div>
-          </div>
+          <ClearHistoryConfirmModal
+            onCancel={() => setShowClearConfirm(false)}
+            onConfirm={handleConfirmClear}
+          />
         )}
 
-        {/* DELETE CONFIRM MODAL */}
         <AnimatePresence>
           {recordToDelete && (
             <DeleteHistoryRecordConfirmModal
               record={recordToDelete}
               onCancel={() => setRecordToDelete(null)}
-              onConfirm={async () => {
-                await onDeleteRecord(recordToDelete.id);
-                setRecordToDelete(null);
-              }}
+              onConfirm={handleConfirmDelete}
             />
           )}
         </AnimatePresence>
