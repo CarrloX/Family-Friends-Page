@@ -6,12 +6,22 @@ interface HeaderProps {
   isVotingInProgress?: boolean;
 }
 
-export const Header: React.FC<HeaderProps> = React.memo(({ isVotingInProgress = true }) => {
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
+export const Header = React.memo(({ isVotingInProgress }: HeaderProps) => {
+  const [isOnline, setIsOnline] = useState(() =>
+    typeof navigator !== 'undefined' ? navigator.onLine : true
+  );
+  const [connectionMessage, setConnectionMessage] = useState('');
 
   useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
+    const handleOnline = () => {
+      setIsOnline(true);
+      setConnectionMessage('Conexión de red restaurada.');
+    };
+
+    const handleOffline = () => {
+      setIsOnline(false);
+      setConnectionMessage('Sin conexión de red.');
+    };
 
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
@@ -24,34 +34,22 @@ export const Header: React.FC<HeaderProps> = React.memo(({ isVotingInProgress = 
 
   return (
     <header className="steam-header">
-      <div className="header-badges-row" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', justifyContent: 'center' }}>
+      <div className="header-badges-row">
         <AnimatePresence mode="wait">
-          {isVotingInProgress ? (
+          {isVotingInProgress != null && (
             <motion.div
-              key="badge-in-progress"
+              key={isVotingInProgress ? 'voting' : 'results'}
               className="steam-header-badge"
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
               transition={{ duration: 0.25 }}
             >
-              <span className="live-dot"></span>
+              <span className={`live-dot${isVotingInProgress ? '' : ' live-dot-complete'}`} aria-hidden="true" />
               <span className="badge-text">
-                ⚡ EN VOTACIÓN • ESPERANDO VOTOS
-              </span>
-            </motion.div>
-          ) : (
-            <motion.div
-              key="badge-voting-active"
-              className="steam-header-badge"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              transition={{ duration: 0.25 }}
-            >
-              <span className="live-dot" style={{ backgroundColor: '#22c55e', boxShadow: '0 0 8px #22c55e' }}></span>
-              <span className="badge-text">
-                🔥 VOTOS REGISTRADOS • RESULTADOS
+                {isVotingInProgress
+                  ? '⚡ EN VOTACIÓN • ESPERANDO VOTOS'
+                  : '🔥 VOTOS REGISTRADOS • RESULTADOS'}
               </span>
             </motion.div>
           )}
@@ -59,19 +57,25 @@ export const Header: React.FC<HeaderProps> = React.memo(({ isVotingInProgress = 
 
         {!isOnline && (
           <div className="offline-badge">
-            <span className="offline-dot"></span>
-            <FaWifi className="offline-icon" />
+            <span className="offline-dot" aria-hidden="true" />
+            <FaWifi className="offline-icon" aria-hidden="true" />
             <span className="badge-text">
-              Sin conexión (Modo lectura offline)
+              Sin conexión de red detectada
             </span>
           </div>
         )}
+
+        {connectionMessage && (
+          <span className="sr-only" role="status" aria-live="polite">
+            {connectionMessage}
+          </span>
+        )}
       </div>
 
-      <div className="steam-title">
-        <FaSteam className="steam-icon" />
+      <h1 className="steam-title">
+        <FaSteam className="steam-icon" aria-hidden="true" />
         <span>VOTACIONES DE STEAM FAMILY</span>
-      </div>
+      </h1>
 
       <p className="steam-subtitle">
        Votaciones de Participantes • Sistema de Aura

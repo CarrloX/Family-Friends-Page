@@ -1258,7 +1258,7 @@ export const SteamVotingDashboard: React.FC = () => {
 
       {/* Contenido principal */}
       <div className="dashboard-content">
-        <Header isVotingInProgress={totalAssignedPoints === 0} />
+        <Header isVotingInProgress={isLoading ? undefined : totalAssignedPoints === 0} />
 
         <AnimatePresence>
           {canManageContent && isEditMode && (

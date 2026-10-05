@@ -201,6 +201,13 @@
   will-change: transform;
 }
 
+.header-badges-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
 .steam-header-badge {
   display: inline-flex;
   align-items: center;
@@ -254,6 +261,11 @@
   animation: pulse-dot 1.8s infinite;
 }
 
+.live-dot-complete {
+  background-color: #22c55e;
+  box-shadow: 0 0 8px #22c55e;
+}
+
 .offline-dot {
   width: 8px;
   height: 8px;
@@ -296,6 +308,7 @@
   animation: fadeInScale 1s ease-out 0.3s both;
   transition: all 0.3s ease;
   border: none;
+  margin: 0;
   padding: 0;
   background-color: transparent;
   will-change: transform;

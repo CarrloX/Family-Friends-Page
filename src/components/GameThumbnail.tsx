@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import type { Game } from '../types/voting';
 import { getGameImageFallbacks, getSteamPlaceholderSvg } from '../utils/steamImages';
 
@@ -11,28 +11,25 @@ interface GameThumbnailProps {
   style?: React.CSSProperties;
 }
 
-export const GameThumbnail: React.FC<GameThumbnailProps> = React.memo(({
+/**
+ * Componente interno que gestiona el estado de fallback de la imagen.
+ * Se remonta automáticamente cuando cambia la identidad del juego
+ * gracias al key que le asigna GameThumbnail, lo que reinicia
+ * currentFallbackIndex a 0 sin necesidad de effects ni setState en render.
+ */
+const GameThumbnailImage: React.FC<Omit<GameThumbnailProps, 'recordId'>> = ({
   game,
   alt,
   className = '',
-  recordId = '',
-  loading = 'eager',
+  loading = 'lazy',
   style,
 }) => {
-  const fallbacks = useMemo(() => getGameImageFallbacks(game || undefined), [game]);
+  const fallbacks = getGameImageFallbacks(game ?? undefined);
   const [currentFallbackIndex, setCurrentFallbackIndex] = useState(0);
 
-  // Reiniciar el índice si cambia el juego o el registro de historial
-  useEffect(() => {
-    setCurrentFallbackIndex(0);
-  }, [game?.id, game?.appId, game?.coverImage, recordId]);
-
-  const currentSrc = useMemo(() => {
-    if (currentFallbackIndex < fallbacks.length) {
-      return fallbacks[currentFallbackIndex];
-    }
-    return getSteamPlaceholderSvg(game?.title || 'Steam Game');
-  }, [fallbacks, currentFallbackIndex, game?.title]);
+  const currentSrc = currentFallbackIndex < fallbacks.length
+    ? fallbacks[currentFallbackIndex]
+    : getSteamPlaceholderSvg(game?.title || 'Steam Game');
 
   const handleError = useCallback(() => {
     setCurrentFallbackIndex((prev) => {
@@ -45,7 +42,6 @@ export const GameThumbnail: React.FC<GameThumbnailProps> = React.memo(({
 
   return (
     <img
-      key={`${recordId}-${game?.id || game?.appId || 'thumb'}-${currentFallbackIndex}`}
       src={currentSrc}
       alt={alt ?? game?.title ?? 'Miniatura del juego'}
       className={className}
@@ -54,4 +50,16 @@ export const GameThumbnail: React.FC<GameThumbnailProps> = React.memo(({
       onError={handleError}
     />
   );
+};
+
+/**
+ * Componente público que calcula la identidad del juego y fuerza
+ * un remount del componente interno cuando esta cambia.
+ */
+export const GameThumbnail: React.FC<GameThumbnailProps> = React.memo((props) => {
+  const { game, recordId = '', ...imageProps } = props;
+  const fallbacks = getGameImageFallbacks(game ?? undefined);
+  const identity = JSON.stringify([fallbacks, recordId]);
+
+  return <GameThumbnailImage key={identity} game={game} {...imageProps} />;
 });
