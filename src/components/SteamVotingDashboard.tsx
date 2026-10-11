@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef, useSyncExternalStore } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Header } from './Header';
 import { UserCard } from './UserCard';
@@ -16,6 +16,20 @@ import type { Voter, Game, VotingHistoryRecord, AuraRank, FreezePriceState, Stea
 import { getMaxVotePoints } from '../types/voting';
 import { FaCog } from "react-icons/fa";
 import { formatCopPrice } from '../services/steamStoreApi';
+
+function subscribeToMobileMediaQuery(callback: () => void) {
+  const mql = window.matchMedia('(max-width: 768px)');
+  mql.addEventListener('change', callback);
+  return () => mql.removeEventListener('change', callback);
+}
+
+function getMobileSnapshot(): boolean {
+  return typeof window !== 'undefined' ? window.innerWidth <= 768 : false;
+}
+
+function getMobileServerSnapshot(): boolean {
+  return false;
+}
 import {
   saveVoters,
   saveGames,
@@ -227,6 +241,38 @@ const ResetAuraConfirmModal = ({
   );
 };
 
+const SYNC_STATUS_CONFIG: Record<string, { icon: string; className: string }> = {
+  saving: { icon: '⏳', className: 'sync-indicator sync-saving' },
+  synced: { icon: '✅', className: 'sync-indicator sync-synced' },
+  error: { icon: '❌', className: 'sync-indicator sync-error' },
+  local: { icon: '💾', className: 'sync-indicator sync-local' },
+};
+
+const SyncIndicator: React.FC<{ syncState: SyncState }> = ({ syncState }) => {
+  const { status, message } = syncState;
+  const isVisible = status !== 'idle';
+  const config = SYNC_STATUS_CONFIG[status] ?? { icon: '✅', className: 'sync-indicator' };
+
+  return (
+    <AnimatePresence>
+      {isVisible && (
+        <motion.div
+          key="sync-indicator"
+          className={config.className}
+          title={message}
+          initial={{ opacity: 0, y: 12, scale: 0.95 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 8, scale: 0.95 }}
+          transition={{ duration: 0.25, ease: 'easeOut' }}
+        >
+          <span className="sync-icon">{config.icon}</span>
+          <span className="sync-text">{message}</span>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+};
+
 // ─── Funciones auxiliares puras ───────────────────────────
 function reconcileVoterVotes(voters: Voter[], gameIds: string[]): { changed: boolean; updatedVoters: Voter[] } {
   const validGameIds = new Set(gameIds);
@@ -272,6 +318,12 @@ export const SteamVotingDashboard: React.FC = () => {
   const [showPinModal, setShowPinModal] = useState<boolean>(false);
 
   const [syncState, setSyncState] = useState<SyncState>({ status: 'idle', message: '' });
+
+  const isMobile = useSyncExternalStore(
+    subscribeToMobileMediaQuery,
+    getMobileSnapshot,
+    getMobileServerSnapshot
+  );
 
   // Auto-ocultar el indicador de sincronización tras 5 segundos al completarse o fallar
   useEffect(() => {
@@ -440,6 +492,14 @@ export const SteamVotingDashboard: React.FC = () => {
       return acc + voter.votes.reduce((sum, vote) => sum + (vote.points || 0), 0);
     }, 0);
   }, [voters]);
+
+  // Texto descriptivo del badge de integrantes según modo de edición y dispositivo
+  const voterCountBadgeText = useMemo(() => {
+    if (!isEditMode) {
+      return `${voters.length} / ${MAX_VOTERS} Integrantes`;
+    }
+    return isMobile ? '⚙️ Editá integrantes y juegos' : '🖐️ Arrastrá tarjetas / Editá juegos arriba';
+  }, [isEditMode, isMobile, voters.length]);
 
   // ─── Reconciliar votos de los integrantes con gamesMap (autocorregir desalineaciones/IDs huérfanos) ───
   useEffect(() => {
@@ -985,54 +1045,7 @@ export const SteamVotingDashboard: React.FC = () => {
     }
   };
 
-  // ─── Sincronización ───────────────────────────────────────
-  const renderSyncIndicator = () => {
-    if (isLoading) return null;
 
-    const { status, message } = syncState;
-    const isVisible = status !== 'idle';
-    let icon = '✅';
-    let className = 'sync-indicator';
-
-    switch (status) {
-      case 'saving':
-        icon = '⏳';
-        className += ' sync-saving';
-        break;
-      case 'synced':
-        className += ' sync-synced';
-        break;
-      case 'error':
-        icon = '❌';
-        className += ' sync-error';
-        break;
-      case 'local':
-        icon = '💾';
-        className += ' sync-local';
-        break;
-      default:
-        break;
-    }
-
-    return (
-      <AnimatePresence>
-        {isVisible && (
-          <motion.div
-            key="sync-indicator"
-            className={className}
-            title={message}
-            initial={{ opacity: 0, y: 12, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 8, scale: 0.95 }}
-            transition={{ duration: 0.25, ease: 'easeOut' }}
-          >
-            <span className="sync-icon">{icon}</span>
-            <span className="sync-text">{message}</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    );
-  };
 
   // ─── Loading state ────────────────────────────────────────
   // Skeleton loaders animados que imitan la estructura del dashboard
@@ -1047,7 +1060,7 @@ export const SteamVotingDashboard: React.FC = () => {
       <div className="bg-gradient-overlay"></div>
       <div className="bg-grid-lines"></div>
 
-      {renderSyncIndicator()}
+      <SyncIndicator syncState={syncState} />
 
       <InstallPrompt />
 
@@ -1287,7 +1300,7 @@ export const SteamVotingDashboard: React.FC = () => {
               <span className="title-icon">🎮</span> VOTACIONES DE PARTICIPANTES
             </h2>
             <span className="voter-count-badge">
-              {isEditMode ? '🖐️ Arrastrá tarjetas / Editá juegos arriba' : `${voters.length} / ${MAX_VOTERS} Integrantes`}
+              {voterCountBadgeText}
             </span>
           </div>
 
@@ -1301,13 +1314,13 @@ export const SteamVotingDashboard: React.FC = () => {
                   isEditMode={isEditMode}
                   apiKey={steamApiKey}
                   onUpdateVoter={handleUpdateVoter}
-                  draggable={true}
-                  onDragStart={(e) => handleDragStart(e, index)}
-                  onDragOver={(e) => handleDragOver(e, index)}
-                  onDrop={(e) => handleDrop(e, index)}
-                  onDragEnd={handleDragEnd}
-                  isDragging={draggedIndex === index}
-                  isDragOver={dragOverIndex === index}
+                  draggable={!isMobile}
+                  onDragStart={!isMobile ? (e) => handleDragStart(e, index) : undefined}
+                  onDragOver={!isMobile ? (e) => handleDragOver(e, index) : undefined}
+                  onDrop={!isMobile ? (e) => handleDrop(e, index) : undefined}
+                  onDragEnd={!isMobile ? handleDragEnd : undefined}
+                  isDragging={!isMobile && draggedIndex === index}
+                  isDragOver={!isMobile && dragOverIndex === index}
                   onRequestDelete={handleRequestDeleteVoter}
                   canDelete={voters.length > MIN_VOTERS}
                 />

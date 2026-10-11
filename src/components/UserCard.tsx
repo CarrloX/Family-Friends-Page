@@ -10,6 +10,7 @@ import {
 } from '../types/voting';
 import { fetchSteamProfile, isValidSteamId64 } from '../services/steamApi';
 import { FaTimes } from "react-icons/fa";
+import { MdDragIndicator } from "react-icons/md";
 import { VoteItem } from './VoteItem';
 
 interface UserCardProps {
@@ -191,10 +192,10 @@ export const UserCard: React.FC<UserCardProps> = React.memo(({
         isDragging ? 'is-dragging' : ''
       } ${isDragOver ? 'is-drag-over' : ''}`}
       draggable={draggable}
-      onDragStart={onDragStart as (event: unknown, info: unknown) => void}
-      onDragOver={onDragOver}
-      onDrop={onDrop}
-      onDragEnd={onDragEnd as (event: unknown, info: unknown) => void}
+      onDragStart={draggable ? (onDragStart as (event: unknown, info: unknown) => void) : undefined}
+      onDragOver={draggable ? onDragOver : undefined}
+      onDrop={draggable ? onDrop : undefined}
+      onDragEnd={draggable ? (onDragEnd as (event: unknown, info: unknown) => void) : undefined}
       initial={{ opacity: 0, y: 20, scale: 0.95 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.2 } }}
@@ -205,9 +206,11 @@ export const UserCard: React.FC<UserCardProps> = React.memo(({
       <div className="card-ambient-glow"></div>
 
       {/* DRAG HANDLE INDICATOR AT TOP RIGHT */}
-      <div className="drag-handle-pill" title="Arrastra para reordenar esta tarjeta">
-        <span className="drag-icon">⋮⋮</span>
-      </div>
+      {draggable && (
+        <div className="drag-handle-pill" title="Arrastra para reordenar esta tarjeta">
+          <MdDragIndicator className="drag-icon" aria-hidden="true" />
+        </div>
+      )}
 
       {/* DELETE USER BUTTON (only visible in edit mode) */}
       {isEditMode && onRequestDelete && (
