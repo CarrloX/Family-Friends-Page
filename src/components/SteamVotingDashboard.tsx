@@ -517,7 +517,10 @@ export const SteamVotingDashboard: React.FC = () => {
           saveApiKey(apiKey);
         }
       } catch (err) {
-        console.error('[Dashboard] Error guardando API key:', err);
+        if (isMountedRef.current) {
+          console.error('[Dashboard] Error guardando API key:', err);
+          setSyncState({ status: 'error', message: 'Error al guardar la clave API' });
+        }
       }
     }, DEBOUNCE_MS);
   }, []);
@@ -779,6 +782,13 @@ export const SteamVotingDashboard: React.FC = () => {
   }, [gamesMap, autoUnfreezePrice]);
 
   const handleDeleteGame = useCallback((gameId: string) => {
+    if (
+      !gamesMap[gameId] ||
+      Object.keys(gamesMap).length <= MIN_GAMES
+    ) {
+      return;
+    }
+
     setGamesMap((prev) => {
       const currentCount = Object.keys(prev).length;
       if (currentCount <= MIN_GAMES) return prev;
@@ -1017,24 +1027,30 @@ export const SteamVotingDashboard: React.FC = () => {
 
     setSyncState({ status: 'saving', message: 'Eliminando registro y restaurando Aura...' });
 
-    // 1. Calcular los votantes con su estado revertido a partir de los snapshots de este registro
-    const updatedVoters = recordToDelete.votersSnapshots
-      ? voters.map((voter) => revertVoterFromSnapshot(voter, recordToDelete.votersSnapshots!))
-      : voters;
+    try {
+      // 1. Calcular los votantes con su estado revertido a partir de los snapshots de este registro
+      const updatedVoters = recordToDelete.votersSnapshots
+        ? voters.map((voter) => revertVoterFromSnapshot(voter, recordToDelete.votersSnapshots!))
+        : voters;
 
-    // 2. Persistir atómicamente la eliminación del registro y la restauración de miembros
-    const result = await deleteHistoryRecord(recordId, updatedVoters);
-    setSyncState(result);
+      // 2. Persistir atómicamente la eliminación del registro y la restauración de miembros
+      const result = await deleteHistoryRecord(recordId, updatedVoters);
+      setSyncState(result);
 
-    // 3. Modificar el estado local ÚNICAMENTE cuando la persistencia haya finalizado con éxito
-    if (result.status === 'synced' || result.status === 'local') {
-      skipNextSaveRef.current = true;
-      setVoters(updatedVoters);
-      setHistory((prev) => prev.filter((r) => r.id !== recordId));
-    } else {
-      throw new Error(
-        result.message || 'No se pudo eliminar el registro en la base de datos. No se alteró el estado local.'
-      );
+      // 3. Modificar el estado local ÚNICAMENTE cuando la persistencia haya finalizado con éxito
+      if (result.status === 'synced' || result.status === 'local') {
+        skipNextSaveRef.current = true;
+        setVoters(updatedVoters);
+        setHistory((prev) => prev.filter((r) => r.id !== recordId));
+      } else {
+        throw new Error(
+          result.message || 'No se pudo eliminar el registro en la base de datos. No se alteró el estado local.'
+        );
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al eliminar el registro del historial';
+      setSyncState({ status: 'error', message });
+      throw err;
     }
   }, [history, voters]);
 
@@ -1203,16 +1219,30 @@ export const SteamVotingDashboard: React.FC = () => {
       }
     }
 
+    // Cancelar temporizadores pendientes del dashboard y de la API key
+    if (saveDebounceRef.current) {
+      clearTimeout(saveDebounceRef.current);
+    }
+    if (apiKeyDebounceRef.current) {
+      clearTimeout(apiKeyDebounceRef.current);
+    }
+    // Invalidar escrituras asíncronas actualmente en vuelo en la cola
+    invalidatePendingWrites();
+
     try {
       setSyncState({ status: 'saving', message: 'Importando backup...' });
       const result = await importBackup(file);
 
+      skipNextSaveRef.current = true;
       setVoters(result.voters);
       setGamesMap(result.gamesMap);
       setHistory(result.history);
       setSteamApiKey(result.steamApiKey);
 
-      setSyncState({ status: 'synced', message: `✅ Backup importado: ${result.voters.length} integrantes, ${result.history.length} registros` });
+      setSyncState({
+        status: 'synced',
+        message: `✅ Backup importado: ${result.voters.length} integrantes, ${result.history.length} registros`,
+      });
       if (importFileInputRef.current) importFileInputRef.current.value = '';
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Error desconocido';

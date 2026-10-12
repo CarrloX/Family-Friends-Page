@@ -1521,6 +1521,8 @@ export async function importBackup(
   history: VotingHistoryRecord[];
   steamApiKey: string;
 }> {
+  invalidatePendingWrites();
+
   if (!canWriteToPersistence()) {
     const currentData = {
       voters: readLocal<Voter[]>(LS_KEY_VOTERS, []),
