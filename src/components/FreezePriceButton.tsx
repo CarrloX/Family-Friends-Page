@@ -10,6 +10,16 @@ export interface FreezePriceButtonProps {
   id?: string;
 }
 
+function getFreezeButtonTitle(isFrozen: boolean, disabled: boolean): string {
+  if (isFrozen) {
+    return 'Volver a sincronizar el precio con Steam';
+  }
+  if (disabled) {
+    return 'No hay información de precio disponible para congelar';
+  }
+  return 'Guardar el precio actual y su descuento';
+}
+
 /**
  * Componente de botón único dinámico (Toggle) para congelar y descongelar
  * el precio del juego ganador en Modo Edición / Administración.
@@ -43,6 +53,7 @@ export const FreezePriceButton = React.memo(({
   const loadingLabel = isFrozen ? 'Descongelando…' : 'Congelando…';
   const idleLabel = isFrozen ? 'Descongelar Precio' : 'Congelar Precio';
   const toggleLabel = isLoading ? loadingLabel : idleLabel;
+  const buttonTitle = getFreezeButtonTitle(isFrozen, disabled);
 
   return (
     <motion.button
@@ -53,11 +64,7 @@ export const FreezePriceButton = React.memo(({
       disabled={isInteractionDisabled}
       aria-pressed={isFrozen}
       aria-busy={isLoading}
-      title={
-        isFrozen
-          ? 'Volver a sincronizar el precio con Steam'
-          : 'Guardar el precio actual y su descuento'
-      }
+      title={buttonTitle}
       whileHover={isInteractionDisabled ? {} : { scale: 1.04, y: -2 }}
       whileTap={isInteractionDisabled ? {} : { scale: 0.96 }}
       layout

@@ -11,6 +11,7 @@ import {
   deleteDoc,
   writeBatch,
   type Firestore,
+  type QuerySnapshot,
 } from 'firebase/firestore';
 import { getFirestoreInstance, isFirebaseReady } from './firebaseConfig';
 import { canManageContent } from './accessControl';
@@ -195,176 +196,286 @@ function handleSyncError(
   return { status: 'local', message: 'Guardado localmente (sin conexión)' };
 }
 
-/**
- * Guarda la lista de votantes. Prioriza Firestore, fallback a localStorage.
- */
-export async function saveVoters(voters: Voter[]): Promise<SyncState> {
-  if (!canWriteToPersistence()) {
-    return buildReadOnlyState();
-  }
+// ============================================================
+// Coordinador Centralizado de Persistencia y Concurrencia
+// ============================================================
+let currentBarrierEpoch = 0;
+let writeQueue: Promise<SyncState> = Promise.resolve({ status: 'idle', message: '' });
 
-  if (isFirebaseReady()) {
-    try {
-      const db = getFirestoreInstance()!;
-      const docRef = doc(db, COLLECTION_GROUP, DOC_MIEMBROS);
-      const payload = removeUndefinedDeep({ voters, lastUpdated: Timestamp.now() });
-      await setDoc(docRef, payload, { merge: true });
-      if (import.meta.env.DEV) {
-        console.log('[Store] Datos sincronizados correctamente.');
-      }
-      return { status: 'synced', message: 'Sincronizado con la nube' };
-    } catch (err) {
-      return handleSyncError(err, () => writeLocal(LS_KEY_VOTERS, voters), 'Error de sincronización, usando almacenamiento local');
-    }
-  }
-  writeLocal(LS_KEY_VOTERS, voters);
-  return { status: 'local', message: 'Guardado localmente' };
+/**
+ * Invalida cualquier escritura en curso o encolada para evitar que sobrescriba
+ * operaciones críticas posteriores (como finalizar votación, reiniciar o restaurar datos).
+ */
+export function invalidatePendingWrites(): void {
+  currentBarrierEpoch++;
 }
 
 /**
- * Guarda el estado activo de la votación actual en Firestore y localStorage.
+ * Ejecuta una operación de escritura asegurando:
+ * 1. Orden secuencial estricto (FIFO) mediante cola de promesas.
+ * 2. Invalidador de épocas (barrier epoch) para descartar escrituras obsoletas.
+ * 3. Captura homogénea de excepciones no controladas.
+ */
+export async function executeCoordinatedWrite(
+  writeFn: () => Promise<SyncState>,
+  options?: { isBarrier?: boolean }
+): Promise<SyncState> {
+  const epoch = options?.isBarrier ? ++currentBarrierEpoch : currentBarrierEpoch;
+
+  const task = writeQueue.then(async (): Promise<SyncState> => {
+    // Si la época avanzó antes de iniciar la ejecución, descartar
+    if (epoch < currentBarrierEpoch) {
+      if (import.meta.env.DEV) {
+        console.warn(`[Store] Escritura omitida por época obsoleta (${epoch} < ${currentBarrierEpoch}).`);
+      }
+      return { status: 'idle', message: 'Operación cancelada por acción posterior' };
+    }
+
+    try {
+      const res = await writeFn();
+      // Si la época avanzó durante la ejecución de la función, descartar el resultado
+      if (epoch < currentBarrierEpoch) {
+        if (import.meta.env.DEV) {
+          console.warn(`[Store] Resultado de escritura descartado por época obsoleta (${epoch} < ${currentBarrierEpoch}).`);
+        }
+        return { status: 'idle', message: 'Operación descartada por acción posterior' };
+      }
+      return res;
+    } catch (err) {
+      if (epoch < currentBarrierEpoch) {
+        return { status: 'idle', message: 'Operación obsoleta' };
+      }
+      if (import.meta.env.DEV) {
+        console.error('[Store] Excepción no controlada en escritura coordinada:', err);
+      }
+      return { status: 'error', message: 'Error inesperado durante la sincronización' };
+    }
+  });
+
+  // Mantener la cola funcional incluso si una promesa previa falló
+  writeQueue = task.catch((): SyncState => ({ status: 'error', message: 'Error en cola de persistencia' }));
+  return task;
+}
+
+/**
+ * Guarda la lista de votantes. Prioriza Firestore, fallback a localStorage.
+ * Coordinado a través de la cola secuencial.
+ */
+export async function saveVoters(voters: Voter[]): Promise<SyncState> {
+  return executeCoordinatedWrite(async () => {
+    if (!canWriteToPersistence()) {
+      return buildReadOnlyState();
+    }
+
+    if (isFirebaseReady()) {
+      try {
+        const db = getFirestoreInstance()!;
+        const docRef = doc(db, COLLECTION_GROUP, DOC_MIEMBROS);
+        const payload = removeUndefinedDeep({ voters, lastUpdated: Timestamp.now() });
+        await setDoc(docRef, payload, { merge: true });
+        if (import.meta.env.DEV) {
+          console.log('[Store] Datos sincronizados correctamente.');
+        }
+        return { status: 'synced', message: 'Sincronizado con la nube' };
+      } catch (err) {
+        return handleSyncError(err, () => writeLocal(LS_KEY_VOTERS, voters), 'Error de sincronización, usando almacenamiento local');
+      }
+    }
+    writeLocal(LS_KEY_VOTERS, voters);
+    return { status: 'local', message: 'Guardado localmente' };
+  });
+}
+
+/**
+ * Guarda el estado activo de la votación actual en Firestore y localStorage de forma atómica y coordinada.
+ * Actualiza tanto la votación activa como el consolidado de grupo (miembros y catálogo) en un único writeBatch.
  */
 export async function saveActiveVotingState(
   voters: Voter[],
   gamesMap: Record<string, Game>,
   freezeState?: FreezePriceState
 ): Promise<SyncState> {
-  if (!canWriteToPersistence()) {
-    return buildReadOnlyState();
-  }
-
-  // Array dinámico de juegos derivado del mapa (preserva el orden)
-  const games = Object.values(gamesMap);
-  const freezeData = freezeState
-    ? {
-        isPrecioCongelado: Boolean(freezeState.isPrecioCongelado),
-        precioCongelado: freezeState.precioCongelado ?? null,
-        descuentoCongelado: freezeState.descuentoCongelado ?? null,
-        precioCongeladoFormatted: freezeState.precioCongeladoFormatted ?? null,
-        precioOriginalCongelado: freezeState.precioOriginalCongelado ?? null,
-        precioOriginalCongeladoFormatted: freezeState.precioOriginalCongeladoFormatted ?? null,
-        congeladoAt: freezeState.congeladoAt ?? null,
-        congeladoGameId: freezeState.gameId ?? null,
-      }
-    : {};
-
-  if (isFirebaseReady()) {
-    try {
-      const db = getFirestoreInstance()!;
-      const docRef = doc(db, COLLECTION_ACTIVE_VOTING, DOC_ACTIVE_VOTING);
-      const payload = removeUndefinedDeep({
-        voters,
-        gamesMap,
-        games,
-        ...freezeData,
-        lastUpdated: Timestamp.now(),
-      });
-      await setDoc(docRef, payload, { merge: true });
-      writeLocal(LS_KEY_ACTIVE_VOTING, { voters, gamesMap, games, ...freezeData });
-      if (import.meta.env.DEV) {
-        console.log('[Store] Estado de sesión sincronizado.');
-      }
-      return { status: 'synced', message: 'Votación actual sincronizada' };
-    } catch (err) {
-      return handleSyncError(
-        err,
-        () => writeLocal(LS_KEY_ACTIVE_VOTING, { voters, gamesMap, games, ...freezeData }),
-        'Error de sincronización, usando almacenamiento local'
-      );
+  return executeCoordinatedWrite(async () => {
+    if (!canWriteToPersistence()) {
+      return buildReadOnlyState();
     }
-  }
 
-  // Modo de desarrollo local / sin backend configurado: persistencia confinada a localStorage
-  writeLocal(LS_KEY_ACTIVE_VOTING, { voters, gamesMap, games, ...freezeData });
-  return { status: 'local', message: 'Votación actual guardada localmente' };
+    // Array dinámico de juegos derivado del mapa (preserva el orden)
+    const games = Object.values(gamesMap);
+    const freezeData = freezeState
+      ? {
+          isPrecioCongelado: Boolean(freezeState.isPrecioCongelado),
+          precioCongelado: freezeState.precioCongelado ?? null,
+          descuentoCongelado: freezeState.descuentoCongelado ?? null,
+          precioCongeladoFormatted: freezeState.precioCongeladoFormatted ?? null,
+          precioOriginalCongelado: freezeState.precioOriginalCongelado ?? null,
+          precioOriginalCongeladoFormatted: freezeState.precioOriginalCongeladoFormatted ?? null,
+          congeladoAt: freezeState.congeladoAt ?? null,
+          congeladoGameId: freezeState.gameId ?? null,
+        }
+      : {};
+
+    const cleanVoters = removeUndefinedDeep(voters);
+    const cleanGamesMap = removeUndefinedDeep(gamesMap);
+    const cleanGames = removeUndefinedDeep(games);
+
+    const saveLocal = () => {
+      writeLocal(LS_KEY_VOTERS, cleanVoters);
+      writeLocal(LS_KEY_GAMES, cleanGamesMap);
+      writeLocal(LS_KEY_ACTIVE_VOTING, {
+        voters: cleanVoters,
+        gamesMap: cleanGamesMap,
+        games: cleanGames,
+        ...freezeData,
+      });
+    };
+
+    if (isFirebaseReady()) {
+      try {
+        const db = getFirestoreInstance()!;
+        const batch = writeBatch(db);
+
+        // 1. Documento de votación activa
+        const activeDocRef = doc(db, COLLECTION_ACTIVE_VOTING, DOC_ACTIVE_VOTING);
+        batch.set(
+          activeDocRef,
+          removeUndefinedDeep({
+            voters: cleanVoters,
+            gamesMap: cleanGamesMap,
+            games: cleanGames,
+            ...freezeData,
+            lastUpdated: Timestamp.now(),
+          }),
+          { merge: true }
+        );
+
+        // 2. Documento consolidado del grupo (miembros y catálogo)
+        const groupDocRef = doc(db, COLLECTION_GROUP, DOC_MIEMBROS);
+        batch.set(
+          groupDocRef,
+          removeUndefinedDeep({
+            voters: cleanVoters,
+            gamesMap: cleanGamesMap,
+            games: cleanGames,
+            lastUpdated: Timestamp.now(),
+          }),
+          { merge: true }
+        );
+
+        await batch.commit();
+        saveLocal();
+
+        if (import.meta.env.DEV) {
+          console.log('[Store] Estado de sesión y grupo sincronizados atómicamente.');
+        }
+        return { status: 'synced', message: 'Votación actual sincronizada' };
+      } catch (err) {
+        return handleSyncError(
+          err,
+          saveLocal,
+          'Error de sincronización, usando almacenamiento local'
+        );
+      }
+    }
+
+    // Modo de desarrollo local / sin backend configurado: persistencia confinada a localStorage
+    saveLocal();
+    return { status: 'local', message: 'Votación actual guardada localmente' };
+  });
 }
 
 /**
  * Guarda de forma inmediata y directa el estado de precio congelado en Firestore y localStorage.
+ * Coordinado a través de la cola secuencial.
  */
 export async function saveFreezePriceState(freezeState: FreezePriceState): Promise<SyncState> {
-  if (!canWriteToPersistence()) {
-    return buildReadOnlyState();
-  }
-
-  const payload = removeUndefinedDeep({
-    isPrecioCongelado: freezeState.isPrecioCongelado,
-    precioCongelado: freezeState.precioCongelado ?? null,
-    descuentoCongelado: freezeState.descuentoCongelado ?? null,
-    precioCongeladoFormatted: freezeState.precioCongeladoFormatted ?? null,
-    precioOriginalCongelado: freezeState.precioOriginalCongelado ?? null,
-    precioOriginalCongeladoFormatted: freezeState.precioOriginalCongeladoFormatted ?? null,
-    congeladoAt: freezeState.congeladoAt ?? new Date().toISOString(),
-    congeladoGameId: freezeState.gameId ?? null,
-    lastUpdated: Timestamp.now(),
-  });
-
-  const saveLocal = () => {
-    const cached = readLocal<Record<string, unknown>>(LS_KEY_ACTIVE_VOTING, {});
-    writeLocal(LS_KEY_ACTIVE_VOTING, { ...cached, ...payload });
-  };
-
-  if (isFirebaseReady()) {
-    try {
-      const db = getFirestoreInstance()!;
-      const docRef = doc(db, COLLECTION_ACTIVE_VOTING, DOC_ACTIVE_VOTING);
-      await setDoc(docRef, payload, { merge: true });
-      saveLocal();
-      if (import.meta.env.DEV) {
-        console.log('[Store] Estado de precio congelado sincronizado en Firestore.');
-      }
-      return { status: 'synced', message: 'Precio congelado guardado en la nube' };
-    } catch (err) {
-      return handleSyncError(err, saveLocal, 'Error al guardar precio congelado, usando almacenamiento local');
+  return executeCoordinatedWrite(async () => {
+    if (!canWriteToPersistence()) {
+      return buildReadOnlyState();
     }
-  }
 
-  saveLocal();
-  return { status: 'local', message: 'Precio congelado guardado localmente' };
+    const payload = removeUndefinedDeep({
+      isPrecioCongelado: freezeState.isPrecioCongelado,
+      precioCongelado: freezeState.precioCongelado ?? null,
+      descuentoCongelado: freezeState.descuentoCongelado ?? null,
+      precioCongeladoFormatted: freezeState.precioCongeladoFormatted ?? null,
+      precioOriginalCongelado: freezeState.precioOriginalCongelado ?? null,
+      precioOriginalCongeladoFormatted: freezeState.precioOriginalCongeladoFormatted ?? null,
+      congeladoAt: freezeState.congeladoAt ?? new Date().toISOString(),
+      congeladoGameId: freezeState.gameId ?? null,
+      lastUpdated: Timestamp.now(),
+    });
+
+    const saveLocal = () => {
+      const cached = readLocal<Record<string, unknown>>(LS_KEY_ACTIVE_VOTING, {});
+      writeLocal(LS_KEY_ACTIVE_VOTING, { ...cached, ...payload });
+    };
+
+    if (isFirebaseReady()) {
+      try {
+        const db = getFirestoreInstance()!;
+        const docRef = doc(db, COLLECTION_ACTIVE_VOTING, DOC_ACTIVE_VOTING);
+        await setDoc(docRef, payload, { merge: true });
+        saveLocal();
+        if (import.meta.env.DEV) {
+          console.log('[Store] Estado de precio congelado sincronizado en Firestore.');
+        }
+        return { status: 'synced', message: 'Precio congelado guardado en la nube' };
+      } catch (err) {
+        return handleSyncError(err, saveLocal, 'Error al guardar precio congelado, usando almacenamiento local');
+      }
+    }
+
+    saveLocal();
+    return { status: 'local', message: 'Precio congelado guardado localmente' };
+  });
 }
 
 /**
  * Descongela el precio y limpia los campos de oferta congelada en Firestore y localStorage.
+ * Coordinado a través de la cola secuencial.
  */
 export async function unfreezePriceState(): Promise<SyncState> {
-  if (!canWriteToPersistence()) {
-    return buildReadOnlyState();
-  }
-
-  const payload = {
-    isPrecioCongelado: false,
-    precioCongelado: null,
-    descuentoCongelado: null,
-    precioCongeladoFormatted: null,
-    precioOriginalCongelado: null,
-    precioOriginalCongeladoFormatted: null,
-    congeladoAt: null,
-    congeladoGameId: null,
-    lastUpdated: Timestamp.now(),
-  };
-
-  const saveLocal = () => {
-    const cached = readLocal<Record<string, unknown>>(LS_KEY_ACTIVE_VOTING, {});
-    writeLocal(LS_KEY_ACTIVE_VOTING, { ...cached, ...payload });
-  };
-
-  if (isFirebaseReady()) {
-    try {
-      const db = getFirestoreInstance()!;
-      const docRef = doc(db, COLLECTION_ACTIVE_VOTING, DOC_ACTIVE_VOTING);
-      await setDoc(docRef, payload, { merge: true });
-      saveLocal();
-      if (import.meta.env.DEV) {
-        console.log('[Store] Precio descongelado en Firestore.');
-      }
-      return { status: 'synced', message: 'Precio descongelado en la nube' };
-    } catch (err) {
-      return handleSyncError(err, saveLocal, 'Error al descongelar precio, usando almacenamiento local');
+  return executeCoordinatedWrite(async () => {
+    if (!canWriteToPersistence()) {
+      return buildReadOnlyState();
     }
-  }
 
-  saveLocal();
-  return { status: 'local', message: 'Precio descongelado localmente' };
+    const payload = {
+      isPrecioCongelado: false,
+      precioCongelado: null,
+      descuentoCongelado: null,
+      precioCongeladoFormatted: null,
+      precioOriginalCongelado: null,
+      precioOriginalCongeladoFormatted: null,
+      congeladoAt: null,
+      congeladoGameId: null,
+      lastUpdated: Timestamp.now(),
+    };
+
+    const saveLocal = () => {
+      const cached = readLocal<Record<string, unknown>>(LS_KEY_ACTIVE_VOTING, {});
+      writeLocal(LS_KEY_ACTIVE_VOTING, { ...cached, ...payload });
+    };
+
+    if (isFirebaseReady()) {
+      try {
+        const db = getFirestoreInstance()!;
+        const docRef = doc(db, COLLECTION_ACTIVE_VOTING, DOC_ACTIVE_VOTING);
+        await setDoc(docRef, payload, { merge: true });
+        saveLocal();
+        if (import.meta.env.DEV) {
+          console.log('[Store] Precio descongelado en Firestore.');
+        }
+        return { status: 'synced', message: 'Precio descongelado en la nube' };
+      } catch (err) {
+        return handleSyncError(err, saveLocal, 'Error al descongelar precio, usando almacenamiento local');
+      }
+    }
+
+    saveLocal();
+    return { status: 'local', message: 'Precio descongelado localmente' };
+  });
 }
 
 export function sanitizeGame(game: Game): Game {
@@ -600,35 +711,38 @@ export async function loadVoters(): Promise<Voter[]> {
 
 /**
  * Guarda el mapa de juegos. Prioriza Firestore, fallback a localStorage.
+ * Coordinado a través de la cola secuencial.
  */
 export async function saveGames(gamesMap: Record<string, Game>): Promise<SyncState> {
-  if (!canWriteToPersistence()) {
-    return buildReadOnlyState();
-  }
-
-  // Array dinámico de juegos derivado del mapa
-  const games = Object.values(gamesMap);
-
-  if (isFirebaseReady()) {
-    try {
-      const db = getFirestoreInstance()!;
-      const docRef = doc(db, COLLECTION_GROUP, DOC_MIEMBROS);
-      const payload = removeUndefinedDeep({
-        gamesMap,
-        games,
-        lastUpdated: Timestamp.now(),
-      });
-      await setDoc(docRef, payload, { merge: true });
-      if (import.meta.env.DEV) {
-        console.log('[Store] Catálogo sincronizado correctamente.');
-      }
-      return { status: 'synced', message: 'Sincronizado con la nube' };
-    } catch (err) {
-      return handleSyncError(err, () => writeLocal(LS_KEY_GAMES, gamesMap), 'Error sincronizando catálogo, usando almacenamiento local');
+  return executeCoordinatedWrite(async () => {
+    if (!canWriteToPersistence()) {
+      return buildReadOnlyState();
     }
-  }
-  writeLocal(LS_KEY_GAMES, gamesMap);
-  return { status: 'local', message: 'Guardado localmente' };
+
+    // Array dinámico de juegos derivado del mapa
+    const games = Object.values(gamesMap);
+
+    if (isFirebaseReady()) {
+      try {
+        const db = getFirestoreInstance()!;
+        const docRef = doc(db, COLLECTION_GROUP, DOC_MIEMBROS);
+        const payload = removeUndefinedDeep({
+          gamesMap,
+          games,
+          lastUpdated: Timestamp.now(),
+        });
+        await setDoc(docRef, payload, { merge: true });
+        if (import.meta.env.DEV) {
+          console.log('[Store] Catálogo sincronizado correctamente.');
+        }
+        return { status: 'synced', message: 'Sincronizado con la nube' };
+      } catch (err) {
+        return handleSyncError(err, () => writeLocal(LS_KEY_GAMES, gamesMap), 'Error sincronizando catálogo, usando almacenamiento local');
+      }
+    }
+    writeLocal(LS_KEY_GAMES, gamesMap);
+    return { status: 'local', message: 'Guardado localmente' };
+  });
 }
 
 /**
@@ -816,53 +930,55 @@ export async function saveFinishedVotingSession(
   updatedVoters: Voter[],
   gamesMap?: Record<string, Game>
 ): Promise<SyncState> {
-  if (!canWriteToPersistence()) {
-    return buildReadOnlyState();
-  }
-
-  const cleanRecord = sanitizeVotingHistoryRecord(record);
-  const cleanVoters = removeUndefinedDeep(updatedVoters);
-  const effectiveGamesMap = deriveGamesMap(cleanRecord, gamesMap);
-  const games = Object.values(effectiveGamesMap);
-
-  const saveLocalFallback = () => {
-    writeLocal(LS_KEY_VOTERS, cleanVoters);
-    appendLocalHistoryRecord(cleanRecord);
-    writeLocal(LS_KEY_ACTIVE_VOTING, {
-      voters: cleanVoters,
-      gamesMap: effectiveGamesMap,
-      games,
-      isPrecioCongelado: false,
-      precioCongelado: null,
-      descuentoCongelado: null,
-      precioCongeladoFormatted: null,
-      precioOriginalCongelado: null,
-      precioOriginalCongeladoFormatted: null,
-      congeladoAt: null,
-      congeladoGameId: null,
-    });
-  };
-
-  if (isFirebaseReady()) {
-    try {
-      const db = getFirestoreInstance()!;
-      await commitFinishedVotingBatch(db, cleanRecord, cleanVoters, effectiveGamesMap, games);
-      saveLocalFallback();
-      if (import.meta.env.DEV) {
-        console.log('[Store] Votación archivada y miembros actualizados de forma atómica en Firestore.');
-      }
-      return { status: 'synced', message: 'Votación finalizada y sincronizada' };
-    } catch (err) {
-      return handleSyncError(
-        err,
-        saveLocalFallback,
-        'Error finalizando votación atómicamente, usando almacenamiento local'
-      );
+  return executeCoordinatedWrite(async () => {
+    if (!canWriteToPersistence()) {
+      return buildReadOnlyState();
     }
-  }
 
-  saveLocalFallback();
-  return { status: 'local', message: 'Votación guardada localmente' };
+    const cleanRecord = sanitizeVotingHistoryRecord(record);
+    const cleanVoters = removeUndefinedDeep(updatedVoters);
+    const effectiveGamesMap = deriveGamesMap(cleanRecord, gamesMap);
+    const games = Object.values(effectiveGamesMap);
+
+    const saveLocalFallback = () => {
+      writeLocal(LS_KEY_VOTERS, cleanVoters);
+      appendLocalHistoryRecord(cleanRecord);
+      writeLocal(LS_KEY_ACTIVE_VOTING, {
+        voters: cleanVoters,
+        gamesMap: effectiveGamesMap,
+        games,
+        isPrecioCongelado: false,
+        precioCongelado: null,
+        descuentoCongelado: null,
+        precioCongeladoFormatted: null,
+        precioOriginalCongelado: null,
+        precioOriginalCongeladoFormatted: null,
+        congeladoAt: null,
+        congeladoGameId: null,
+      });
+    };
+
+    if (isFirebaseReady()) {
+      try {
+        const db = getFirestoreInstance()!;
+        await commitFinishedVotingBatch(db, cleanRecord, cleanVoters, effectiveGamesMap, games);
+        saveLocalFallback();
+        if (import.meta.env.DEV) {
+          console.log('[Store] Votación archivada y miembros actualizados de forma atómica en Firestore.');
+        }
+        return { status: 'synced', message: 'Votación finalizada y sincronizada' };
+      } catch (err) {
+        return handleSyncError(
+          err,
+          saveLocalFallback,
+          'Error finalizando votación atómicamente, usando almacenamiento local'
+        );
+      }
+    }
+
+    saveLocalFallback();
+    return { status: 'local', message: 'Votación guardada localmente' };
+  }, { isBarrier: true });
 }
 
 /**
@@ -901,109 +1017,326 @@ export async function loadHistory(): Promise<VotingHistoryRecord[]> {
   return sanitizedLocal;
 }
 
-async function deleteFirestoreHistoryDoc(recordId: string): Promise<SyncState | null> {
-  if (!isFirebaseReady()) return null;
+export interface InitialDashboardData {
+  voters: Voter[];
+  gamesMap: Record<string, Game>;
+  history: VotingHistoryRecord[];
+  apiKey: string;
+  freezeState: FreezePriceState;
+  hasExistingData: boolean;
+}
 
-  try {
-    const db = getFirestoreInstance()!;
+function getSortedLocalHistory(): VotingHistoryRecord[] {
+  const localHistory = readLocal<VotingHistoryRecord[]>(LS_KEY_HISTORY, []);
+  if (localHistory.length === 0) return [];
+  const sanitized = localHistory.map(sanitizeVotingHistoryRecord);
+  sanitized.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  return sanitized;
+}
 
-    // 1. Intento de borrado directo si el doc ID de Firestore coincide con el UUID
-    const directDocRef = doc(db, COLLECTION_HISTORY, recordId);
-    const directSnap = await getDoc(directDocRef);
-    if (directSnap.exists()) {
-      await deleteDoc(directDocRef);
-      if (import.meta.env.DEV) {
-        console.log('[Store] Registro eliminado del almacenamiento remoto.');
-      }
-      return null;
-    }
-
-    // 2. Fallback de escaneo para registros legados insertados previamente con auto-ID
-    const colRef = collection(db, COLLECTION_HISTORY);
-    const snap = await getDocs(colRef);
-    const docToDelete = snap.docs.find((d) => d.data().id === recordId || d.id === recordId);
-    if (docToDelete) {
-      await deleteDoc(docToDelete.ref);
-      if (import.meta.env.DEV) {
-        console.log('[Store] Registro eliminado del almacenamiento remoto.');
-      }
-    }
-    return null;
-  } catch (err) {
-    if (isPermissionDeniedError(err)) {
-      if (import.meta.env.DEV) {
-        console.error('[Store] Operación denegada: permisos insuficientes.');
-      }
-      return { status: 'error', message: 'Permiso denegado por el servidor: requiere rol de administrador' };
-    }
-    if (import.meta.env.DEV) {
-      console.warn('[Store] Error eliminando registro remoto:', err);
-    }
-    return null;
+function resolveInitialVoters(
+  parsedActive: ActiveVotingStateResult | null,
+  groupData: GrupoDocument | null
+): Voter[] {
+  if (parsedActive?.voters && parsedActive.voters.length > 0) {
+    return parsedActive.voters;
   }
+  if (groupData?.voters && Array.isArray(groupData.voters) && groupData.voters.length > 0) {
+    return groupData.voters;
+  }
+  return readLocal<Voter[]>(LS_KEY_VOTERS, []);
+}
+
+function resolveInitialGamesMap(
+  parsedActive: ActiveVotingStateResult | null,
+  groupData: GrupoDocument | null
+): Record<string, Game> {
+  if (parsedActive?.gamesMap && Object.keys(parsedActive.gamesMap).length > 0) {
+    return parsedActive.gamesMap;
+  }
+  if (groupData?.gamesMap && typeof groupData.gamesMap === 'object' && Object.keys(groupData.gamesMap).length > 0) {
+    return sanitizeGamesMap(groupData.gamesMap);
+  }
+  if (groupData?.games && Array.isArray(groupData.games) && groupData.games.length > 0) {
+    const rebuilt: Record<string, Game> = {};
+    for (const g of groupData.games) {
+      rebuilt[g.id] = sanitizeGame(g);
+    }
+    return rebuilt;
+  }
+  return sanitizeGamesMap(readLocal<Record<string, Game>>(LS_KEY_GAMES, {}));
+}
+
+function parseHistorySnapshot(historySnap: QuerySnapshot): VotingHistoryRecord[] {
+  const resolvedHistory: VotingHistoryRecord[] = [];
+  historySnap.forEach((d) => {
+    const data = d.data() as VotingHistoryRecord & { savedAt?: Timestamp; createdAt?: Timestamp | string };
+    resolvedHistory.push(sanitizeVotingHistoryRecord(data));
+  });
+  resolvedHistory.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  return resolvedHistory;
+}
+
+function resolveInitialHistory(historySnap: QuerySnapshot): VotingHistoryRecord[] {
+  if (!historySnap.empty) {
+    return parseHistorySnapshot(historySnap);
+  }
+  return getSortedLocalHistory();
+}
+
+function cacheResolvedInitialData(
+  voters: Voter[],
+  gamesMap: Record<string, Game>,
+  history: VotingHistoryRecord[],
+  parsedActive: ActiveVotingStateResult | null
+): void {
+  if (voters.length > 0) writeLocal(LS_KEY_VOTERS, voters);
+  if (Object.keys(gamesMap).length > 0) writeLocal(LS_KEY_GAMES, gamesMap);
+  if (history.length > 0) writeLocal(LS_KEY_HISTORY, history);
+  if (parsedActive) writeLocal(LS_KEY_ACTIVE_VOTING, parsedActive);
+}
+
+function loadLocalFallbackDashboardData(apiKey: string): InitialDashboardData {
+  const cachedActive = loadCachedActiveVoting();
+  const cachedVoters = cachedActive?.voters || readLocal<Voter[]>(LS_KEY_VOTERS, []);
+  const cachedGamesMap = cachedActive?.gamesMap || sanitizeGamesMap(readLocal<Record<string, Game>>(LS_KEY_GAMES, {}));
+  const cachedHistory = getSortedLocalHistory();
+  const cachedFreeze = cachedActive?.freezeState || DEFAULT_FREEZE_STATE;
+
+  const hasExistingData = Boolean(
+    cachedVoters.length > 0 ||
+    Object.keys(cachedGamesMap).length > 0 ||
+    cachedHistory.length > 0
+  );
+
+  return {
+    voters: cachedVoters,
+    gamesMap: cachedGamesMap,
+    history: cachedHistory,
+    apiKey,
+    freezeState: cachedFreeze,
+    hasExistingData,
+  };
+}
+
+function checkHasExistingData(
+  hasRemoteDoc: boolean,
+  voters: Voter[],
+  gamesMap: Record<string, Game>,
+  history: VotingHistoryRecord[]
+): boolean {
+  return (
+    hasRemoteDoc ||
+    voters.length > 0 ||
+    Object.keys(gamesMap).length > 0 ||
+    history.length > 0
+  );
 }
 
 /**
- * Elimina un registro específico del historial por su ID.
+ * Carga de forma atómica y completa los datos iniciales de la aplicación.
+ * Distingue explícitamente entre una base de datos vacía legítima y un fallo
+ * de lectura en Firestore (lanzando la excepción en este último caso para evitar
+ * que conjuntos vacíos por error de red activen autoguardados indeseados).
  */
-export async function deleteHistoryRecord(recordId: string): Promise<SyncState> {
-  if (!canWriteToPersistence()) {
-    return buildReadOnlyState();
+export async function loadInitialDashboardData(): Promise<InitialDashboardData> {
+  const apiKey = loadApiKey();
+
+  if (!isFirebaseReady()) {
+    return loadLocalFallbackDashboardData(apiKey);
   }
 
-  const firestoreError = await deleteFirestoreHistoryDoc(recordId);
-  if (firestoreError) {
-    return firestoreError;
-  }
+  const db = getFirestoreInstance()!;
+  const activeDocRef = doc(db, COLLECTION_ACTIVE_VOTING, DOC_ACTIVE_VOTING);
+  const groupDocRef = doc(db, COLLECTION_GROUP, DOC_MIEMBROS);
+  const historyColRef = collection(db, COLLECTION_HISTORY);
+  const historyQuery = query(historyColRef, orderBy('savedAt', 'desc'));
 
-  const history = readLocal<VotingHistoryRecord[]>(LS_KEY_HISTORY, []);
-  const updated = history.filter((r) => r.id !== recordId);
-  writeLocal(LS_KEY_HISTORY, updated);
-  return { status: 'synced', message: 'Registro eliminado' };
+  // Si getDoc o getDocs falla, la promesa se rechaza y se propaga el error (NO se asume vacío)
+  const [activeSnap, groupSnap, historySnap] = await Promise.all([
+    getDoc(activeDocRef),
+    getDoc(groupDocRef),
+    getDocs(historyQuery),
+  ]);
+
+  const parsedActive = activeSnap.exists()
+    ? parseActiveVotingData(activeSnap.data() as ActiveVotingDocument)
+    : null;
+
+  const groupData = groupSnap.exists()
+    ? (groupSnap.data() as GrupoDocument)
+    : null;
+
+  const resolvedVoters = resolveInitialVoters(parsedActive, groupData);
+  const resolvedGamesMap = resolveInitialGamesMap(parsedActive, groupData);
+  const resolvedFreezeState = parsedActive?.freezeState || DEFAULT_FREEZE_STATE;
+  const resolvedHistory = resolveInitialHistory(historySnap);
+
+  cacheResolvedInitialData(resolvedVoters, resolvedGamesMap, resolvedHistory, parsedActive);
+
+  const hasRemoteDoc = activeSnap.exists() || groupSnap.exists() || !historySnap.empty;
+  const hasExistingData = checkHasExistingData(hasRemoteDoc, resolvedVoters, resolvedGamesMap, resolvedHistory);
+
+  return {
+    voters: resolvedVoters,
+    gamesMap: resolvedGamesMap,
+    history: resolvedHistory,
+    apiKey,
+    freezeState: resolvedFreezeState,
+    hasExistingData,
+  };
 }
 
-async function deleteFirestoreHistoryCollection(): Promise<SyncState | null> {
-  if (!isFirebaseReady()) return null;
-
-  try {
-    const db = getFirestoreInstance()!;
-    const colRef = collection(db, COLLECTION_HISTORY);
-    const snap = await getDocs(colRef);
-    const deletePromises = snap.docs.map((d) => deleteDoc(d.ref));
-    await Promise.all(deletePromises);
-    if (import.meta.env.DEV) {
-      console.log('[Store] Registros archivados depurados.');
-    }
-    return null;
-  } catch (err) {
-    if (isPermissionDeniedError(err)) {
-      if (import.meta.env.DEV) {
-        console.error('[Store] Operación denegada: permisos insuficientes.');
-      }
-      return { status: 'error', message: 'Permiso denegado por el servidor: requiere rol de administrador' };
-    }
-    if (import.meta.env.DEV) {
-      console.warn('[Store] Error depurando registros remotos:', err);
-    }
-    return null;
+async function findFirestoreHistoryDocRef(db: Firestore, recordId: string) {
+  // 1. Intento de búsqueda directa si el doc ID de Firestore coincide con el UUID
+  const directDocRef = doc(db, COLLECTION_HISTORY, recordId);
+  const directSnap = await getDoc(directDocRef);
+  if (directSnap.exists()) {
+    return directDocRef;
   }
+
+  // 2. Fallback de escaneo para registros legados insertados previamente con auto-ID
+  const colRef = collection(db, COLLECTION_HISTORY);
+  const snap = await getDocs(colRef);
+  const docToDelete = snap.docs.find((d) => d.data().id === recordId || d.id === recordId);
+  return docToDelete ? docToDelete.ref : null;
 }
 
 /**
- * Limpia el historial de votaciones en Firestore y localStorage.
+ * Elimina un registro específico del historial por su ID y restaura opcionalmente
+ * el estado de los votantes de forma atómica en Firestore y localStorage.
  */
-export async function clearHistory(): Promise<SyncState> {
-  if (!canWriteToPersistence()) {
-    return buildReadOnlyState();
-  }
+export async function deleteHistoryRecord(
+  recordId: string,
+  updatedVoters?: Voter[]
+): Promise<SyncState> {
+  return executeCoordinatedWrite(async () => {
+    if (!canWriteToPersistence()) {
+      return buildReadOnlyState();
+    }
 
-  const firestoreError = await deleteFirestoreHistoryCollection();
-  if (firestoreError) {
-    return firestoreError;
-  }
+    const saveLocalFallback = () => {
+      const history = readLocal<VotingHistoryRecord[]>(LS_KEY_HISTORY, []);
+      const updated = history.filter((r) => r.id !== recordId);
+      writeLocal(LS_KEY_HISTORY, updated);
+      if (updatedVoters) {
+        writeLocal(LS_KEY_VOTERS, removeUndefinedDeep(updatedVoters));
+      }
+    };
 
-  removeLocal(LS_KEY_HISTORY);
-  return { status: 'synced', message: 'Historial limpiado' };
+    if (isFirebaseReady()) {
+      try {
+        const db = getFirestoreInstance()!;
+        const targetDocRef = await findFirestoreHistoryDocRef(db, recordId);
+
+        const batch = writeBatch(db);
+        if (targetDocRef) {
+          batch.delete(targetDocRef);
+        }
+        if (updatedVoters) {
+          const cleanVoters = removeUndefinedDeep(updatedVoters);
+          const votersDocRef = doc(db, COLLECTION_GROUP, DOC_MIEMBROS);
+          batch.set(
+            votersDocRef,
+            { voters: cleanVoters, lastUpdated: Timestamp.now() },
+            { merge: true }
+          );
+          const activeDocRef = doc(db, COLLECTION_ACTIVE_VOTING, DOC_ACTIVE_VOTING);
+          batch.set(
+            activeDocRef,
+            { voters: cleanVoters, lastUpdated: Timestamp.now() },
+            { merge: true }
+          );
+        }
+
+        await batch.commit();
+        saveLocalFallback();
+        if (import.meta.env.DEV) {
+          console.log('[Store] Registro eliminado y votantes actualizados de forma atómica en Firestore.');
+        }
+        return { status: 'synced', message: 'Registro eliminado y Aura restaurado' };
+      } catch (err) {
+        return handleSyncError(
+          err,
+          saveLocalFallback,
+          'Error eliminando registro en Firestore, usando almacenamiento local'
+        );
+      }
+    }
+
+    saveLocalFallback();
+    return { status: 'local', message: 'Registro eliminado localmente' };
+  }, { isBarrier: true });
+}
+
+/**
+ * Limpia el historial de votaciones y actualiza opcionalmente el estado de Aura
+ * de los integrantes de forma atómica en Firestore y localStorage.
+ */
+export async function clearHistory(updatedVoters?: Voter[]): Promise<SyncState> {
+  return executeCoordinatedWrite(async () => {
+    if (!canWriteToPersistence()) {
+      return buildReadOnlyState();
+    }
+
+    const saveLocalFallback = () => {
+      removeLocal(LS_KEY_HISTORY);
+      if (updatedVoters) {
+        writeLocal(LS_KEY_VOTERS, removeUndefinedDeep(updatedVoters));
+      }
+    };
+
+    if (isFirebaseReady()) {
+      try {
+        const db = getFirestoreInstance()!;
+        const colRef = collection(db, COLLECTION_HISTORY);
+        const snap = await getDocs(colRef);
+
+        const batch = writeBatch(db);
+        snap.docs.forEach((d) => {
+          batch.delete(d.ref);
+        });
+
+        if (updatedVoters) {
+          const cleanVoters = removeUndefinedDeep(updatedVoters);
+          const votersDocRef = doc(db, COLLECTION_GROUP, DOC_MIEMBROS);
+          batch.set(
+            votersDocRef,
+            { voters: cleanVoters, lastUpdated: Timestamp.now() },
+            { merge: true }
+          );
+          const activeDocRef = doc(db, COLLECTION_ACTIVE_VOTING, DOC_ACTIVE_VOTING);
+          batch.set(
+            activeDocRef,
+            { voters: cleanVoters, lastUpdated: Timestamp.now() },
+            { merge: true }
+          );
+        }
+
+        await batch.commit();
+        saveLocalFallback();
+        if (import.meta.env.DEV) {
+          console.log('[Store] Historial limpiado y votantes actualizados de forma atómica en Firestore.');
+        }
+        return {
+          status: 'synced',
+          message: updatedVoters ? 'Historial limpiado y Aura restaurado' : 'Historial limpiado',
+        };
+      } catch (err) {
+        return handleSyncError(
+          err,
+          saveLocalFallback,
+          'Error limpiando historial en Firestore, usando almacenamiento local'
+        );
+      }
+    }
+
+    saveLocalFallback();
+    return {
+      status: 'local',
+      message: updatedVoters ? 'Historial limpiado y Aura restaurado (modo local)' : 'Historial limpiado (modo local)',
+    };
+  }, { isBarrier: true });
 }
 
 /**
@@ -1271,41 +1604,58 @@ export async function importBackup(
 }
 
 /**
- * Limpia todos los datos (reset).
+ * Limpia todos los datos (reset) de forma atómica en Firestore y localStorage.
  */
-export async function resetAllData(): Promise<void> {
-  if (!canWriteToPersistence()) {
-    return;
-  }
+export async function resetAllData(): Promise<SyncState> {
+  return executeCoordinatedWrite(async () => {
+    if (!canWriteToPersistence()) {
+      return buildReadOnlyState();
+    }
 
-  removeLocal(LS_KEY_VOTERS);
-  removeLocal(LS_KEY_GAMES);
-  removeLocal(LS_KEY_HISTORY);
-  removeLocal(LS_KEY_API_KEY);
-  removeLocal(LS_KEY_ACTIVE_VOTING);
+    const saveLocalFallback = () => {
+      removeLocal(LS_KEY_VOTERS);
+      removeLocal(LS_KEY_GAMES);
+      removeLocal(LS_KEY_HISTORY);
+      removeLocal(LS_KEY_API_KEY);
+      removeLocal(LS_KEY_ACTIVE_VOTING);
+    };
 
-  if (isFirebaseReady()) {
-    try {
-      const db = getFirestoreInstance()!;
-      // Limpiar documento de grupo
-      const docRef = doc(db, COLLECTION_GROUP, DOC_MIEMBROS);
-      await setDoc(docRef, { voters: [], gamesMap: {}, lastUpdated: Timestamp.now() });
+    if (isFirebaseReady()) {
+      try {
+        const db = getFirestoreInstance()!;
+        const batch = writeBatch(db);
 
-      const activeDocRef = doc(db, COLLECTION_ACTIVE_VOTING, DOC_ACTIVE_VOTING);
-      await setDoc(activeDocRef, { voters: [], gamesMap: {}, lastUpdated: Timestamp.now() });
+        // 1. Limpiar documento de grupo
+        const docRef = doc(db, COLLECTION_GROUP, DOC_MIEMBROS);
+        batch.set(docRef, { voters: [], gamesMap: {}, lastUpdated: Timestamp.now() });
 
-      // Limpiar historial
-      const colRef = collection(db, COLLECTION_HISTORY);
-      const snap = await getDocs(colRef);
-      const deletePromises = snap.docs.map((d) => deleteDoc(d.ref));
-      await Promise.all(deletePromises);
-      if (import.meta.env.DEV) {
-        console.log('[Store] Datos restablecidos.');
-      }
-    } catch (err) {
-      if (import.meta.env.DEV) {
-        console.warn('[Store] Error al restablecer datos remotos:', err);
+        // 2. Limpiar sesión de votación activa
+        const activeDocRef = doc(db, COLLECTION_ACTIVE_VOTING, DOC_ACTIVE_VOTING);
+        batch.set(activeDocRef, { voters: [], gamesMap: {}, lastUpdated: Timestamp.now() });
+
+        // 3. Limpiar todos los documentos de la colección de historial
+        const colRef = collection(db, COLLECTION_HISTORY);
+        const snap = await getDocs(colRef);
+        snap.docs.forEach((d) => {
+          batch.delete(d.ref);
+        });
+
+        await batch.commit();
+        saveLocalFallback();
+        if (import.meta.env.DEV) {
+          console.log('[Store] Datos restablecidos atómicamente en Firestore.');
+        }
+        return { status: 'synced', message: 'Datos restablecidos' };
+      } catch (err) {
+        return handleSyncError(
+          err,
+          saveLocalFallback,
+          'Error al restablecer datos en Firestore, usando almacenamiento local'
+        );
       }
     }
-  }
+
+    saveLocalFallback();
+    return { status: 'local', message: 'Datos restablecidos (modo local)' };
+  }, { isBarrier: true });
 }

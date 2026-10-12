@@ -68,9 +68,9 @@ export const DeleteHistoryRecordConfirmModal = ({
           <div className="modal-title-group">
             <h2 id="delete-history-title">
               <span aria-hidden="true">⚠️</span>{' '}
-              Eliminar Votación del Historial
+              Deshacer Última Votación
             </h2>
-            <p>Esta acción eliminará el registro y revertirá sus efectos sobre los integrantes.</p>
+            <p>Esta acción eliminará la votación más reciente y restaurará el Aura de los integrantes al estado previo.</p>
           </div>
           <motion.button
             type="button"
@@ -109,14 +109,14 @@ export const DeleteHistoryRecordConfirmModal = ({
 
           <section id="delete-history-description" className="delete-warning-text">
             <p>
-              ¿Estás seguro de que deseas eliminar la votación <strong>{record.winningGame.title}</strong> del historial?
+              ¿Estás seguro de que deseas deshacer y eliminar la votación más reciente (<strong>{record.winningGame.title}</strong>)?
             </p>
             <p className="delete-warning-sub">
-              El documento de esta votación será eliminado de la base de datos.
+              El registro de esta votación se eliminará permanentemente de la base de datos.
             </p>
             <p className="delete-warning-note">
               <span aria-hidden="true">📊</span>{' '}
-              <strong>Efecto colateral:</strong> El balance de cuotas y el Aura de cada integrante se revertirán al valor que tenían <em>antes</em> de esta votación, usando el snapshot almacenado en el registro.
+              <strong>Restauración de Aura:</strong> El balance de cuotas y el rango de cada integrante se restaurarán exactamente al valor que tenían <em>antes</em> de esta votación mediante su snapshot correspondiente.
             </p>
           </section>
         </div>
@@ -145,7 +145,7 @@ export const DeleteHistoryRecordConfirmModal = ({
             whileHover={isDeleting ? {} : { scale: 1.03 }}
             whileTap={isDeleting ? {} : { scale: 0.97 }}
           >
-            {isDeleting ? 'Eliminando…' : 'Eliminar votación'}
+            {isDeleting ? 'Eliminando…' : 'Deshacer y eliminar'}
           </motion.button>
         </footer>
       </motion.div>

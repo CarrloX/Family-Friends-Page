@@ -31,21 +31,17 @@ function getMobileServerSnapshot(): boolean {
   return false;
 }
 import {
-  saveVoters,
-  saveGames,
   saveActiveVotingState,
   saveFinishedVotingSession,
   saveFreezePriceState,
   unfreezePriceState,
-  loadActiveVotingState,
-  loadVoters,
-  loadGames,
-  loadHistory,
+  invalidatePendingWrites,
+  loadInitialDashboardData,
+  type InitialDashboardData,
   clearHistory as clearHistoryStore,
   deleteHistoryRecord,
   resetAllData,
   saveApiKey,
-  loadApiKey,
   createBackupData,
   downloadBackup,
   importBackup,
@@ -110,12 +106,51 @@ const applyRevertToVoter = (
   };
 };
 
+const computeRevertedVoters = (
+  voters: Voter[],
+  records: VotingHistoryRecord[]
+): Voter[] => {
+  const reverts = buildRevertMap(records);
+  return voters.map((voter) => applyRevertToVoter(voter, reverts));
+};
+
 const resetVoterAura = (voter: Voter): Voter => ({
   ...voter,
   auraQuotaBalance: 0,
   auraRank: 'Socio Regular',
   multiplier: 1.0,
 });
+
+function isValidPriceInfo(price?: SteamPriceInfo | null): price is SteamPriceInfo {
+  if (!price) return false;
+  return Boolean(
+    price.isFree === true ||
+    (typeof price.final === 'number' && !Number.isNaN(price.final))
+  );
+}
+
+function buildFrozenPriceState(
+  gameId: string,
+  priceInfo: SteamPriceInfo
+): FreezePriceState {
+  const isFree = Boolean(priceInfo.isFree || priceInfo.final === 0);
+  const finalPrice = isFree ? 0 : (priceInfo.final ?? 0);
+  const discountPercent = priceInfo.discountPercent ?? 0;
+  const formattedPrice = priceInfo.finalFormatted || (isFree ? 'Gratis' : formatCopPrice(finalPrice));
+  const initialPrice = priceInfo.initial ?? finalPrice;
+  const initialFormatted = priceInfo.initialFormatted ?? formattedPrice;
+
+  return {
+    isPrecioCongelado: true,
+    precioCongelado: finalPrice,
+    descuentoCongelado: discountPercent,
+    precioCongeladoFormatted: formattedPrice,
+    precioOriginalCongelado: initialPrice,
+    precioOriginalCongeladoFormatted: initialFormatted,
+    congeladoAt: new Date().toISOString(),
+    gameId,
+  };
+}
 
 // ─── Componente auxiliar: Modal de confirmación ───────────
 interface ResetAuraConfirmModalProps {
@@ -314,7 +349,9 @@ export const SteamVotingDashboard: React.FC = () => {
   const [showResetAuraConfirm, setShowResetAuraConfirm] = useState(false);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [initialLoadStatus, setInitialLoadStatus] = useState<'loading' | 'loaded' | 'error'>('loading');
+  const [initialLoadErrorMessage, setInitialLoadErrorMessage] = useState<string>('');
+  const isLoading = initialLoadStatus === 'loading';
   const [showPinModal, setShowPinModal] = useState<boolean>(false);
 
   const [syncState, setSyncState] = useState<SyncState>({ status: 'idle', message: '' });
@@ -343,55 +380,92 @@ export const SteamVotingDashboard: React.FC = () => {
     return unsubscribe;
   }, []);
 
-   const votersDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-   const gamesDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-   const activeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-   const apiKeyDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-   const skipNextVotersSaveRef = useRef<boolean>(false);
-   const skipNextActiveSaveRef = useRef<boolean>(false);
-   const importFileInputRef = useRef<HTMLInputElement | null>(null);
-   // Ref para resolver la Promise del modal de PIN
-   const pinModalResolveRef = useRef<((value: boolean) => void) | null>(null);
+  const isMountedRef = useRef<boolean>(true);
+  const saveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const apiKeyDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const skipNextSaveRef = useRef<boolean>(false);
+  const importFileInputRef = useRef<HTMLInputElement | null>(null);
+  // Ref para resolver la Promise del modal de PIN y reutilizarla ante llamadas simultáneas
+  const pinModalResolveRef = useRef<((value: boolean) => void) | null>(null);
+  const pendingUnlockPromiseRef = useRef<Promise<boolean> | null>(null);
+
+  // Limpieza al desmontar el componente: cancelar temporizadores e invalidar escrituras pendientes
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (saveDebounceRef.current) {
+        clearTimeout(saveDebounceRef.current);
+      }
+      if (apiKeyDebounceRef.current) {
+        clearTimeout(apiKeyDebounceRef.current);
+      }
+      invalidatePendingWrites();
+      if (pinModalResolveRef.current) {
+        pinModalResolveRef.current(false);
+        pinModalResolveRef.current = null;
+        pendingUnlockPromiseRef.current = null;
+      }
+    };
+  }, []);
 
   const canManageContent = adminAccess.canManageContent;
 
 
-  // ─── Carga inicial de datos ───────────────────────────────
-  useEffect(() => {
-    const loadAllData = async () => {
-      setIsLoading(true);
-      try {
-        const [loadedActive, loadedVoters, loadedGames, loadedHistory, loadedApiKey] =
-          await Promise.all([
-            loadActiveVotingState(),
-            loadVoters(),
-            loadGames(),
-            loadHistory(),
-            Promise.resolve(loadApiKey()),
-          ]);
+  const handleApplyInitialData = useCallback((data: InitialDashboardData) => {
+    setVoters(data.voters);
+    setGamesMap(data.gamesMap);
+    setHistory(data.history);
+    setSteamApiKey(data.apiKey);
+    setFreezeState(data.freezeState);
 
-        setVoters(loadedActive?.voters && loadedActive.voters.length > 0 ? loadedActive.voters : loadedVoters);
-        setGamesMap(loadedActive?.gamesMap && Object.keys(loadedActive.gamesMap).length > 0 ? loadedActive.gamesMap : loadedGames);
-        setHistory(loadedHistory);
-        setSteamApiKey(loadedApiKey);
-
-        if (loadedActive?.freezeState) {
-          setFreezeState(loadedActive.freezeState);
-        }
-
-        if (loadedVoters.length > 0 || Object.keys(loadedGames).length > 0) {
-          setSyncState({ status: 'synced', message: 'Datos cargados' });
-        }
-      } catch (err) {
-        console.warn('[Dashboard] Error en carga inicial:', err);
-        setSyncState({ status: 'error', message: 'Error al cargar datos' });
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    void loadAllData();
+    setInitialLoadStatus('loaded');
+    setSyncState({
+      status: 'synced',
+      message: data.hasExistingData ? 'Datos cargados' : 'Sesión iniciada (sin datos previos)',
+    });
   }, []);
+
+  const handleInitialLoadError = useCallback((err: unknown) => {
+    console.error('[Dashboard] Error en carga inicial:', err);
+    const message = err instanceof Error ? err.message : 'Error al conectar con la base de datos remota';
+    setInitialLoadStatus('error');
+    setInitialLoadErrorMessage(message);
+    setSyncState({ status: 'error', message: 'Error al cargar datos remotos' });
+  }, []);
+
+  // ─── Carga inicial de datos con distinción explícita de error vs vacío ───
+  useEffect(() => {
+    let ignore = false;
+    void loadInitialDashboardData().then(
+      (data) => {
+        if (ignore) return;
+        handleApplyInitialData(data);
+      },
+      (err: unknown) => {
+        if (ignore) return;
+        handleInitialLoadError(err);
+      }
+    );
+    return () => {
+      ignore = true;
+    };
+  }, [handleApplyInitialData, handleInitialLoadError]);
+
+  const handleRetryInitialLoad = useCallback(async () => {
+    setInitialLoadStatus('loading');
+    setInitialLoadErrorMessage('');
+    setSyncState({ status: 'saving', message: 'Reintentando conexión...' });
+
+    try {
+      const data = await loadInitialDashboardData();
+      if (!isMountedRef.current) return;
+      handleApplyInitialData(data);
+    } catch (err) {
+      if (!isMountedRef.current) return;
+      handleInitialLoadError(err);
+    }
+  }, [handleApplyInitialData, handleInitialLoadError]);
 
   useEffect(() => {
     if (!canManageContent && isEditMode) {
@@ -401,49 +475,33 @@ export const SteamVotingDashboard: React.FC = () => {
     }
   }, [canManageContent, isEditMode]);
 
-  // ─── Sincronización con debounce ─────────────────────────
-  const debouncedSaveVoters = useCallback((votersToSave: Voter[]) => {
-    if (votersDebounceRef.current) {
-      clearTimeout(votersDebounceRef.current);
-    }
-    if (skipNextVotersSaveRef.current) {
-      skipNextVotersSaveRef.current = false;
-      return;
-    }
-    void Promise.resolve().then(() => {
-      setSyncState({ status: 'saving', message: 'Guardando...' });
-    });
-    votersDebounceRef.current = setTimeout(async () => {
-      const result = await saveVoters(votersToSave);
-      setSyncState(result);
-    }, DEBOUNCE_MS);
-  }, []);
-
-  const debouncedSaveGames = useCallback((gamesToSave: Record<string, Game>) => {
-    if (gamesDebounceRef.current) {
-      clearTimeout(gamesDebounceRef.current);
-    }
-    void Promise.resolve().then(() => {
-      setSyncState({ status: 'saving', message: 'Guardando...' });
-    });
-    gamesDebounceRef.current = setTimeout(async () => {
-      const result = await saveGames(gamesToSave);
-      setSyncState(result);
-    }, DEBOUNCE_MS);
-  }, []);
-
-  const debouncedSaveActiveVoting = useCallback(
-    (votersToSave: Voter[], gamesToSave: Record<string, Game>, currentFreezeState?: FreezePriceState) => {
-      if (activeDebounceRef.current) {
-        clearTimeout(activeDebounceRef.current);
+  // ─── Sincronización con debounce coordinado ──────────────
+  const debouncedSaveDashboard = useCallback(
+    (votersToSave: Voter[], gamesToSave: Record<string, Game>, currentFreezeState: FreezePriceState) => {
+      if (saveDebounceRef.current) {
+        clearTimeout(saveDebounceRef.current);
       }
-      if (skipNextActiveSaveRef.current) {
-        skipNextActiveSaveRef.current = false;
+      if (skipNextSaveRef.current) {
+        skipNextSaveRef.current = false;
         return;
       }
-      activeDebounceRef.current = setTimeout(async () => {
-        const result = await saveActiveVotingState(votersToSave, gamesToSave, currentFreezeState);
-        setSyncState(result);
+      void Promise.resolve().then(() => {
+        if (isMountedRef.current) {
+          setSyncState({ status: 'saving', message: 'Guardando...' });
+        }
+      });
+      saveDebounceRef.current = setTimeout(async () => {
+        try {
+          const result = await saveActiveVotingState(votersToSave, gamesToSave, currentFreezeState);
+          if (isMountedRef.current && result.status !== 'idle') {
+            setSyncState(result);
+          }
+        } catch (err) {
+          if (isMountedRef.current) {
+            console.error('[Dashboard] Error en guardado automático:', err);
+            setSyncState({ status: 'error', message: 'Error en sincronización automática' });
+          }
+        }
       }, DEBOUNCE_MS);
     },
     []
@@ -454,33 +512,27 @@ export const SteamVotingDashboard: React.FC = () => {
       clearTimeout(apiKeyDebounceRef.current);
     }
     apiKeyDebounceRef.current = setTimeout(() => {
-      saveApiKey(apiKey);
+      try {
+        if (isMountedRef.current) {
+          saveApiKey(apiKey);
+        }
+      } catch (err) {
+        console.error('[Dashboard] Error guardando API key:', err);
+      }
     }, DEBOUNCE_MS);
   }, []);
 
   useEffect(() => {
-    if (!isLoading) {
-      debouncedSaveVoters(voters);
+    if (initialLoadStatus === 'loaded' && canManageContent) {
+      debouncedSaveDashboard(voters, gamesMap, freezeState);
     }
-  }, [voters, isLoading, debouncedSaveVoters]);
+  }, [voters, gamesMap, freezeState, initialLoadStatus, canManageContent, debouncedSaveDashboard]);
 
   useEffect(() => {
-    if (!isLoading) {
-      debouncedSaveGames(gamesMap);
-    }
-  }, [gamesMap, isLoading, debouncedSaveGames]);
-
-  useEffect(() => {
-    if (!isLoading && canManageContent) {
-      debouncedSaveActiveVoting(voters, gamesMap, freezeState);
-    }
-  }, [voters, gamesMap, freezeState, isLoading, canManageContent, debouncedSaveActiveVoting]);
-
-  useEffect(() => {
-    if (!isLoading) {
+    if (initialLoadStatus === 'loaded') {
       debouncedSaveApiKey(steamApiKey);
     }
-  }, [steamApiKey, isLoading, debouncedSaveApiKey]);
+  }, [steamApiKey, initialLoadStatus, debouncedSaveApiKey]);
 
   // ─── Calcular resultados ─────────────────────────────────
   const results = useMemo(() => calculateResults(voters, gamesMap), [voters, gamesMap]);
@@ -503,6 +555,7 @@ export const SteamVotingDashboard: React.FC = () => {
 
   // ─── Reconciliar votos de los integrantes con gamesMap (autocorregir desalineaciones/IDs huérfanos) ───
   useEffect(() => {
+    if (initialLoadStatus !== 'loaded') return;
     const gameIds = Object.keys(gamesMap);
     if (gameIds.length === 0 || voters.length === 0) return;
 
@@ -513,16 +566,17 @@ export const SteamVotingDashboard: React.FC = () => {
         setVoters(updatedVoters);
       });
     }
-  }, [gamesMap, voters]);
+  }, [gamesMap, voters, initialLoadStatus]);
 
   // ─── Descongelado automático al iniciar o modificar nuevo ciclo de votación ───
   const autoUnfreezePrice = useCallback(async (reason: string) => {
-    if (!freezeState.isPrecioCongelado) return;
+    if (!canManageContent || !freezeState.isPrecioCongelado) return;
 
     if (import.meta.env.DEV) {
       console.log(`[Dashboard] Descongelamiento automático: ${reason}`);
     }
 
+    const previousFreezeState = freezeState;
     const resetFreezeState: FreezePriceState = {
       isPrecioCongelado: false,
       precioCongelado: null,
@@ -534,74 +588,115 @@ export const SteamVotingDashboard: React.FC = () => {
       gameId: null,
     };
 
-    setFreezeState(resetFreezeState);
-    await unfreezePriceState();
-    setSyncState({ status: 'synced', message: `Precio descongelado (${reason})` });
-  }, [freezeState.isPrecioCongelado]);
+    setSyncState({ status: 'saving', message: `Descongelando precio (${reason})...` });
+
+    try {
+      const syncRes = await unfreezePriceState();
+
+      if (syncRes.status === 'synced' || syncRes.status === 'local') {
+        skipNextSaveRef.current = true;
+        setFreezeState(resetFreezeState);
+        setSyncState({
+          status: syncRes.status,
+          message: `Precio descongelado (${reason})`,
+        });
+      } else {
+        // Falló la persistencia (permisos insuficientes o rechazo remoto): restaurar estado anterior
+        setFreezeState(previousFreezeState);
+        setSyncState(syncRes);
+        if (import.meta.env.DEV) {
+          console.warn(`[Dashboard] Falló la descongelación automática de precio (${reason}):`, syncRes.message);
+        }
+      }
+    } catch (err) {
+      console.error(`[Dashboard] Excepción al descongelar precio automáticamente (${reason}):`, err);
+      setFreezeState(previousFreezeState);
+      setSyncState({
+        status: 'error',
+        message: `Error al descongelar precio (${reason})`,
+      });
+    }
+  }, [canManageContent, freezeState]);
+
+  // ─── Procedimiento para congelar el precio del juego ganador ───
+  const freezePrice = useCallback(async (currentLivePrice: SteamPriceInfo | null): Promise<FreezePriceState | null> => {
+    const winningResult = results[0];
+    if (!winningResult?.game) {
+      setSyncState({
+        status: 'error',
+        message: 'No hay un juego ganador seleccionado para congelar el precio',
+      });
+      return null;
+    }
+
+    const priceToFreeze = currentLivePrice || winningResult.game.price || null;
+    if (!isValidPriceInfo(priceToFreeze)) {
+      setSyncState({
+        status: 'error',
+        message: 'No se puede congelar el precio: no hay información de precio disponible para este juego',
+      });
+      return null;
+    }
+
+    const newFreezeState = buildFrozenPriceState(winningResult.game.id, priceToFreeze);
+    setSyncState({ status: 'saving', message: 'Congelando precio...' });
+    const syncRes = await saveFreezePriceState(newFreezeState);
+    setSyncState(syncRes);
+
+    if (syncRes.status !== 'synced' && syncRes.status !== 'local') {
+      return null;
+    }
+    return newFreezeState;
+  }, [results]);
+
+  // ─── Procedimiento para descongelar el precio ───
+  const unfreezePrice = useCallback(async (): Promise<boolean> => {
+    setSyncState({ status: 'saving', message: 'Descongelando precio...' });
+    const syncRes = await unfreezePriceState();
+    setSyncState(syncRes);
+    return syncRes.status === 'synced' || syncRes.status === 'local';
+  }, []);
 
   // ─── Toggle interactivo de congelamiento de precio (Modo Edición) ───
   const handleToggleFreezePrice = useCallback(async (currentLivePrice: SteamPriceInfo | null) => {
     if (!canManageContent) return;
 
     setIsFreezingLoading(true);
+    const previousFreezeState = freezeState;
+
     try {
-      if (!freezeState.isPrecioCongelado) {
-        // Capturar precio actual y porcentaje de descuento del juego ganador
-        const winningResult = results[0];
-        const priceToFreeze = currentLivePrice || winningResult?.game?.price || null;
-
-        const finalPrice = priceToFreeze?.final ?? 0;
-        const discountPercent = priceToFreeze?.discountPercent ?? 0;
-        const isFree = Boolean(priceToFreeze?.isFree || finalPrice === 0);
-        const formattedPrice = priceToFreeze?.finalFormatted || (isFree ? 'Gratis' : formatCopPrice(finalPrice));
-
-        const newFreezeState: FreezePriceState = {
-          isPrecioCongelado: true,
-          precioCongelado: finalPrice,
-          descuentoCongelado: discountPercent,
-          precioCongeladoFormatted: formattedPrice,
-          precioOriginalCongelado: priceToFreeze?.initial ?? finalPrice,
-          precioOriginalCongeladoFormatted: priceToFreeze?.initialFormatted ?? formattedPrice,
-          congeladoAt: new Date().toISOString(),
-          gameId: winningResult?.game?.id ?? null,
-        };
-
-        setFreezeState(newFreezeState);
-        setSyncState({ status: 'saving', message: 'Congelando precio...' });
-        const syncRes = await saveFreezePriceState(newFreezeState);
-        setSyncState(syncRes);
+      if (!previousFreezeState.isPrecioCongelado) {
+        const frozenState = await freezePrice(currentLivePrice);
+        if (frozenState) {
+          skipNextSaveRef.current = true;
+          setFreezeState(frozenState);
+        } else {
+          setFreezeState(previousFreezeState);
+        }
       } else {
-        // Descongelar precio: liberar valores congelados y regresar a false
-        const resetFreezeState: FreezePriceState = {
-          isPrecioCongelado: false,
-          precioCongelado: null,
-          descuentoCongelado: null,
-          precioCongeladoFormatted: null,
-          precioOriginalCongelado: null,
-          precioOriginalCongeladoFormatted: null,
-          congeladoAt: null,
-          gameId: null,
-        };
-
-        setFreezeState(resetFreezeState);
-        setSyncState({ status: 'saving', message: 'Descongelando precio...' });
-        const syncRes = await unfreezePriceState();
-        setSyncState(syncRes);
+        const success = await unfreezePrice();
+        if (success) {
+          skipNextSaveRef.current = true;
+          setFreezeState(DEFAULT_FREEZE_STATE);
+        } else {
+          setFreezeState(previousFreezeState);
+        }
       }
     } catch (err) {
       console.error('[Dashboard] Error al alternar congelamiento de precio:', err);
+      setFreezeState(previousFreezeState);
       setSyncState({ status: 'error', message: 'Error al cambiar estado de precio congelado' });
     } finally {
       setIsFreezingLoading(false);
     }
-  }, [canManageContent, freezeState.isPrecioCongelado, results]);
+  }, [canManageContent, freezeState, freezePrice, unfreezePrice]);
 
   // ─── Watcher reactivo: Descongelado automático ante cambios en el ciclo de votación ───
   const prevGamesSignatureRef = useRef<string>('');
   const prevWinnerIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (isLoading) return;
+    if (initialLoadStatus !== 'loaded' || !canManageContent) return;
 
     const gameIds = Object.keys(gamesMap).sort((a, b) => a.localeCompare(b)).join(',');
     const winnerId = results[0]?.game?.id || null;
@@ -640,7 +735,7 @@ export const SteamVotingDashboard: React.FC = () => {
 
     prevGamesSignatureRef.current = gameIds;
     prevWinnerIdRef.current = winnerId;
-  }, [gamesMap, results, freezeState.isPrecioCongelado, freezeState.gameId, totalAssignedPoints, isLoading, autoUnfreezePrice]);
+  }, [gamesMap, results, freezeState.isPrecioCongelado, freezeState.gameId, totalAssignedPoints, initialLoadStatus, canManageContent, autoUnfreezePrice]);
 
   // ─── Handlers ─────────────────────────────────────────────
   const handleUpdateVoter = useCallback((updatedVoter: Voter) => {
@@ -729,7 +824,6 @@ export const SteamVotingDashboard: React.FC = () => {
   }, [autoUnfreezePrice]);
 
   // ─── Desbloqueo de admin vía modal BottomSheet (reemplaza window.prompt) ───
-  // ─── Desbloqueo de admin vía modal BottomSheet ───
   const requestAdminUnlockViaModal = useCallback((forceOpen = false): Promise<boolean> => {
     const state = getAdminAccessState();
     // Si ya posee privilegios de administrador y no se fuerza abrir el modal, no necesita volver a identificarse
@@ -737,11 +831,19 @@ export const SteamVotingDashboard: React.FC = () => {
       return Promise.resolve(true);
     }
 
+    // Reutilizar la promesa existente si el modal ya está abierto o hay una autenticación en curso
+    if (pendingUnlockPromiseRef.current) {
+      return pendingUnlockPromiseRef.current;
+    }
+
     // Abre el modal de inicio de sesión de Firebase Auth y espera resolución
-    return new Promise<boolean>((resolve) => {
+    const unlockPromise = new Promise<boolean>((resolve) => {
       pinModalResolveRef.current = resolve;
       setShowPinModal(true);
     });
+
+    pendingUnlockPromiseRef.current = unlockPromise;
+    return unlockPromise;
   }, []);
 
   // Si la URL contiene el parámetro ?admin=true y el usuario no tiene privilegios de admin,
@@ -760,8 +862,10 @@ export const SteamVotingDashboard: React.FC = () => {
       if (result.success) {
         setAdminAccess(getAdminAccessState());
         setShowPinModal(false);
-        pinModalResolveRef.current?.(true);
+        const resolve = pinModalResolveRef.current;
         pinModalResolveRef.current = null;
+        pendingUnlockPromiseRef.current = null;
+        resolve?.(true);
       }
       return result;
     },
@@ -777,8 +881,10 @@ export const SteamVotingDashboard: React.FC = () => {
   // Handler cuando el usuario cancela el modal de PIN
   const handlePinCancel = useCallback(() => {
     setShowPinModal(false);
-    pinModalResolveRef.current?.(false);
+    const resolve = pinModalResolveRef.current;
     pinModalResolveRef.current = null;
+    pendingUnlockPromiseRef.current = null;
+    resolve?.(false);
   }, []);
 
   // Atajo de teclado Shift + Alt + A (o Alt + Shift + A) para acceso de admin
@@ -826,13 +932,11 @@ export const SteamVotingDashboard: React.FC = () => {
     updatedVoters: Voter[],
     historyRecord: VotingHistoryRecord
   ) => {
-    // 1. Cancelar cualquier guardado debounce pendiente para evitar sobreescritura con estado previo
-    if (votersDebounceRef.current) {
-      clearTimeout(votersDebounceRef.current);
+    // 1. Cancelar temporizador pendiente e invalidar escrituras en vuelo en el servicio de persistencia
+    if (saveDebounceRef.current) {
+      clearTimeout(saveDebounceRef.current);
     }
-    if (activeDebounceRef.current) {
-      clearTimeout(activeDebounceRef.current);
-    }
+    invalidatePendingWrites();
 
     setSyncState({ status: 'saving', message: 'Guardando votación...' });
 
@@ -843,8 +947,7 @@ export const SteamVotingDashboard: React.FC = () => {
     // 3. Si la persistencia fue exitosa (remota o fallback local), reflejar el nuevo estado en la interfaz
     if (result.status === 'synced' || result.status === 'local') {
       // Evitar que el setState de React dispare un re-guardado redundante por debounce
-      skipNextVotersSaveRef.current = true;
-      skipNextActiveSaveRef.current = true;
+      skipNextSaveRef.current = true;
 
       setVoters(updatedVoters);
       setHistory((prev) => [historyRecord, ...prev]);
@@ -866,63 +969,137 @@ export const SteamVotingDashboard: React.FC = () => {
     }
   }, [gamesMap]);
 
-  /**
-   * Revierte los cambios de Aura acumulados de múltiples votaciones,
-   * devolviendo a cada votante al estado MÁS ANTIGUO (balance inicial).
-   */
-  const revertVotersAura = useCallback(
-    (records: VotingHistoryRecord[]) => {
-      setVoters((prevVoters) => {
-        const reverts = buildRevertMap(records);
-        return prevVoters.map((voter) => applyRevertToVoter(voter, reverts));
-      });
-    },
-    [setVoters]
-  );
-
   const handleClearHistory = useCallback(async () => {
-    if (history.length > 0) {
-      revertVotersAura(history);
+    if (saveDebounceRef.current) {
+      clearTimeout(saveDebounceRef.current);
     }
+    invalidatePendingWrites();
 
-    setHistory([]);
-    setSyncState({ status: 'saving', message: 'Limpiando...' });
-    const result = await clearHistoryStore();
-    setSyncState(result);
-  }, [history, revertVotersAura]);
+    setSyncState({ status: 'saving', message: 'Limpiando historial y restaurando Aura...' });
+
+    try {
+      const updatedVoters = history.length > 0 ? computeRevertedVoters(voters, history) : voters;
+      const result = await clearHistoryStore(updatedVoters);
+      setSyncState(result);
+
+      if (result.status === 'synced' || result.status === 'local') {
+        skipNextSaveRef.current = true;
+        setVoters(updatedVoters);
+        setHistory([]);
+      } else {
+        throw new Error(result.message || 'No se pudo limpiar el historial.');
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al limpiar el historial';
+      setSyncState({ status: 'error', message });
+      throw err;
+    }
+  }, [history, voters]);
 
   const handleDeleteHistoryRecord = useCallback(async (recordId: string) => {
-    setSyncState({ status: 'saving', message: 'Eliminando registro...' });
     const recordToDelete = history.find((r) => r.id === recordId);
-    const result = await deleteHistoryRecord(recordId);
+    if (!recordToDelete) {
+      setSyncState({ status: 'error', message: 'Registro de votación no encontrado' });
+      return;
+    }
+
+    // Regla de integridad crítica: Solo se permite eliminar o deshacer la votación más reciente (LIFO)
+    if (history.length > 0 && history[0].id !== recordId) {
+      const errorMsg = 'Solo se puede eliminar la votación más reciente para garantizar la integridad y coherencia del historial y de Aura.';
+      setSyncState({ status: 'error', message: errorMsg });
+      throw new Error(errorMsg);
+    }
+
+    if (saveDebounceRef.current) {
+      clearTimeout(saveDebounceRef.current);
+    }
+    invalidatePendingWrites();
+
+    setSyncState({ status: 'saving', message: 'Eliminando registro y restaurando Aura...' });
+
+    // 1. Calcular los votantes con su estado revertido a partir de los snapshots de este registro
+    const updatedVoters = recordToDelete.votersSnapshots
+      ? voters.map((voter) => revertVoterFromSnapshot(voter, recordToDelete.votersSnapshots!))
+      : voters;
+
+    // 2. Persistir atómicamente la eliminación del registro y la restauración de miembros
+    const result = await deleteHistoryRecord(recordId, updatedVoters);
     setSyncState(result);
 
-    if (recordToDelete?.votersSnapshots) {
-      const snapshots = recordToDelete.votersSnapshots;
-      setVoters((prev) => prev.map((voter) => revertVoterFromSnapshot(voter, snapshots)));
+    // 3. Modificar el estado local ÚNICAMENTE cuando la persistencia haya finalizado con éxito
+    if (result.status === 'synced' || result.status === 'local') {
+      skipNextSaveRef.current = true;
+      setVoters(updatedVoters);
+      setHistory((prev) => prev.filter((r) => r.id !== recordId));
+    } else {
+      throw new Error(
+        result.message || 'No se pudo eliminar el registro en la base de datos. No se alteró el estado local.'
+      );
+    }
+  }, [history, voters]);
+
+  const handleResetData = useCallback(async () => {
+    if (!window.confirm('¿Deseas restablecer los datos originales de todos los integrantes y juegos?')) {
+      return;
     }
 
-    setHistory((prev) => prev.filter((r) => r.id !== recordId));
-  }, [history]);
-
-  const handleResetData = async () => {
-    if (window.confirm('¿Deseas restablecer los datos originales de todos los integrantes y juegos?')) {
-      setVoters([]);
-      setGamesMap({});
-      setSteamApiKey('');
-      setHistory([]);
-      setFreezeState(DEFAULT_FREEZE_STATE);
-      setSyncState({ status: 'saving', message: 'Restableciendo...' });
-      await resetAllData();
-      setSyncState({ status: 'synced', message: 'Datos restablecidos' });
+    if (saveDebounceRef.current) {
+      clearTimeout(saveDebounceRef.current);
     }
-  };
+    invalidatePendingWrites();
 
-  const handleResetAllAura = () => {
-    setVoters((prev) => prev.map(resetVoterAura));
-    setSyncState({ status: 'synced', message: 'Aura restablecido para todos' });
-    setShowResetAuraConfirm(false);
-  };
+    setSyncState({ status: 'saving', message: 'Restableciendo todos los datos...' });
+
+    try {
+      const result = await resetAllData();
+      setSyncState(result);
+
+      if (result.status === 'synced' || result.status === 'local') {
+        skipNextSaveRef.current = true;
+        setVoters([]);
+        setGamesMap({});
+        setSteamApiKey('');
+        setHistory([]);
+        setFreezeState(DEFAULT_FREEZE_STATE);
+      } else {
+        throw new Error(result.message || 'No se pudieron restablecer los datos en la base de datos.');
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al restablecer los datos';
+      setSyncState({ status: 'error', message });
+    }
+  }, []);
+
+  const handleResetAllAura = useCallback(async () => {
+    if (saveDebounceRef.current) {
+      clearTimeout(saveDebounceRef.current);
+    }
+    invalidatePendingWrites();
+
+    const previousVoters = voters;
+    const updatedVoters = voters.map(resetVoterAura);
+
+    setSyncState({ status: 'saving', message: 'Restableciendo Aura de todos los integrantes...' });
+
+    try {
+      const result = await saveActiveVotingState(updatedVoters, gamesMap, freezeState);
+      setSyncState(result);
+
+      if (result.status === 'synced' || result.status === 'local') {
+        skipNextSaveRef.current = true;
+        setVoters(updatedVoters);
+        setShowResetAuraConfirm(false);
+      } else {
+        setVoters(previousVoters);
+        throw new Error(result.message || 'No se pudo restablecer el Aura en la persistencia.');
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al restablecer Aura';
+      setSyncState({ status: 'error', message });
+      setVoters(previousVoters);
+      throw err;
+    }
+  }, [voters, gamesMap, freezeState]);
 
   // ─── Drag and Drop ────────────────────────────────────────
   const handleDragStart = (e: React.DragEvent, index: number) => {
@@ -1050,8 +1227,56 @@ export const SteamVotingDashboard: React.FC = () => {
   // ─── Loading state ────────────────────────────────────────
   // Skeleton loaders animados que imitan la estructura del dashboard
   // mientras se realiza la lectura inicial de Firestore.
-  if (isLoading) {
+  if (initialLoadStatus === 'loading') {
     return <DashboardSkeleton />;
+  }
+
+  // ─── Error state: No se pudo cargar la información inicial ───
+  // Si la lectura remota falló, no se debe asumir datos vacíos ni permitir
+  // que los autoguardados sobrescriban la base de datos con arrays vacíos.
+  if (initialLoadStatus === 'error') {
+    return (
+      <div className="steam-dashboard-container initial-error-container">
+        <div className="bg-gradient-overlay" />
+        <div className="bg-grid-lines" />
+
+        <SyncIndicator syncState={syncState} />
+
+        <main className="initial-error-card-wrapper" role="alert" aria-live="assertive">
+          <div className="initial-load-error-card">
+            <div className="initial-error-badge">
+              <span className="initial-error-icon" aria-hidden="true">⚠️</span>
+              <span className="initial-error-tag">Error de Conexión Remota</span>
+            </div>
+
+            <h1 className="initial-error-title">No se pudieron cargar los datos</h1>
+
+            <p className="initial-error-desc">
+              Ocurrió un error al leer la información desde el servidor. Para proteger la integridad de tus datos y evitar sobreescribir la información existente con una lista vacía, el autoguardado se encuentra <strong>suspendido</strong>.
+            </p>
+
+            {initialLoadErrorMessage && (
+              <div className="initial-error-detail">
+                <span className="initial-error-detail-label">Detalle del error:</span>
+                <code>{initialLoadErrorMessage}</code>
+              </div>
+            )}
+
+            <div className="initial-error-actions">
+              <motion.button
+                type="button"
+                className="btn-retry-initial-load"
+                onClick={() => void handleRetryInitialLoad()}
+                whileHover={{ scale: 1.04, y: -2 }}
+                whileTap={{ scale: 0.96 }}
+              >
+                🔄 Reintentar conexión
+              </motion.button>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
   }
 
   // ─── Render principal ─────────────────────────────────────

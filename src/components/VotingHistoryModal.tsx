@@ -176,6 +176,7 @@ const HistorySidebar: React.FC<HistorySidebarProps> = ({
   onPageChange,
 }) => {
   const recordsToRender = isMobile ? history : paginatedHistory;
+  const latestRecordId = history[0]?.id;
 
   return (
     <div className="history-sidebar">
@@ -187,6 +188,7 @@ const HistorySidebar: React.FC<HistorySidebarProps> = ({
               key={rec.id}
               rec={rec}
               isSelected={rec.id === selectedRecordId}
+              isLatest={rec.id === latestRecordId}
               canManageContent={canManageContent}
               onSelect={onSelectRecord}
               onRequestDelete={onRequestDelete}
@@ -345,7 +347,7 @@ const ClearHistoryConfirmModal: React.FC<ClearHistoryConfirmModalProps> = ({
 
 interface VotingHistoryModalProps {
   history: VotingHistoryRecord[];
-  onClearHistory: () => void;
+  onClearHistory: () => Promise<void> | void;
   onDeleteRecord: (recordId: string) => Promise<void>;
   onClose: () => void;
   canManageContent?: boolean;
@@ -409,15 +411,23 @@ export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = React.memo(
     setIsHandlePressed(false);
   }, []);
 
-  const handleConfirmClear = useCallback(() => {
-    onClearHistory();
-    setShowClearConfirm(false);
+  const handleConfirmClear = useCallback(async () => {
+    try {
+      await onClearHistory();
+      setShowClearConfirm(false);
+    } catch {
+      // Si la persistencia falló, el error ya fue establecido en syncState; conservamos el diálogo abierto
+    }
   }, [onClearHistory]);
 
   const handleConfirmDelete = useCallback(async () => {
     if (!recordToDelete) return;
-    await onDeleteRecord(recordToDelete.id);
-    setRecordToDelete(null);
+    try {
+      await onDeleteRecord(recordToDelete.id);
+      setRecordToDelete(null);
+    } catch {
+      // Si la persistencia falló, el error ya fue establecido en syncState; conservamos el diálogo abierto
+    }
   }, [recordToDelete, onDeleteRecord]);
 
   const selectedRecord = useMemo(() => {

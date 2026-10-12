@@ -248,6 +248,7 @@ const WinnerPriceActions: React.FC<WinnerPriceActionsProps> = ({
         isFrozen={isPrecioCongelado}
         onToggle={() => onToggleFreezePrice(liveSteamPrice)}
         isLoading={isFreezingLoading}
+        disabled={!isPrecioCongelado && (!effectivePrice || (effectivePrice.isFree !== true && typeof effectivePrice.final !== 'number'))}
       />
     )}
   </div>
