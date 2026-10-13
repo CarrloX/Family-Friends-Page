@@ -2324,9 +2324,9 @@
 
 /* ==================== CARD EDIT PANEL ==================== */
 .user-card.editing-mode {
-  border: 2px dashed rgba(168, 85, 247, 0.8) !important;
-  box-shadow: 0 0 30px rgba(168, 85, 247, 0.3) !important;
-  background: linear-gradient(180deg, rgba(23, 26, 33, 0.98) 0%, rgba(15, 15, 27, 0.98) 100%) !important;
+  border: 2px dashed rgba(168, 85, 247, 0.8);
+  box-shadow: 0 0 30px rgba(168, 85, 247, 0.3);
+  background: linear-gradient(180deg, rgba(23, 26, 33, 0.98) 0%, rgba(15, 15, 27, 0.98) 100%);
   animation: glowPulse 2s ease-in-out infinite;
 }
 
@@ -2571,13 +2571,13 @@
 @media (pointer: coarse) {
   .user-card,
   .user-card:active {
-    cursor: default !important;
-    -webkit-user-drag: none !important;
-    touch-action: pan-y !important;
+    cursor: default;
+    -webkit-user-drag: none;
+    touch-action: pan-y;
   }
 
   .drag-handle-pill {
-    display: none !important;
+    display: none;
   }
 }
 
@@ -2624,15 +2624,15 @@
 .user-card.is-dragging {
   opacity: 0.35;
   transform: scale(0.95);
-  border: 2px dashed #a855f7 !important;
-  box-shadow: 0 0 25px rgba(168, 85, 247, 0.6) !important;
+  border: 2px dashed #a855f7;
+  box-shadow: 0 0 25px rgba(168, 85, 247, 0.6);
   animation: glowPulse 1s ease-in-out infinite;
 }
 
 .user-card.is-drag-over {
   transform: scale(1.05) translateY(-8px);
-  border: 2px solid #38bdf8 !important;
-  box-shadow: 0 0 35px rgba(56, 189, 248, 0.8) !important;
+  border: 2px solid #38bdf8;
+  box-shadow: 0 0 35px rgba(56, 189, 248, 0.8);
   animation: bounceIn 0.4s ease-out;
 }
 
@@ -3371,8 +3371,8 @@ textarea.manual-input {
 }
 
 .delete-warning-sub {
-  color: rgba(255, 255, 255, 0.7) !important;
-  font-size: 13px !important;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 13px;
 }
 
 .delete-warning-note {
@@ -3380,13 +3380,13 @@ textarea.manual-input {
   border: 1px solid rgba(168, 85, 247, 0.5);
   border-radius: 8px;
   padding: 10px 14px;
-  font-size: 12px !important;
-  color: #ffffff !important;
+  font-size: 12px;
+  color: #ffffff;
 }
 
 .delete-modal-actions {
-  justify-content: center !important;
-  gap: 16px !important;
+  justify-content: center;
+  gap: 16px;
 }
 
 .btn-modal-confirm-delete {
@@ -3489,7 +3489,7 @@ textarea.manual-input {
   justify-content: center;
   padding: 20px;
   animation: fadeIn 0.3s ease-out;
-  -webkit-tap-highlight-color: transparent !important;
+  -webkit-tap-highlight-color: transparent;
   -webkit-touch-callout: none;
   outline: none;
   touch-action: manipulation;
@@ -3507,7 +3507,7 @@ textarea.manual-input {
   border: none;
   cursor: pointer;
   z-index: 0;
-  -webkit-tap-highlight-color: transparent !important;
+  -webkit-tap-highlight-color: transparent;
   outline: none;
   touch-action: manipulation;
 }
@@ -3518,7 +3518,7 @@ textarea.manual-input {
 
 .bottom-sheet-backdrop {
   cursor: pointer;
-  -webkit-tap-highlight-color: transparent !important;
+  -webkit-tap-highlight-color: transparent;
   -webkit-touch-callout: none;
   outline: none;
   touch-action: manipulation;
@@ -3530,7 +3530,7 @@ textarea.manual-input {
   position: relative;
   z-index: 1;
   cursor: default;
-  -webkit-tap-highlight-color: transparent !important;
+  -webkit-tap-highlight-color: transparent;
   -webkit-touch-callout: none;
   outline: none;
 }
@@ -3590,22 +3590,22 @@ textarea.manual-input {
   }
 
   .bottom-sheet-panel {
-    position: fixed !important;
+    position: fixed;
     bottom: 0;
     left: 0;
     right: 0;
-    max-width: 100% !important;
+    max-width: 100%;
     max-height: 90vh;
-    border-radius: 20px 20px 0 0 !important;
-    border-bottom: none !important;
-    margin: 0 !important;
+    border-radius: 20px 20px 0 0;
+    border-bottom: none;
+    margin: 0;
     /* Animación de entrada desde abajo */
     animation: bottomSheetSlideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
   /* El modal de historial usa framer-motion para arrastre fluido sin saltos CSS */
   .bottom-sheet-panel.history-modal-container {
-    animation: none !important;
+    animation: none;
   }
 
   .bottom-sheet-panel.history-modal-container .modal-header {
@@ -3656,9 +3656,9 @@ textarea.manual-input {
 
 @media (max-width: 768px) {
   .admin-pin-modal-container {
-    max-width: 100% !important;
-    border-radius: 20px 20px 0 0 !important;
-    border-bottom: none !important;
+    max-width: 100%;
+    border-radius: 20px 20px 0 0;
+    border-bottom: none;
     padding: 24px 20px 32px;
   }
 }
@@ -3726,8 +3726,8 @@ textarea.manual-input {
 /* Estado de error visual para PIN incorrecto (animación delegada a Framer Motion) */
 .admin-pin-input.has-error,
 .admin-pin-input.shake-error {
-  border-color: #ef4444 !important;
-  box-shadow: 0 0 15px rgba(239, 68, 68, 0.5) !important;
+  border-color: #ef4444;
+  box-shadow: 0 0 15px rgba(239, 68, 68, 0.5);
 }
 
 .admin-pin-error {
@@ -4374,7 +4374,7 @@ textarea.manual-input {
   }
 
   .history-pagination {
-    display: none !important;
+    display: none;
   }
 }
 
@@ -5450,12 +5450,12 @@ textarea.manual-input {
   }
 
   .history-modal-container .btn-modal-cancel {
-    display: none !important;
+    display: none;
   }
 
 
   .history-content-layout {
-    display: flex !important;
+    display: flex;
     flex-direction: column;
     min-height: 0;
     height: auto;
@@ -6250,44 +6250,44 @@ textarea.manual-input {
 @media (max-width: 768px) {
   /* Replace backdrop-filter with solid semi-transparent backgrounds */
   .read-only-banner {
-    -webkit-backdrop-filter: none !important;
-    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
     background: rgba(15, 15, 27, 0.96);
   }
 
   .hidden-gear-btn {
-    -webkit-backdrop-filter: none !important;
-    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
     background: rgba(15, 15, 27, 0.7);
   }
 
   .edit-mode-top-bar {
-    -webkit-backdrop-filter: none !important;
-    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
     background: rgba(15, 15, 27, 0.97);
   }
 
   /* Desactivar arrastre y agarre en modo celular */
   .user-card {
-    cursor: default !important;
-    -webkit-user-drag: none !important;
-    user-select: auto !important;
-    -webkit-user-select: auto !important;
-    touch-action: pan-y !important;
+    cursor: default;
+    -webkit-user-drag: none;
+    user-select: auto;
+    -webkit-user-select: auto;
+    touch-action: pan-y;
     animation: fadeInScale 0.3s ease-out both;
   }
 
   .user-card:active {
-    cursor: default !important;
+    cursor: default;
   }
 
   .drag-handle-pill {
-    display: none !important;
+    display: none;
   }
 
   .btn-action-secondary {
-    -webkit-backdrop-filter: none !important;
-    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
     background: rgba(23, 26, 33, 0.92);
     animation: fadeInScale 0.3s ease-out 0.6s both;
   }
@@ -6311,92 +6311,92 @@ textarea.manual-input {
 }
 
   .install-prompt-btn {
-    -webkit-backdrop-filter: none !important;
-    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
 
   /* Disable continuous glowPulse animations on mobile */
   .steam-header-badge:hover {
-    animation: none !important;
+    animation: none;
     transform: translateY(-1px);
   }
 
   .vote-item.favorite-item {
-    animation: slideInLeft 0.5s ease-out both !important;
+    animation: slideInLeft 0.5s ease-out both;
     box-shadow: 0 0 8px rgba(157, 78, 221, 0.2);
   }
 
   .stat-card.primary-stat {
-    animation: none !important;
+    animation: none;
     box-shadow: 0 0 8px rgba(157, 78, 221, 0.2);
   }
 
   .winner-banner-glow {
-    animation: none !important;
+    animation: none;
     filter: drop-shadow(0 0 15px rgba(157, 78, 221, 0.4));
   }
 
   .user-card.editing-mode {
-    animation: none !important;
-    box-shadow: 0 0 15px rgba(168, 85, 247, 0.2) !important;
+    animation: none;
+    box-shadow: 0 0 15px rgba(168, 85, 247, 0.2);
   }
 
   .user-card.is-dragging {
-    animation: none !important;
+    animation: none;
   }
 
   .user-card.is-drag-over {
-    animation: none !important;
+    animation: none;
   }
 
   .edit-badge {
-    animation: none !important;
+    animation: none;
   }
 
   .winner-trophy-tag {
-    animation: slideInLeft 0.6s ease-out 0.8s both !important;
+    animation: slideInLeft 0.6s ease-out 0.8s both;
   }
 
   .toggle-choice-btn.btn-yes.active,
   .toggle-choice-btn.btn-no.active {
-    animation: none !important;
+    animation: none;
   }
 
   .badge-icon {
-    animation: none !important;
+    animation: none;
   }
 
   .multiplier-value {
-    animation: none !important;
+    animation: none;
   }
 
   .favorite-badge {
-    animation: none !important;
+    animation: none;
   }
 
   .winner-tag {
-    animation: none !important;
+    animation: none;
   }
 
   .install-icon {
-    animation: none !important;
+    animation: none;
   }
 
   .live-dot {
-    animation: none !important;
+    animation: none;
   }
 
   /* Disable background animations on mobile */
   .bg-gradient-overlay {
-    animation: none !important;
+    animation: none;
   }
 
   .bg-grid-lines {
-    animation: none !important;
+    animation: none;
   }
 
   .header-divider {
-    animation: none !important;
+    animation: none;
     background-size: 100% 100%;
   }
 
@@ -6735,7 +6735,7 @@ textarea.manual-input {
 
 
   .card-ambient-glow {
-    animation: none !important;
+    animation: none;
     opacity: 0.5;
   }
 
@@ -7067,8 +7067,8 @@ textarea.manual-input {
 
 .auto-zero-row,
 .vote-item.auto-zero-item {
-  border-color: rgba(168, 85, 247, 0.4) !important;
-  background: linear-gradient(135deg, rgba(168, 85, 247, 0.1) 0%, rgba(56, 189, 248, 0.05) 100%) !important;
+  border-color: rgba(168, 85, 247, 0.4);
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.1) 0%, rgba(56, 189, 248, 0.05) 100%);
   box-shadow: inset 0 0 12px rgba(168, 85, 247, 0.15), 0 0 10px rgba(168, 85, 247, 0.2);
 }
 

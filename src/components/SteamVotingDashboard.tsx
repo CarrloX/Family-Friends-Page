@@ -12,7 +12,7 @@ import { DashboardSkeleton } from './DashboardSkeleton';
 import { AdminPinModal } from './AdminPinModal';
 import { useModalFocusTrap } from '../hooks/useModalFocusTrap';
 import { calculateResults } from '../data/votingData';
-import type { Voter, Game, VotingHistoryRecord, AuraRank, FreezePriceState, SteamPriceInfo } from '../types/voting';
+import type { Voter, Game, VotingHistoryRecord, AuraRank, FreezePriceState, SteamPriceInfo, GameResult } from '../types/voting';
 import { getMaxVotePoints } from '../types/voting';
 import { FaCog } from "react-icons/fa";
 import { formatCopPrice } from '../services/steamStoreApi';
@@ -47,12 +47,14 @@ import {
   importBackup,
   DEFAULT_FREEZE_STATE,
   type SyncState,
+  type ImportBackupResult,
 } from '../services/dataStore';
 import {
   getAdminAccessState,
   loginAdminWithPassword,
   logoutAdmin,
   type AuthResult,
+  type AdminAccessState,
 } from '../services/accessControl';
 import { subscribeToAuthState } from '../services/firebaseConfig';
 
@@ -332,6 +334,436 @@ function reconcileVoterVotes(voters: Voter[], gameIds: string[]): { changed: boo
   return { changed, updatedVoters };
 }
 
+function getVoterCountBadgeText(isEditMode: boolean, isMobile: boolean, count: number): string {
+  if (!isEditMode) {
+    return `${count} / ${MAX_VOTERS} Integrantes`;
+  }
+  return isMobile ? '⚙️ Editá integrantes y juegos' : '🖐️ Arrastrá tarjetas / Editá juegos arriba';
+}
+
+function confirmBackupOverwrite(hasExistingData: boolean): boolean {
+  if (!hasExistingData) return true;
+  return window.confirm(
+    '⚠️ Al importar un backup se sobrescribirán TODOS los datos actuales.\n\n¿Estás seguro de continuar?'
+  );
+}
+
+function getErrorMessage(err: unknown, fallback: string): string {
+  return err instanceof Error ? err.message : fallback;
+}
+
+function useAdminShortcut(
+  requestAdminUnlockViaModal: (forceOpen?: boolean) => Promise<boolean>,
+  setIsEditMode: React.Dispatch<React.SetStateAction<boolean>>
+) {
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const isKeyA = event.key === 'a' || event.key === 'A' || event.code === 'KeyA';
+      const isAltShift = event.altKey && event.shiftKey;
+
+      if (isAltShift && isKeyA) {
+        event.preventDefault();
+        event.stopPropagation();
+
+        const state = getAdminAccessState();
+        if (state.isAdmin) {
+          setIsEditMode((prev) => !prev);
+        } else {
+          void requestAdminUnlockViaModal(true);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [requestAdminUnlockViaModal, setIsEditMode]);
+}
+
+function useAutoUnfreezeWatcher(
+  initialLoadStatus: 'loading' | 'loaded' | 'error',
+  canManageContent: boolean,
+  gamesMap: Record<string, Game>,
+  results: GameResult[],
+  freezeState: FreezePriceState,
+  totalAssignedPoints: number,
+  autoUnfreezePrice: (reason: string) => Promise<void>
+) {
+  const prevGamesSignatureRef = useRef<string>('');
+  const prevWinnerIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (initialLoadStatus !== 'loaded' || !canManageContent) return;
+
+    const gameIds = Object.keys(gamesMap).sort((a, b) => a.localeCompare(b)).join(',');
+    const winnerId = results[0]?.game?.id || null;
+
+    if (!prevGamesSignatureRef.current) {
+      prevGamesSignatureRef.current = gameIds;
+      prevWinnerIdRef.current = winnerId;
+      return;
+    }
+
+    // 1. Si la lista de juegos propuestos cambió
+    if (freezeState.isPrecioCongelado && prevGamesSignatureRef.current !== gameIds) {
+      void Promise.resolve().then(() => {
+        void autoUnfreezePrice('cambio en lista de juegos');
+      });
+    }
+
+    // 2. Si el juego ganador cambió
+    if (
+      freezeState.isPrecioCongelado &&
+      freezeState.gameId &&
+      winnerId &&
+      freezeState.gameId !== winnerId
+    ) {
+      void Promise.resolve().then(() => {
+        void autoUnfreezePrice('cambio de juego ganador');
+      });
+    }
+
+    // 3. Si se limpiaron todos los votos de la sesión
+    if (freezeState.isPrecioCongelado && totalAssignedPoints === 0) {
+      void Promise.resolve().then(() => {
+        void autoUnfreezePrice('votos reiniciados');
+      });
+    }
+
+    prevGamesSignatureRef.current = gameIds;
+    prevWinnerIdRef.current = winnerId;
+  }, [
+    gamesMap,
+    results,
+    freezeState.isPrecioCongelado,
+    freezeState.gameId,
+    totalAssignedPoints,
+    initialLoadStatus,
+    canManageContent,
+    autoUnfreezePrice,
+  ]);
+}
+
+function useVotersDragAndDrop(
+  setVoters: React.Dispatch<React.SetStateAction<Voter[]>>,
+  isMobile: boolean
+) {
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+  const handleDragStart = useCallback((e: React.DragEvent, index: number) => {
+    setDraggedIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', index.toString());
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverIndex((prev) => (prev !== index ? index : prev));
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent, targetIndex: number) => {
+    e.preventDefault();
+    setDraggedIndex((currentDragged) => {
+      if (currentDragged === null || currentDragged === targetIndex) {
+        setDragOverIndex(null);
+        return null;
+      }
+
+      setVoters((prevVoters) => {
+        const updated = [...prevVoters];
+        const [draggedItem] = updated.splice(currentDragged, 1);
+        updated.splice(targetIndex, 0, draggedItem);
+        return updated;
+      });
+
+      setDragOverIndex(null);
+      return null;
+    });
+  }, [setVoters]);
+
+  const handleDragEnd = useCallback(() => {
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  }, []);
+
+  const getDragProps = useCallback((index: number) => {
+    if (isMobile) {
+      return { draggable: false, isDragging: false, isDragOver: false };
+    }
+    return {
+      draggable: true,
+      onDragStart: (e: React.DragEvent) => handleDragStart(e, index),
+      onDragOver: (e: React.DragEvent) => handleDragOver(e, index),
+      onDrop: (e: React.DragEvent) => handleDrop(e, index),
+      onDragEnd: handleDragEnd,
+      isDragging: draggedIndex === index,
+      isDragOver: dragOverIndex === index,
+    };
+  }, [isMobile, handleDragStart, handleDragOver, handleDrop, handleDragEnd, draggedIndex, dragOverIndex]);
+
+  return { getDragProps };
+}
+
+interface InitialLoadErrorViewProps {
+  syncState: SyncState;
+  errorMessage: string;
+  onRetry: () => void;
+}
+
+const InitialLoadErrorView: React.FC<InitialLoadErrorViewProps> = ({
+  syncState,
+  errorMessage,
+  onRetry,
+}) => (
+  <div className="steam-dashboard-container initial-error-container">
+    <div className="bg-gradient-overlay" />
+    <div className="bg-grid-lines" />
+
+    <SyncIndicator syncState={syncState} />
+
+    <main className="initial-error-card-wrapper" role="alert" aria-live="assertive">
+      <div className="initial-load-error-card">
+        <div className="initial-error-badge">
+          <span className="initial-error-icon" aria-hidden="true">⚠️</span>
+          <span className="initial-error-tag">Error de Conexión Remota</span>
+        </div>
+
+        <h1 className="initial-error-title">No se pudieron cargar los datos</h1>
+
+        <p className="initial-error-desc">
+          Ocurrió un error al leer la información desde el servidor. Para proteger la integridad de tus datos y evitar sobreescribir la información existente con una lista vacía, el autoguardado se encuentra <strong>suspendido</strong>.
+        </p>
+
+        {errorMessage && (
+          <div className="initial-error-detail">
+            <span className="initial-error-detail-label">Detalle del error:</span>
+            <code>{errorMessage}</code>
+          </div>
+        )}
+
+        <div className="initial-error-actions">
+          <motion.button
+            type="button"
+            className="btn-retry-initial-load"
+            onClick={onRetry}
+            whileHover={{ scale: 1.04, y: -2 }}
+            whileTap={{ scale: 0.96 }}
+          >
+            🔄 Reintentar conexión
+          </motion.button>
+        </div>
+      </div>
+    </main>
+  </div>
+);
+
+interface AdminSessionBadgeProps {
+  adminAccess: AdminAccessState;
+  onLogout: () => void;
+}
+
+const AdminSessionBadge: React.FC<AdminSessionBadgeProps> = ({ adminAccess, onLogout }) => {
+  if (!adminAccess.isAuthenticated) return null;
+
+  return (
+    <motion.div
+      className="admin-session-badge"
+      initial={{ opacity: 0, x: -10 }}
+      animate={{ opacity: 1, x: 0 }}
+      style={{
+        position: 'fixed',
+        top: 14,
+        left: 14,
+        zIndex: 90,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        background: 'rgba(23, 26, 33, 0.94)',
+        border: adminAccess.isAdmin
+          ? '1px solid rgba(168, 85, 247, 0.5)'
+          : '1px solid rgba(156, 163, 175, 0.3)',
+        boxShadow: adminAccess.isAdmin
+          ? '0 0 15px rgba(168, 85, 247, 0.25)'
+          : 'none',
+        borderRadius: 20,
+        padding: '6px 12px',
+        fontSize: '12px',
+        color: adminAccess.isAdmin ? '#c084fc' : '#9ca3af',
+        backdropFilter: 'blur(8px)',
+      }}
+    >
+      <span>
+        {adminAccess.isAdmin ? '🛡️ Admin' : '👤 Usuario'}: {adminAccess.adminEmail || 'Sesión activa'}
+      </span>
+      <button
+        type="button"
+        onClick={onLogout}
+        style={{
+          background: 'transparent',
+          border: 'none',
+          color: '#f87171',
+          cursor: 'pointer',
+          fontSize: '11px',
+          fontWeight: 600,
+          padding: '2px 6px',
+          borderRadius: 4,
+        }}
+        title="Cerrar sesión (Volver a solo lectura)"
+      >
+        Cerrar sesión
+      </button>
+    </motion.div>
+  );
+};
+
+interface EditModeTopBarProps {
+  voterCount: number;
+  steamApiKey: string;
+  onApiKeyChange: (key: string) => void;
+  onAddVoter: () => void;
+  onExportBackup: () => void;
+  onImportClick: () => void;
+  onImportFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  importFileInputRef: React.RefObject<HTMLInputElement | null>;
+  isSaving: boolean;
+  onResetAllVotes: () => void;
+  onResetData: () => void;
+  onOpenResetAuraConfirm: () => void;
+  onCloseEditMode: () => void;
+}
+
+const EditModeTopBar: React.FC<EditModeTopBarProps> = ({
+  voterCount,
+  steamApiKey,
+  onApiKeyChange,
+  onAddVoter,
+  onExportBackup,
+  onImportClick,
+  onImportFileChange,
+  importFileInputRef,
+  isSaving,
+  onResetAllVotes,
+  onResetData,
+  onOpenResetAuraConfirm,
+  onCloseEditMode,
+}) => (
+  <motion.div
+    key="edit-mode-bar"
+    className="edit-mode-top-bar"
+    initial={{ opacity: 0, y: -20, height: 0 }}
+    animate={{ opacity: 1, y: 0, height: 'auto' }}
+    exit={{ opacity: 0, y: -20, height: 0 }}
+    transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+  >
+    <div className="edit-bar-left">
+      <span className="edit-badge">⚙️ MODO EDICIÓN ACTIVO</span>
+      <span className="edit-help-text">
+        Buscá juegos en Steam, edita perfiles y arrastrá tarjetas. Autoguardado activo.
+      </span>
+    </div>
+
+    <div className="edit-bar-controls">
+      <motion.button
+        type="button"
+        className="btn-add-voter"
+        onClick={onAddVoter}
+        disabled={voterCount >= MAX_VOTERS}
+        title={voterCount >= MAX_VOTERS ? `Máximo de ${MAX_VOTERS} integrantes alcanzado (límite Steam Families)` : 'Añadir nuevo integrante'}
+        whileHover={{ scale: 1.03 }}
+        whileTap={{ scale: 0.97 }}
+      >
+        ➕ Añadir Integrante ({voterCount}/{MAX_VOTERS})
+      </motion.button>
+
+      <div className="api-key-input-container">
+        <label htmlFor="steam-api-key-input">Steam Web API Key (opcional):</label>
+        <input
+          id="steam-api-key-input"
+          type="password"
+          placeholder="Clave API de Steam..."
+          value={steamApiKey}
+          onChange={(e) => onApiKeyChange(e.target.value)}
+          className="api-key-input"
+        />
+      </div>
+
+      <div className="backup-btn-group">
+        <motion.button
+          type="button"
+          className="btn-backup btn-export"
+          onClick={onExportBackup}
+          title="Descargar backup completo en JSON"
+          whileHover={{ scale: 1.03 }}
+          whileTap={{ scale: 0.97 }}
+        >
+          📥 Exportar Backup
+        </motion.button>
+        <motion.button
+          type="button"
+          className="btn-backup btn-import"
+          onClick={onImportClick}
+          disabled={isSaving}
+          title="Restaurar datos desde un archivo JSON"
+          whileHover={isSaving ? {} : { scale: 1.03 }}
+          whileTap={isSaving ? {} : { scale: 0.97 }}
+        >
+          📤 Importar Backup
+        </motion.button>
+        <input
+          ref={importFileInputRef}
+          type="file"
+          accept=".json"
+          onChange={onImportFileChange}
+          style={{ display: 'none' }}
+        />
+      </div>
+
+      <motion.button
+        type="button"
+        className="btn-reset-votes"
+        onClick={onResetAllVotes}
+        title="Reiniciar a 0 puntos todos los votos de los integrantes para comenzar un nuevo ciclo de votación"
+        whileHover={{ scale: 1.03 }}
+        whileTap={{ scale: 0.97 }}
+      >
+        🧹 Reiniciar Votos (Nuevo Ciclo)
+      </motion.button>
+
+      <motion.button
+        type="button"
+        className="btn-reset-data"
+        onClick={onResetData}
+        whileHover={{ scale: 1.03 }}
+        whileTap={{ scale: 0.97 }}
+      >
+        Restablecer
+      </motion.button>
+
+      <motion.button
+        type="button"
+        className="btn-reset-aura"
+        onClick={onOpenResetAuraConfirm}
+        title="Restablece el Aura de todos los integrantes a Socio Regular (0 Cuotas, 1.0x)"
+        whileHover={{ scale: 1.03 }}
+        whileTap={{ scale: 0.97 }}
+      >
+        🔄 Restablecer Aura
+      </motion.button>
+
+      <motion.button
+        type="button"
+        className="btn-save-edit"
+        onClick={onCloseEditMode}
+        whileHover={{ scale: 1.03 }}
+        whileTap={{ scale: 0.97 }}
+      >
+        ✓ Guardar / Listo
+      </motion.button>
+    </div>
+  </motion.div>
+);
+
 // ─── Componente principal ─────────────────────────────────
 export const SteamVotingDashboard: React.FC = () => {
   const [voters, setVoters] = useState<Voter[]>([]);
@@ -347,8 +779,6 @@ export const SteamVotingDashboard: React.FC = () => {
   const [adminAccess, setAdminAccess] = useState(() => getAdminAccessState());
   const [voterToDelete, setVoterToDelete] = useState<Voter | null>(null);
   const [showResetAuraConfirm, setShowResetAuraConfirm] = useState(false);
-  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [initialLoadStatus, setInitialLoadStatus] = useState<'loading' | 'loaded' | 'error'>('loading');
   const [initialLoadErrorMessage, setInitialLoadErrorMessage] = useState<string>('');
   const isLoading = initialLoadStatus === 'loading';
@@ -361,6 +791,8 @@ export const SteamVotingDashboard: React.FC = () => {
     getMobileSnapshot,
     getMobileServerSnapshot
   );
+
+  const { getDragProps } = useVotersDragAndDrop(setVoters, isMobile);
 
   // Auto-ocultar el indicador de sincronización tras 5 segundos al completarse o fallar
   useEffect(() => {
@@ -389,30 +821,56 @@ export const SteamVotingDashboard: React.FC = () => {
   const pinModalResolveRef = useRef<((value: boolean) => void) | null>(null);
   const pendingUnlockPromiseRef = useRef<Promise<boolean> | null>(null);
 
+  const cancelPendingWritesAndDebounce = useCallback(() => {
+    if (saveDebounceRef.current) {
+      clearTimeout(saveDebounceRef.current);
+    }
+    if (apiKeyDebounceRef.current) {
+      clearTimeout(apiKeyDebounceRef.current);
+    }
+    invalidatePendingWrites();
+  }, []);
+
+  const resetImportInput = useCallback(() => {
+    if (importFileInputRef.current) {
+      importFileInputRef.current.value = '';
+    }
+  }, []);
+
+  const applyImportResult = useCallback((result: ImportBackupResult) => {
+    if (result.syncState.status === 'read-only') {
+      setSyncState(result.syncState);
+      return;
+    }
+
+    skipNextSaveRef.current = true;
+    setVoters(result.voters);
+    setGamesMap(result.gamesMap);
+    setHistory(result.history);
+    setSteamApiKey(result.steamApiKey);
+    setFreezeState(DEFAULT_FREEZE_STATE);
+    setSyncState(result.syncState);
+  }, []);
+
   // Limpieza al desmontar el componente: cancelar temporizadores e invalidar escrituras pendientes
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
-      if (saveDebounceRef.current) {
-        clearTimeout(saveDebounceRef.current);
-      }
-      if (apiKeyDebounceRef.current) {
-        clearTimeout(apiKeyDebounceRef.current);
-      }
-      invalidatePendingWrites();
+      cancelPendingWritesAndDebounce();
       if (pinModalResolveRef.current) {
         pinModalResolveRef.current(false);
         pinModalResolveRef.current = null;
         pendingUnlockPromiseRef.current = null;
       }
     };
-  }, []);
+  }, [cancelPendingWritesAndDebounce]);
 
   const canManageContent = adminAccess.canManageContent;
 
 
   const handleApplyInitialData = useCallback((data: InitialDashboardData) => {
+    skipNextSaveRef.current = true;
     setVoters(data.voters);
     setGamesMap(data.gamesMap);
     setHistory(data.history);
@@ -549,12 +1007,10 @@ export const SteamVotingDashboard: React.FC = () => {
   }, [voters]);
 
   // Texto descriptivo del badge de integrantes según modo de edición y dispositivo
-  const voterCountBadgeText = useMemo(() => {
-    if (!isEditMode) {
-      return `${voters.length} / ${MAX_VOTERS} Integrantes`;
-    }
-    return isMobile ? '⚙️ Editá integrantes y juegos' : '🖐️ Arrastrá tarjetas / Editá juegos arriba';
-  }, [isEditMode, isMobile, voters.length]);
+  const voterCountBadgeText = useMemo(
+    () => getVoterCountBadgeText(isEditMode, isMobile, voters.length),
+    [isEditMode, isMobile, voters.length]
+  );
 
   // ─── Reconciliar votos de los integrantes con gamesMap (autocorregir desalineaciones/IDs huérfanos) ───
   useEffect(() => {
@@ -694,51 +1150,15 @@ export const SteamVotingDashboard: React.FC = () => {
     }
   }, [canManageContent, freezeState, freezePrice, unfreezePrice]);
 
-  // ─── Watcher reactivo: Descongelado automático ante cambios en el ciclo de votación ───
-  const prevGamesSignatureRef = useRef<string>('');
-  const prevWinnerIdRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (initialLoadStatus !== 'loaded' || !canManageContent) return;
-
-    const gameIds = Object.keys(gamesMap).sort((a, b) => a.localeCompare(b)).join(',');
-    const winnerId = results[0]?.game?.id || null;
-
-    if (!prevGamesSignatureRef.current) {
-      prevGamesSignatureRef.current = gameIds;
-      prevWinnerIdRef.current = winnerId;
-      return;
-    }
-
-    // 1. Si la lista de juegos propuestos cambió
-    if (freezeState.isPrecioCongelado && prevGamesSignatureRef.current !== gameIds) {
-      void Promise.resolve().then(() => {
-        void autoUnfreezePrice('cambio en lista de juegos');
-      });
-    }
-
-    // 2. Si el juego ganador cambió
-    if (
-      freezeState.isPrecioCongelado &&
-      freezeState.gameId &&
-      winnerId &&
-      freezeState.gameId !== winnerId
-    ) {
-      void Promise.resolve().then(() => {
-        void autoUnfreezePrice('cambio de juego ganador');
-      });
-    }
-
-    // 3. Si se limpiaron todos los votos de la sesión
-    if (freezeState.isPrecioCongelado && totalAssignedPoints === 0) {
-      void Promise.resolve().then(() => {
-        void autoUnfreezePrice('votos reiniciados');
-      });
-    }
-
-    prevGamesSignatureRef.current = gameIds;
-    prevWinnerIdRef.current = winnerId;
-  }, [gamesMap, results, freezeState.isPrecioCongelado, freezeState.gameId, totalAssignedPoints, initialLoadStatus, canManageContent, autoUnfreezePrice]);
+  useAutoUnfreezeWatcher(
+    initialLoadStatus,
+    canManageContent,
+    gamesMap,
+    results,
+    freezeState,
+    totalAssignedPoints,
+    autoUnfreezePrice
+  );
 
   // ─── Handlers ─────────────────────────────────────────────
   const handleUpdateVoter = useCallback((updatedVoter: Voter) => {
@@ -898,30 +1318,7 @@ export const SteamVotingDashboard: React.FC = () => {
   }, []);
 
   // Atajo de teclado Shift + Alt + A (o Alt + Shift + A) para acceso de admin
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      const isKeyA = event.key === 'a' || event.key === 'A' || event.code === 'KeyA';
-      const isAltShift = event.altKey && event.shiftKey;
-
-      if (isAltShift && isKeyA) {
-        event.preventDefault();
-        event.stopPropagation();
-
-        const state = getAdminAccessState();
-        if (state.isAdmin) {
-          // Si ya es administrador, alternar modo edición
-          setIsEditMode((prev) => !prev);
-        } else {
-          // Si no es administrador, abrir inmediatamente el modal de identificación
-          void requestAdminUnlockViaModal(true);
-        }
-      }
-    };
-
-    // Usar capture phase para asegurar recepción antes de que otros elementos intercepten
-    window.addEventListener('keydown', handleKeyDown, true);
-    return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [requestAdminUnlockViaModal]);
+  useAdminShortcut(requestAdminUnlockViaModal, setIsEditMode);
 
   const handleToggleEditMode = useCallback(() => {
     if (!canManageContent) {
@@ -1117,37 +1514,7 @@ export const SteamVotingDashboard: React.FC = () => {
     }
   }, [voters, gamesMap, freezeState]);
 
-  // ─── Drag and Drop ────────────────────────────────────────
-  const handleDragStart = (e: React.DragEvent, index: number) => {
-    setDraggedIndex(index);
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', index.toString());
-  };
 
-  const handleDragOver = (e: React.DragEvent, index: number) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    if (dragOverIndex !== index) {
-      setDragOverIndex(index);
-    }
-  };
-
-  const handleDrop = (e: React.DragEvent, targetIndex: number) => {
-    e.preventDefault();
-    if (draggedIndex === null || draggedIndex === targetIndex) {
-      setDraggedIndex(null);
-      setDragOverIndex(null);
-      return;
-    }
-
-    const updatedVoters = [...voters];
-    const [draggedItem] = updatedVoters.splice(draggedIndex, 1);
-    updatedVoters.splice(targetIndex, 0, draggedItem);
-
-    setVoters(updatedVoters);
-    setDraggedIndex(null);
-    setDragOverIndex(null);
-  };
 
   const handleAddVoter = () => {
     if (voters.length >= MAX_VOTERS) return;
@@ -1188,10 +1555,7 @@ export const SteamVotingDashboard: React.FC = () => {
     setVoterToDelete(null);
   };
 
-  const handleDragEnd = () => {
-    setDraggedIndex(null);
-    setDragOverIndex(null);
-  };
+
 
   // ─── Backup: Exportar ─────────────────────────────────────
   const handleExportBackup = () => {
@@ -1209,103 +1573,42 @@ export const SteamVotingDashboard: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (voters.length > 0 || history.length > 0) {
-      const confirmed = window.confirm(
-        '⚠️ Al importar un backup se sobrescribirán TODOS los datos actuales.\n\n¿Estás seguro de continuar?'
-      );
-      if (!confirmed) {
-        if (importFileInputRef.current) importFileInputRef.current.value = '';
-        return;
-      }
+    const hasData = voters.length > 0 || history.length > 0;
+    if (!confirmBackupOverwrite(hasData)) {
+      resetImportInput();
+      return;
     }
 
-    // Cancelar temporizadores pendientes del dashboard y de la API key
-    if (saveDebounceRef.current) {
-      clearTimeout(saveDebounceRef.current);
-    }
-    if (apiKeyDebounceRef.current) {
-      clearTimeout(apiKeyDebounceRef.current);
-    }
-    // Invalidar escrituras asíncronas actualmente en vuelo en la cola
-    invalidatePendingWrites();
+    cancelPendingWritesAndDebounce();
 
     try {
-      setSyncState({ status: 'saving', message: 'Importando backup...' });
+      setSyncState({ status: 'saving', message: 'Importando y sincronizando backup...' });
       const result = await importBackup(file);
-
-      skipNextSaveRef.current = true;
-      setVoters(result.voters);
-      setGamesMap(result.gamesMap);
-      setHistory(result.history);
-      setSteamApiKey(result.steamApiKey);
-
-      setSyncState({
-        status: 'synced',
-        message: `✅ Backup importado: ${result.voters.length} integrantes, ${result.history.length} registros`,
-      });
-      if (importFileInputRef.current) importFileInputRef.current.value = '';
+      applyImportResult(result);
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Error desconocido';
+      const errorMsg = getErrorMessage(err, 'Error desconocido al importar el backup');
       console.error('[Dashboard] Error al importar backup:', err);
       setSyncState({ status: 'error', message: `❌ ${errorMsg}` });
-      if (importFileInputRef.current) importFileInputRef.current.value = '';
+    } finally {
+      resetImportInput();
     }
   };
 
 
 
   // ─── Loading state ────────────────────────────────────────
-  // Skeleton loaders animados que imitan la estructura del dashboard
-  // mientras se realiza la lectura inicial de Firestore.
   if (initialLoadStatus === 'loading') {
     return <DashboardSkeleton />;
   }
 
   // ─── Error state: No se pudo cargar la información inicial ───
-  // Si la lectura remota falló, no se debe asumir datos vacíos ni permitir
-  // que los autoguardados sobrescriban la base de datos con arrays vacíos.
   if (initialLoadStatus === 'error') {
     return (
-      <div className="steam-dashboard-container initial-error-container">
-        <div className="bg-gradient-overlay" />
-        <div className="bg-grid-lines" />
-
-        <SyncIndicator syncState={syncState} />
-
-        <main className="initial-error-card-wrapper" role="alert" aria-live="assertive">
-          <div className="initial-load-error-card">
-            <div className="initial-error-badge">
-              <span className="initial-error-icon" aria-hidden="true">⚠️</span>
-              <span className="initial-error-tag">Error de Conexión Remota</span>
-            </div>
-
-            <h1 className="initial-error-title">No se pudieron cargar los datos</h1>
-
-            <p className="initial-error-desc">
-              Ocurrió un error al leer la información desde el servidor. Para proteger la integridad de tus datos y evitar sobreescribir la información existente con una lista vacía, el autoguardado se encuentra <strong>suspendido</strong>.
-            </p>
-
-            {initialLoadErrorMessage && (
-              <div className="initial-error-detail">
-                <span className="initial-error-detail-label">Detalle del error:</span>
-                <code>{initialLoadErrorMessage}</code>
-              </div>
-            )}
-
-            <div className="initial-error-actions">
-              <motion.button
-                type="button"
-                className="btn-retry-initial-load"
-                onClick={() => void handleRetryInitialLoad()}
-                whileHover={{ scale: 1.04, y: -2 }}
-                whileTap={{ scale: 0.96 }}
-              >
-                🔄 Reintentar conexión
-              </motion.button>
-            </div>
-          </div>
-        </main>
-      </div>
+      <InitialLoadErrorView
+        syncState={syncState}
+        errorMessage={initialLoadErrorMessage}
+        onRetry={() => void handleRetryInitialLoad()}
+      />
     );
   }
 
@@ -1333,55 +1636,7 @@ export const SteamVotingDashboard: React.FC = () => {
         </motion.button>
       )}
 
-      {adminAccess.isAuthenticated && (
-        <motion.div
-          className="admin-session-badge"
-          initial={{ opacity: 0, x: -10 }}
-          animate={{ opacity: 1, x: 0 }}
-          style={{
-            position: 'fixed',
-            top: 14,
-            left: 14,
-            zIndex: 90,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            background: 'rgba(23, 26, 33, 0.94)',
-            border: adminAccess.isAdmin
-              ? '1px solid rgba(168, 85, 247, 0.5)'
-              : '1px solid rgba(156, 163, 175, 0.3)',
-            boxShadow: adminAccess.isAdmin
-              ? '0 0 15px rgba(168, 85, 247, 0.25)'
-              : 'none',
-            borderRadius: 20,
-            padding: '6px 12px',
-            fontSize: '12px',
-            color: adminAccess.isAdmin ? '#c084fc' : '#9ca3af',
-            backdropFilter: 'blur(8px)',
-          }}
-        >
-          <span>
-            {adminAccess.isAdmin ? '🛡️ Admin' : '👤 Usuario'}: {adminAccess.adminEmail || 'Sesión activa'}
-          </span>
-          <button
-            type="button"
-            onClick={handleLogoutAdmin}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: '#f87171',
-              cursor: 'pointer',
-              fontSize: '11px',
-              fontWeight: 600,
-              padding: '2px 6px',
-              borderRadius: 4,
-            }}
-            title="Cerrar sesión (Volver a solo lectura)"
-          >
-            Cerrar sesión
-          </button>
-        </motion.div>
-      )}
+      <AdminSessionBadge adminAccess={adminAccess} onLogout={handleLogoutAdmin} />
 
 
       {/* Botones de acción principales */}
@@ -1408,119 +1663,21 @@ export const SteamVotingDashboard: React.FC = () => {
       {/* Barra de edición */}
       <AnimatePresence>
         {canManageContent && isEditMode && (
-          <motion.div
-            key="edit-mode-bar"
-            className="edit-mode-top-bar"
-            initial={{ opacity: 0, y: -20, height: 0 }}
-            animate={{ opacity: 1, y: 0, height: 'auto' }}
-            exit={{ opacity: 0, y: -20, height: 0 }}
-            transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-          >
-            <div className="edit-bar-left">
-              <span className="edit-badge">⚙️ MODO EDICIÓN ACTIVO</span>
-              <span className="edit-help-text">
-                Buscá juegos en Steam, edita perfiles y arrastrá tarjetas. Autoguardado activo.
-              </span>
-            </div>
-
-            <div className="edit-bar-controls">
-              <motion.button
-                type="button"
-                className="btn-add-voter"
-                onClick={handleAddVoter}
-                disabled={voters.length >= MAX_VOTERS}
-                title={voters.length >= MAX_VOTERS ? `Máximo de ${MAX_VOTERS} integrantes alcanzado (límite Steam Families)` : 'Añadir nuevo integrante'}
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.97 }}
-              >
-                ➕ Añadir Integrante ({voters.length}/{MAX_VOTERS})
-              </motion.button>
-
-              <div className="api-key-input-container">
-                <label htmlFor="steam-api-key-input">Steam Web API Key (opcional):</label>
-                <input
-                  id="steam-api-key-input"
-                  type="password"
-                  placeholder="Clave API de Steam..."
-                  value={steamApiKey}
-                  onChange={(e) => setSteamApiKey(e.target.value)}
-                  className="api-key-input"
-                />
-              </div>
-
-              <div className="backup-btn-group">
-                <motion.button
-                  type="button"
-                  className="btn-backup btn-export"
-                  onClick={handleExportBackup}
-                  title="Descargar backup completo en JSON"
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.97 }}
-                >
-                  📥 Exportar Backup
-                </motion.button>
-                <motion.button
-                  type="button"
-                  className="btn-backup btn-import"
-                  onClick={handleImportClick}
-                  title="Restaurar datos desde un archivo JSON"
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.97 }}
-                >
-                  📤 Importar Backup
-                </motion.button>
-                <input
-                  ref={importFileInputRef}
-                  type="file"
-                  accept=".json"
-                  onChange={handleImportFileChange}
-                  style={{ display: 'none' }}
-                />
-              </div>
-
-              <motion.button
-                type="button"
-                className="btn-reset-votes"
-                onClick={handleResetAllVotes}
-                title="Reiniciar a 0 puntos todos los votos de los integrantes para comenzar un nuevo ciclo de votación"
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.97 }}
-              >
-                🧹 Reiniciar Votos (Nuevo Ciclo)
-              </motion.button>
-
-              <motion.button
-                type="button"
-                className="btn-reset-data"
-                onClick={handleResetData}
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.97 }}
-              >
-                Restablecer
-              </motion.button>
-
-              <motion.button
-                type="button"
-                className="btn-reset-aura"
-                onClick={() => setShowResetAuraConfirm(true)}
-                title="Restablece el Aura de todos los integrantes a Socio Regular (0 Cuotas, 1.0x)"
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.97 }}
-              >
-                🔄 Restablecer Aura
-              </motion.button>
-
-              <motion.button
-                type="button"
-                className="btn-save-edit"
-                onClick={() => setIsEditMode(false)}
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.97 }}
-              >
-                ✓ Guardar / Listo
-              </motion.button>
-            </div>
-          </motion.div>
+          <EditModeTopBar
+            voterCount={voters.length}
+            steamApiKey={steamApiKey}
+            onApiKeyChange={setSteamApiKey}
+            onAddVoter={handleAddVoter}
+            onExportBackup={handleExportBackup}
+            onImportClick={handleImportClick}
+            onImportFileChange={handleImportFileChange}
+            importFileInputRef={importFileInputRef}
+            isSaving={syncState.status === 'saving'}
+            onResetAllVotes={handleResetAllVotes}
+            onResetData={handleResetData}
+            onOpenResetAuraConfirm={() => setShowResetAuraConfirm(true)}
+            onCloseEditMode={() => setIsEditMode(false)}
+          />
         )}
       </AnimatePresence>
 
@@ -1569,15 +1726,9 @@ export const SteamVotingDashboard: React.FC = () => {
                   isEditMode={isEditMode}
                   apiKey={steamApiKey}
                   onUpdateVoter={handleUpdateVoter}
-                  draggable={!isMobile}
-                  onDragStart={!isMobile ? (e) => handleDragStart(e, index) : undefined}
-                  onDragOver={!isMobile ? (e) => handleDragOver(e, index) : undefined}
-                  onDrop={!isMobile ? (e) => handleDrop(e, index) : undefined}
-                  onDragEnd={!isMobile ? handleDragEnd : undefined}
-                  isDragging={!isMobile && draggedIndex === index}
-                  isDragOver={!isMobile && dragOverIndex === index}
                   onRequestDelete={handleRequestDeleteVoter}
                   canDelete={voters.length > MIN_VOTERS}
+                  {...getDragProps(index)}
                 />
               ))}
             </AnimatePresence>
