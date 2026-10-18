@@ -1285,10 +1285,18 @@
   backdrop-filter: blur(6px);
 }
 
-.btn-reset-votes:hover {
+.btn-reset-votes:hover:not(:disabled) {
   border-color: #c084fc;
   color: #ffffff;
   box-shadow: 0 0 15px rgba(168, 85, 247, 0.4);
+}
+
+.btn-reset-votes:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+  pointer-events: none;
 }
 
 /* Botón de limpiar votos individuales en la tarjeta de usuario */
@@ -2169,13 +2177,21 @@
   transition: transform 0.6s ease;
 }
 
-.hidden-gear-btn:hover {
+.hidden-gear-btn:hover:not(:disabled) {
   opacity: 1;
   color: var(--neon-purple-bright, #c084fc);
   border-color: rgba(168, 85, 247, 0.9);
   background: rgba(23, 26, 33, 0.9);
   box-shadow: 0 0 25px rgba(168, 85, 247, 0.7);
   transform: rotate(60deg) scale(1.15);
+}
+
+.hidden-gear-btn:disabled {
+  opacity: 0.15;
+  cursor: not-allowed;
+  pointer-events: none;
+  box-shadow: none;
+  transform: none;
 }
 
 .hidden-gear-btn.active {
@@ -2262,6 +2278,13 @@
   transform: scale(1.02);
 }
 
+.api-key-input:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: rgba(0, 0, 0, 0.25);
+  border-color: rgba(168, 85, 247, 0.15);
+}
+
 .btn-reset-data {
   background: var(--bg-red-solid);
   border: 1px solid rgba(239, 68, 68, 0.6);
@@ -2274,12 +2297,20 @@
   transition: all 0.3s ease;
 }
 
-.btn-reset-data:hover {
+.btn-reset-data:hover:not(:disabled) {
   background: #7f1d1d;
   border-color: #ef4444;
   color: var(--text-on-dark);
   transform: translateY(-2px) scale(1.05);
   box-shadow: 0 0 15px rgba(239, 68, 68, 0.5);
+}
+
+.btn-reset-data:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+  pointer-events: none;
 }
 
 .btn-reset-aura {
@@ -2299,9 +2330,17 @@
   white-space: nowrap;
 }
 
-.btn-reset-aura:hover {
+.btn-reset-aura:hover:not(:disabled) {
   transform: translateY(-3px) scale(1.05);
   box-shadow: 0 0 30px rgba(16, 185, 129, 0.8);
+}
+
+.btn-reset-aura:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+  pointer-events: none;
 }
 
 .btn-save-edit {
@@ -2317,9 +2356,17 @@
   transition: all 0.3s ease;
 }
 
-.btn-save-edit:hover {
+.btn-save-edit:hover:not(:disabled) {
   transform: translateY(-3px) scale(1.05);
   box-shadow: 0 0 30px rgba(168, 85, 247, 0.8);
+}
+
+.btn-save-edit:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+  pointer-events: none;
 }
 
 /* ==================== CARD EDIT PANEL ==================== */
@@ -2741,26 +2788,23 @@
   white-space: nowrap;
 }
 
-.btn-delete-game-slot:hover {
+.btn-delete-game-slot:hover:not(:disabled):not(.disabled) {
   background: #dc2626;
   border-color: #ef4444;
   color: #ffffff;
   box-shadow: 0 0 15px rgba(239, 68, 68, 0.6);
 }
 
+.btn-delete-game-slot:disabled,
 .btn-delete-game-slot.disabled {
   background: rgba(100, 116, 139, 0.15);
   border: 1px solid rgba(100, 116, 139, 0.4);
   color: rgba(255, 255, 255, 0.5);
   cursor: not-allowed;
   opacity: 0.6;
-}
-
-.btn-delete-game-slot.disabled:hover {
-  background: rgba(100, 116, 139, 0.15);
-  border-color: rgba(100, 116, 139, 0.4);
-  color: rgba(255, 255, 255, 0.5);
   box-shadow: none;
+  transform: none;
+  pointer-events: none;
 }
 
 .game-slot-limit-card {
@@ -2826,11 +2870,19 @@ background: #3b0764;
   animation: fadeInScale 0.5s ease-out both;
 }
 
-.btn-add-game-slot:hover {
+.btn-add-game-slot:hover:not(:disabled) {
   background: rgba(168, 85, 247, 0.18);
   border-color: var(--neon-purple-bright);
   box-shadow: 0 0 25px rgba(168, 85, 247, 0.4);
   transform: translateY(-4px) scale(1.02);
+}
+
+.btn-add-game-slot:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+  box-shadow: none;
+  transform: none;
 }
 
 .add-game-icon {
@@ -2962,6 +3014,13 @@ background: #3b0764;
   transform: scale(1.02);
 }
 
+.slot-search-input:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: rgba(15, 15, 27, 0.4);
+  border-color: rgba(168, 85, 247, 0.15);
+}
+
 .search-spinner {
   position: absolute;
   right: 10px;
@@ -3085,6 +3144,13 @@ background: #3b0764;
   transform: scale(1.02);
 }
 
+.manual-input:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: rgba(15, 15, 27, 0.4);
+  border-color: rgba(255, 255, 255, 0.05);
+}
+
 textarea.manual-input {
   font-family: inherit;
   resize: vertical;
@@ -3109,11 +3175,19 @@ textarea.manual-input {
   transition: all 0.3s ease;
 }
 
-.btn-apply-cover:hover {
+.btn-apply-cover:hover:not(:disabled) {
   background: #075985;
   color: var(--text-on-dark);
   transform: translateY(-2px) scale(1.05);
   box-shadow: 0 0 12px rgba(59, 130, 246, 0.5);
+}
+
+.btn-apply-cover:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+  pointer-events: none;
 }
 
 /* ==================== AURA SYSTEM BADGES ==================== */
@@ -3271,15 +3345,23 @@ textarea.manual-input {
   transition: transform 0.6s ease;
 }
 
-.btn-history-glow:hover {
+.btn-history-glow:hover:not(:disabled) {
   transform: translateY(-3px) scale(1.03);
   color: #ffffff;
   border-color: rgba(192, 132, 252, 0.95);
   box-shadow: 0 0 18px rgba(168, 85, 247, 0.55), 0 0 38px rgba(168, 85, 247, 0.3);
 }
 
-.btn-history-glow:hover::before {
+.btn-history-glow:hover:not(:disabled)::before {
   transform: translateX(120%);
+}
+
+.btn-history-glow:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+  pointer-events: none;
 }
 
 /* ==================== DELETE CONFIRM MODAL ==================== */
@@ -5888,7 +5970,7 @@ textarea.manual-input {
   box-shadow: 0 0 12px rgba(16, 185, 129, 0.4);
 }
 
-.btn-export:hover {
+.btn-export:hover:not(:disabled) {
   background: rgba(16, 185, 129, 0.3);
   border-color: #10b981;
   box-shadow: 0 0 12px rgba(16, 185, 129, 0.4);
@@ -5901,11 +5983,19 @@ textarea.manual-input {
   color: #ffffff;
 }
 
-.btn-import:hover {
+.btn-import:hover:not(:disabled) {
   background: rgba(59, 130, 246, 0.3);
   border-color: #3b82f6;
   box-shadow: 0 0 12px rgba(59, 130, 246, 0.4);
   transform: translateY(-1px);
+}
+
+.btn-backup:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+  pointer-events: none;
 }
 
 /* ==================== LOADING SCREEN ==================== */
@@ -7106,10 +7196,18 @@ textarea.manual-input {
 }
 
 
-.points-select:hover,
-.inline-points-select:hover {
+.points-select:hover:not(:disabled),
+.inline-points-select:hover:not(:disabled) {
   border-color: var(--neon-purple-bright);
   box-shadow: 0 0 8px rgba(168, 85, 247, 0.3);
+}
+
+.points-select:disabled,
+.inline-points-select:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  border-color: rgba(255, 255, 255, 0.15);
+  box-shadow: none;
 }
 
 .points-select:focus,

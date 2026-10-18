@@ -810,23 +810,21 @@ function parseActiveVotingData(data: ActiveVotingDocument): ActiveVotingStateRes
 async function fetchFirestoreActiveVoting(): Promise<ActiveVotingStateResult | null> {
   if (!isFirebaseReady()) return null;
 
-  try {
-    const db = getFirestoreInstance()!;
-    const docRef = doc(db, COLLECTION_ACTIVE_VOTING, DOC_ACTIVE_VOTING);
-    const snap = await getDoc(docRef);
-    if (!snap.exists()) return null;
-
-    const parsed = parseActiveVotingData(snap.data() as ActiveVotingDocument);
-    if (parsed) {
-      writeLocal(LS_KEY_ACTIVE_VOTING, parsed);
-    }
-    return parsed;
-  } catch (err) {
-    if (import.meta.env.DEV) {
-      console.warn('[Store] Error cargando estado de sesión remoto:', err);
-    }
+  const db = getFirestoreInstance()!;
+  const docRef = doc(db, COLLECTION_ACTIVE_VOTING, DOC_ACTIVE_VOTING);
+  const snap = await getDoc(docRef);
+  if (!snap.exists()) {
+    removeLocal(LS_KEY_ACTIVE_VOTING);
     return null;
   }
+
+  const parsed = parseActiveVotingData(snap.data() as ActiveVotingDocument);
+  if (parsed) {
+    writeLocal(LS_KEY_ACTIVE_VOTING, parsed);
+  } else {
+    removeLocal(LS_KEY_ACTIVE_VOTING);
+  }
+  return parsed;
 }
 
 function loadCachedActiveVoting(): ActiveVotingStateResult | null {
@@ -852,68 +850,77 @@ function loadCachedActiveVoting(): ActiveVotingStateResult | null {
 
 /**
  * Carga el estado activo de la votación desde Firestore o localStorage.
+ * Distingue explícitamente entre:
+ * 1. Resultado remoto válido (documento existente o ausencia legítima del documento).
+ * 2. Falla transitoria de conectividad / sin conexión (recurre a la caché local de respaldo).
+ * 3. Error real no transitorio (permisos, consulta inválida), propagando la excepción.
  */
 export async function loadActiveVotingState(): Promise<ActiveVotingStateResult | null> {
-  const firestoreState = await fetchFirestoreActiveVoting();
-  if (firestoreState) {
-    return firestoreState;
+  if (!isFirebaseReady()) {
+    return loadCachedActiveVoting();
   }
-  return loadCachedActiveVoting();
-}
-
-async function fetchFirestoreVoters(): Promise<Voter[] | null> {
-  if (!isFirebaseReady()) return null;
 
   try {
-    const db = getFirestoreInstance()!;
-    const docRef = doc(db, COLLECTION_GROUP, DOC_MIEMBROS);
-    const snap = await getDoc(docRef);
-    if (!snap.exists()) {
-      writeLocal(LS_KEY_VOTERS, []);
-      return [];
-    }
-
-    const data = snap.data() as GrupoDocument;
-    if (Array.isArray(data.voters)) {
+    return await fetchFirestoreActiveVoting();
+  } catch (err) {
+    if (isNetworkOrOfflineError(err)) {
       if (import.meta.env.DEV) {
-        console.log('[Store] Datos de participantes recuperados.');
+        console.warn('[Store] Falla transitoria de red en loadActiveVotingState, usando caché local:', err);
       }
-      writeLocal(LS_KEY_VOTERS, data.voters);
-      return data.voters;
+      return loadCachedActiveVoting();
     }
+    throw err;
+  }
+}
+
+async function fetchFirestoreVoters(): Promise<Voter[]> {
+  if (!isFirebaseReady()) return [];
+
+  const db = getFirestoreInstance()!;
+  const docRef = doc(db, COLLECTION_GROUP, DOC_MIEMBROS);
+  const snap = await getDoc(docRef);
+  if (!snap.exists()) {
     writeLocal(LS_KEY_VOTERS, []);
     return [];
-  } catch (err) {
-    if (import.meta.env.DEV) {
-      console.warn('[Store] Error recuperando participantes remotos:', err);
-    }
-    return null;
   }
+
+  const data = snap.data() as GrupoDocument;
+  if (Array.isArray(data.voters)) {
+    if (import.meta.env.DEV) {
+      console.log('[Store] Datos de participantes recuperados.');
+    }
+    writeLocal(LS_KEY_VOTERS, data.voters);
+    return data.voters;
+  }
+  writeLocal(LS_KEY_VOTERS, []);
+  return [];
 }
 
 /**
- * Carga la lista de votantes. Prioriza la votación activa en Firestore, fallback a la colección de grupo y localStorage solo en modo offline.
+ * Carga la lista de votantes. Prioriza la votación activa en Firestore, luego la colección de grupo y localStorage solo en modo offline o falla de red.
+ * Distingue explícitamente entre resultado remoto legítimo (incluso vacío), falla transitoria de red y error no transitorio.
  */
 export async function loadVoters(): Promise<Voter[]> {
-  if (isFirebaseReady()) {
-    try {
-      const activeVoting = await fetchFirestoreActiveVoting();
-      if (activeVoting) {
-        return activeVoting.voters;
-      }
-
-      const firestoreVoters = await fetchFirestoreVoters();
-      if (firestoreVoters !== null) {
-        return firestoreVoters;
-      }
-    } catch (err) {
-      if (import.meta.env.DEV) {
-        console.warn('[Store] Error cargando votantes remotos, usando fallback local:', err);
-      }
-    }
+  if (!isFirebaseReady()) {
+    return readLocal<Voter[]>(LS_KEY_VOTERS, []);
   }
 
-  return readLocal<Voter[]>(LS_KEY_VOTERS, []);
+  try {
+    const activeVoting = await fetchFirestoreActiveVoting();
+    if (activeVoting && Array.isArray(activeVoting.voters)) {
+      return activeVoting.voters;
+    }
+
+    return await fetchFirestoreVoters();
+  } catch (err) {
+    if (isNetworkOrOfflineError(err)) {
+      if (import.meta.env.DEV) {
+        console.warn('[Store] Falla transitoria de red en loadVoters, usando fallback local:', err);
+      }
+      return readLocal<Voter[]>(LS_KEY_VOTERS, []);
+    }
+    throw err;
+  }
 }
 
 /**
@@ -971,73 +978,65 @@ export async function saveGames(gamesMap: Record<string, Game>): Promise<SyncSta
   });
 }
 
-/**
- * Carga el mapa de juegos desde Firestore. Si el documento remoto no existe o está vacío, retorna el mapa correspondiente y actualiza la caché.
- */
-async function fetchFirestoreGames(): Promise<Record<string, Game> | null> {
-  if (!isFirebaseReady()) return null;
+async function fetchFirestoreGames(): Promise<Record<string, Game>> {
+  if (!isFirebaseReady()) return {};
 
-  try {
-    const db = getFirestoreInstance()!;
-    const docRef = doc(db, COLLECTION_GROUP, DOC_MIEMBROS);
-    const snap = await getDoc(docRef);
-    if (!snap.exists()) {
-      writeLocal(LS_KEY_GAMES, {});
-      return {};
-    }
-
-    const data = snap.data() as GrupoDocument;
-    if (data.gamesMap && typeof data.gamesMap === 'object') {
-      if (import.meta.env.DEV) {
-        console.log('[Store] Catálogo recuperado.');
-      }
-      const cleanMap = sanitizeGamesMap(data.gamesMap);
-      writeLocal(LS_KEY_GAMES, cleanMap);
-      return cleanMap;
-    }
-    // Fallback: si solo existe el array `games`, reconstruir el mapa
-    if (Array.isArray(data.games)) {
-      const rebuiltMap: Record<string, Game> = {};
-      data.games.forEach((g) => { rebuiltMap[g.id] = sanitizeGame(g); });
-      if (import.meta.env.DEV) {
-        console.log('[Store] Estructura reconstruida desde datos existentes.');
-      }
-      writeLocal(LS_KEY_GAMES, rebuiltMap);
-      return rebuiltMap;
-    }
+  const db = getFirestoreInstance()!;
+  const docRef = doc(db, COLLECTION_GROUP, DOC_MIEMBROS);
+  const snap = await getDoc(docRef);
+  if (!snap.exists()) {
     writeLocal(LS_KEY_GAMES, {});
     return {};
-  } catch (err) {
-    if (import.meta.env.DEV) {
-      console.warn('[Store] Error recuperando catálogo:', err);
-    }
-    return null;
   }
+
+  const data = snap.data() as GrupoDocument;
+  if (data.gamesMap && typeof data.gamesMap === 'object') {
+    if (import.meta.env.DEV) {
+      console.log('[Store] Catálogo recuperado.');
+    }
+    const cleanMap = sanitizeGamesMap(data.gamesMap);
+    writeLocal(LS_KEY_GAMES, cleanMap);
+    return cleanMap;
+  }
+  // Fallback: si solo existe el array `games`, reconstruir el mapa
+  if (Array.isArray(data.games)) {
+    const rebuiltMap: Record<string, Game> = {};
+    data.games.forEach((g) => { rebuiltMap[g.id] = sanitizeGame(g); });
+    if (import.meta.env.DEV) {
+      console.log('[Store] Estructura reconstruida desde datos existentes.');
+    }
+    writeLocal(LS_KEY_GAMES, rebuiltMap);
+    return rebuiltMap;
+  }
+  writeLocal(LS_KEY_GAMES, {});
+  return {};
 }
 
 /**
- * Carga el mapa de juegos. Prioriza la votación activa en Firestore, fallback a la colección de grupo y localStorage solo en modo offline.
+ * Carga el mapa de juegos. Prioriza la votación activa en Firestore, luego la colección de grupo y localStorage solo en modo offline o falla de red.
+ * Distingue explícitamente entre resultado remoto legítimo (incluso vacío), falla transitoria de red y error no transitorio.
  */
 export async function loadGames(): Promise<Record<string, Game>> {
-  if (isFirebaseReady()) {
-    try {
-      const activeVoting = await fetchFirestoreActiveVoting();
-      if (activeVoting) {
-        return activeVoting.gamesMap;
-      }
-
-      const firestoreGames = await fetchFirestoreGames();
-      if (firestoreGames !== null) {
-        return firestoreGames;
-      }
-    } catch (err) {
-      if (import.meta.env.DEV) {
-        console.warn('[Store] Error cargando catálogo remoto, usando fallback local:', err);
-      }
-    }
+  if (!isFirebaseReady()) {
+    return sanitizeGamesMap(readLocal<Record<string, Game>>(LS_KEY_GAMES, {}));
   }
 
-  return sanitizeGamesMap(readLocal<Record<string, Game>>(LS_KEY_GAMES, {}));
+  try {
+    const activeVoting = await fetchFirestoreActiveVoting();
+    if (activeVoting?.gamesMap) {
+      return activeVoting.gamesMap;
+    }
+
+    return await fetchFirestoreGames();
+  } catch (err) {
+    if (isNetworkOrOfflineError(err)) {
+      if (import.meta.env.DEV) {
+        console.warn('[Store] Falla transitoria de red en loadGames, usando fallback local:', err);
+      }
+      return sanitizeGamesMap(readLocal<Record<string, Game>>(LS_KEY_GAMES, {}));
+    }
+    throw err;
+  }
 }
 
 function appendLocalHistoryRecord(cleanRecord: VotingHistoryRecord): boolean {
@@ -1227,40 +1226,54 @@ export async function saveFinishedVotingSession(
   }, { isBarrier: true });
 }
 
+function getSortedLocalHistory(): VotingHistoryRecord[] {
+  const localHistory = readLocal<VotingHistoryRecord[]>(LS_KEY_HISTORY, []);
+  if (localHistory.length === 0) return [];
+  const sanitized = localHistory.map(sanitizeVotingHistoryRecord);
+  sanitized.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  return sanitized;
+}
+
 /**
  * Carga completamente el historial de votaciones. Prioriza Firestore, fallback a localStorage solo en modo offline o error de red.
+ * Distingue explícitamente entre:
+ * 1. Resultado remoto válido (registros encontrados o colección vacía legítima).
+ * 2. Falla transitoria de conectividad / sin conexión (recurre a la caché local de respaldo).
+ * 3. Error real no transitorio (permisos, consulta inválida), propagando la excepción.
  */
 export async function loadHistory(): Promise<VotingHistoryRecord[]> {
-  if (isFirebaseReady()) {
-    try {
-      const db = getFirestoreInstance()!;
-      const colRef = collection(db, COLLECTION_HISTORY);
-      const q = query(colRef, orderBy('savedAt', 'desc'));
-      const snap = await getDocs(q);
-      const records: VotingHistoryRecord[] = [];
-      if (!snap.empty) {
-        snap.forEach((d) => {
-          const data = d.data() as VotingHistoryRecord & { savedAt?: Timestamp; createdAt?: Timestamp | string };
-          records.push(sanitizeVotingHistoryRecord(data));
-        });
-        // Orden canónico estricto por fecha de creación descendente
-        records.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-        if (import.meta.env.DEV) {
-          console.log('[Store] Registros previos recuperados.');
-        }
-      }
-      writeLocal(LS_KEY_HISTORY, records);
-      return records;
-    } catch (err) {
+  if (!isFirebaseReady()) {
+    return getSortedLocalHistory();
+  }
+
+  try {
+    const db = getFirestoreInstance()!;
+    const colRef = collection(db, COLLECTION_HISTORY);
+    const q = query(colRef, orderBy('savedAt', 'desc'));
+    const snap = await getDocs(q);
+    const records: VotingHistoryRecord[] = [];
+    if (!snap.empty) {
+      snap.forEach((d) => {
+        const data = d.data() as VotingHistoryRecord & { savedAt?: Timestamp; createdAt?: Timestamp | string };
+        records.push(sanitizeVotingHistoryRecord(data));
+      });
+      // Orden canónico estricto por fecha de creación descendente
+      records.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       if (import.meta.env.DEV) {
-        console.warn('[Store] Error recuperando registros remotos:', err);
+        console.log('[Store] Registros previos recuperados.');
       }
     }
+    writeLocal(LS_KEY_HISTORY, records);
+    return records;
+  } catch (err) {
+    if (isNetworkOrOfflineError(err)) {
+      if (import.meta.env.DEV) {
+        console.warn('[Store] Falla transitoria de red en loadHistory, usando fallback local:', err);
+      }
+      return getSortedLocalHistory();
+    }
+    throw err;
   }
-  const localHistory = readLocal<VotingHistoryRecord[]>(LS_KEY_HISTORY, []);
-  const sanitizedLocal = localHistory.map(sanitizeVotingHistoryRecord);
-  sanitizedLocal.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  return sanitizedLocal;
 }
 
 export interface InitialDashboardData {
@@ -1270,14 +1283,6 @@ export interface InitialDashboardData {
   apiKey: string;
   freezeState: FreezePriceState;
   hasExistingData: boolean;
-}
-
-function getSortedLocalHistory(): VotingHistoryRecord[] {
-  const localHistory = readLocal<VotingHistoryRecord[]>(LS_KEY_HISTORY, []);
-  if (localHistory.length === 0) return [];
-  const sanitized = localHistory.map(sanitizeVotingHistoryRecord);
-  sanitized.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  return sanitized;
 }
 
 function resolveInitialVoters(

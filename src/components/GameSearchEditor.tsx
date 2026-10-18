@@ -11,6 +11,7 @@ interface GameSearchEditorProps {
   onDeleteGame: (gameId: string) => void;
   minGames: number;
   maxGames: number;
+  disabled?: boolean;
 }
 
 export const GameSearchEditor = ({
@@ -20,11 +21,12 @@ export const GameSearchEditor = ({
   onDeleteGame,
   minGames,
   maxGames,
+  disabled = false,
 }: GameSearchEditorProps) => {
   const gameIds = Object.keys(gamesMap);
   const gameCount = gameIds.length;
-  const canAdd = gameCount < maxGames;
-  const canDelete = gameCount > minGames;
+  const canAdd = gameCount < maxGames && !disabled;
+  const canDelete = gameCount > minGames && !disabled;
 
   return (
     <div className="game-search-editor-container">
@@ -47,6 +49,7 @@ export const GameSearchEditor = ({
             onDeleteGame={onDeleteGame}
             canDelete={canDelete}
             minGames={minGames}
+            disabled={disabled}
           />
         ))}
 
@@ -55,8 +58,9 @@ export const GameSearchEditor = ({
             type="button"
             className="btn-add-game-slot"
             onClick={onAddGame}
-            whileHover={{ scale: 1.03, y: -3 }}
-            whileTap={{ scale: 0.97 }}
+            disabled={disabled}
+            whileHover={disabled ? {} : { scale: 1.03, y: -3 }}
+            whileTap={disabled ? {} : { scale: 0.97 }}
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ type: 'spring', stiffness: 300, damping: 25 }}
@@ -247,10 +251,11 @@ interface SingleGameSlotEditorProps {
   onDeleteGame: (gameId: string) => void;
   canDelete: boolean;
   minGames: number;
+  disabled?: boolean;
 }
 
 /* ── Sub-componente: fila superior con badge y botón eliminar/bloqueo ── */
-const SlotBadgeRow = ({ slotIndex, gameId, game, canDelete, isLoadingDetails, minGames, onDeleteGame }: {
+const SlotBadgeRow = ({ slotIndex, gameId, game, canDelete, isLoadingDetails, minGames, onDeleteGame, disabled = false }: {
   slotIndex: number;
   gameId: string;
   game: Game;
@@ -258,35 +263,45 @@ const SlotBadgeRow = ({ slotIndex, gameId, game, canDelete, isLoadingDetails, mi
   isLoadingDetails: boolean;
   minGames: number;
   onDeleteGame: (gameId: string) => void;
-}) => (
-  <div className="slot-badge-row">
-    <div className="slot-badge">Juego #{slotIndex}</div>
-    {canDelete ? (
-      <motion.button
-        type="button"
-        className={`btn-delete-game-slot ${isLoadingDetails ? 'disabled' : ''}`}
-        onClick={() => !isLoadingDetails && onDeleteGame(gameId)}
-        disabled={isLoadingDetails}
-        title={isLoadingDetails ? 'Esperá a que finalice la sincronización de detalles...' : 'Quitar este juego de la votación'}
-        aria-label={`Eliminar juego ${game.title || slotIndex}`}
-        whileHover={{ scale: isLoadingDetails ? 1 : 1.05 }}
-        whileTap={{ scale: isLoadingDetails ? 1 : 0.92 }}
-      >
-        🗑️ Eliminar Juego
-      </motion.button>
-    ) : (
-      <motion.button
-        type="button"
-        className="btn-delete-game-slot disabled"
-        disabled
-        title={`Deben quedar al menos ${minGames} juegos. Agregá un juego antes de eliminar.`}
-        aria-label={`No se puede eliminar: mínimo ${minGames} juegos requeridos`}
-      >
-        🔒 Mínimo {minGames}
-      </motion.button>
-    )}
-  </div>
-);
+  disabled?: boolean;
+}) => {
+  let deleteButtonTitle = 'Quitar este juego de la votación';
+  if (disabled) {
+    deleteButtonTitle = 'Modificación bloqueada durante la importación';
+  } else if (isLoadingDetails) {
+    deleteButtonTitle = 'Esperá a que finalice la sincronización de detalles...';
+  }
+
+  return (
+    <div className="slot-badge-row">
+      <div className="slot-badge">Juego #{slotIndex}</div>
+      {canDelete ? (
+        <motion.button
+          type="button"
+          className={`btn-delete-game-slot ${isLoadingDetails || disabled ? 'disabled' : ''}`}
+          onClick={() => !isLoadingDetails && !disabled && onDeleteGame(gameId)}
+          disabled={isLoadingDetails || disabled}
+          title={deleteButtonTitle}
+          aria-label={`Eliminar juego ${game.title || slotIndex}`}
+          whileHover={{ scale: isLoadingDetails || disabled ? 1 : 1.05 }}
+          whileTap={{ scale: isLoadingDetails || disabled ? 1 : 0.92 }}
+        >
+          🗑️ Eliminar Juego
+        </motion.button>
+      ) : (
+        <motion.button
+          type="button"
+          className="btn-delete-game-slot disabled"
+          disabled
+          title={`Deben quedar al menos ${minGames} juegos. Agregá un juego antes de eliminar.`}
+          aria-label={`No se puede eliminar: mínimo ${minGames} juegos requeridos`}
+        >
+          🔒 Mínimo {minGames}
+        </motion.button>
+      )}
+    </div>
+  );
+};
 
 /* ── Sub-componente: previsualización de la portada y metadata ── */
 const SlotPreview = ({ game, isLoadingDetails }: {
@@ -316,6 +331,7 @@ const SteamSearchSection = ({
   gameId, isLoadingDetails, searchTerm, searchResults, isSearching,
   showDropdown, focusedIndex, dropdownRef, setShowDropdown,
   handleSearchTermChange, handleKeyDown, handleSelectSteamGame,
+  disabled = false,
 }: {
   gameId: string;
   isLoadingDetails: boolean;
@@ -329,83 +345,89 @@ const SteamSearchSection = ({
   handleSearchTermChange: (v: string) => void;
   handleKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
   handleSelectSteamGame: (item: SteamSearchResultItem) => void;
-}) => (
-  <div className="slot-search-container" ref={dropdownRef}>
-    <label htmlFor={`slot-search-input-${gameId}`} className="slot-label">🔍 Buscar en Steam Store:</label>
-    <div className="search-input-wrapper">
-      <input
-        id={`slot-search-input-${gameId}`}
-        type="text"
-        role="combobox"
-        className="slot-search-input"
-        placeholder={
-          isLoadingDetails
-            ? 'Obteniendo detalles del juego...'
-            : 'Escribe para buscar (ej: Helldivers, Elden, Rust)...'
-        }
-        value={searchTerm}
-        onChange={(e) => handleSearchTermChange(e.target.value)}
-        onKeyDown={handleKeyDown}
-        onFocus={() => searchResults.length > 0 && setShowDropdown(true)}
-        disabled={isLoadingDetails}
-        aria-autocomplete="list"
-        aria-expanded={showDropdown && searchResults.length > 0}
-        aria-controls={`steam-results-${gameId}`}
-        aria-activedescendant={
-          showDropdown && focusedIndex >= 0 && searchResults[focusedIndex]
-            ? `steam-option-${gameId}-${searchResults[focusedIndex].id}`
-            : undefined
-        }
-      />
-      {(isSearching || isLoadingDetails) && (
-        <span
-          className="search-spinner"
-          title={isLoadingDetails ? 'Obteniendo detalles de Steam...' : 'Buscando en Steam...'}
+  disabled?: boolean;
+}) => {
+  let searchPlaceholder = 'Escribe para buscar (ej: Helldivers, Elden, Rust)...';
+  if (disabled) {
+    searchPlaceholder = 'Importación en curso...';
+  } else if (isLoadingDetails) {
+    searchPlaceholder = 'Obteniendo detalles del juego...';
+  }
+
+  return (
+    <div className="slot-search-container" ref={dropdownRef}>
+      <label htmlFor={`slot-search-input-${gameId}`} className="slot-label">🔍 Buscar en Steam Store:</label>
+      <div className="search-input-wrapper">
+        <input
+          id={`slot-search-input-${gameId}`}
+          type="text"
+          role="combobox"
+          className="slot-search-input"
+          placeholder={searchPlaceholder}
+          value={searchTerm}
+          onChange={(e) => !disabled && handleSearchTermChange(e.target.value)}
+          onKeyDown={(e) => !disabled && handleKeyDown(e)}
+          onFocus={() => !disabled && searchResults.length > 0 && setShowDropdown(true)}
+          disabled={isLoadingDetails || disabled}
+          aria-autocomplete="list"
+          aria-expanded={showDropdown && searchResults.length > 0}
+          aria-controls={`steam-results-${gameId}`}
+          aria-activedescendant={
+            showDropdown && focusedIndex >= 0 && searchResults[focusedIndex]
+              ? `steam-option-${gameId}-${searchResults[focusedIndex].id}`
+              : undefined
+          }
+        />
+        {(isSearching || isLoadingDetails) && (
+          <span
+            className="search-spinner"
+            title={isLoadingDetails ? 'Obteniendo detalles de Steam...' : 'Buscando en Steam...'}
+          >
+            ⏳
+          </span>
+        )}
+      </div>
+
+      {/* STEAM STORE TYPEAHEAD DROPDOWN */}
+      {showDropdown && searchResults.length > 0 && !disabled && (
+        <div
+          id={`steam-results-${gameId}`}
+          className="steam-search-dropdown"
+          role="listbox"
+          aria-label="Resultados de búsqueda de Steam"
         >
-          ⏳
-        </span>
+          {searchResults.map((item, idx) => (
+            <motion.div
+              key={item.id}
+              id={`steam-option-${gameId}-${item.id}`}
+              role="option"
+              tabIndex={-1}
+              className={`dropdown-item-row ${idx === focusedIndex ? 'focused' : ''}`}
+              aria-selected={idx === focusedIndex}
+              onClick={() => handleSelectSteamGame(item)}
+              whileHover={{ scale: 1.01, backgroundColor: 'rgba(102, 192, 244, 0.15)' }}
+              whileTap={{ scale: 0.98 }}
+            >
+              <img src={item.tiny_image} alt={item.name} className="dropdown-item-thumb" loading="lazy" />
+              <div className="dropdown-item-info">
+                <span className="dropdown-item-title">{item.name}</span>
+                <span className="dropdown-item-meta">
+                  AppID: {item.id} • {item.price_formatted}
+                </span>
+              </div>
+            </motion.div>
+          ))}
+        </div>
       )}
     </div>
-
-    {/* STEAM STORE TYPEAHEAD DROPDOWN */}
-    {showDropdown && searchResults.length > 0 && (
-      <div
-        id={`steam-results-${gameId}`}
-        className="steam-search-dropdown"
-        role="listbox"
-        aria-label="Resultados de búsqueda de Steam"
-      >
-        {searchResults.map((item, idx) => (
-          <motion.div
-            key={item.id}
-            id={`steam-option-${gameId}-${item.id}`}
-            role="option"
-            tabIndex={-1}
-            className={`dropdown-item-row ${idx === focusedIndex ? 'focused' : ''}`}
-            aria-selected={idx === focusedIndex}
-            onClick={() => handleSelectSteamGame(item)}
-            whileHover={{ scale: 1.01, backgroundColor: 'rgba(102, 192, 244, 0.15)' }}
-            whileTap={{ scale: 0.98 }}
-          >
-            <img src={item.tiny_image} alt={item.name} className="dropdown-item-thumb" loading="lazy" />
-            <div className="dropdown-item-info">
-              <span className="dropdown-item-title">{item.name}</span>
-              <span className="dropdown-item-meta">
-                AppID: {item.id} • {item.price_formatted}
-              </span>
-            </div>
-          </motion.div>
-        ))}
-      </div>
-    )}
-  </div>
-);
+  );
+};
 
 /* ── Sub-componente: campos manuales de edición (título, descripción, portada) ── */
 const ManualEditControls = ({
   gameId, game, isLoadingDetails, customCoverUrl, uploadError,
   setCustomCoverUrl, handleTitleChange, handleDescriptionChange,
-  handleApplyCustomCover, handleFileUpload,
+  handleApplyCustomCover, handleFileUpload, disabled = false,
 }: {
   gameId: string;
   game: Game;
@@ -417,76 +439,86 @@ const ManualEditControls = ({
   handleDescriptionChange: (v: string) => void;
   handleApplyCustomCover: () => void;
   handleFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
-}) => (
-  <div className="slot-manual-controls">
-    <div className="manual-field">
-      <label htmlFor={`manual-title-input-${gameId}`} className="manual-label">Editar Nombre Manual:</label>
-      <input
-        id={`manual-title-input-${gameId}`}
-        type="text"
-        className="manual-input"
-        value={game.title || ''}
-        onChange={(e) => handleTitleChange(e.target.value)}
-        disabled={isLoadingDetails}
-      />
-    </div>
+  disabled?: boolean;
+}) => {
+  let fileUploadTitle = 'Subir imagen local (máx 2 MB)';
+  if (disabled) {
+    fileUploadTitle = 'Modificación bloqueada durante la importación';
+  } else if (isLoadingDetails) {
+    fileUploadTitle = 'Sincronizando con Steam...';
+  }
 
-    <div className="manual-field">
-      <label htmlFor={`desc-input-${gameId}`} className="manual-label">Editar Descripción Manual:</label>
-      <textarea
-        id={`desc-input-${gameId}`}
-        className="manual-input manual-textarea"
-        rows={3}
-        value={game.description || ''}
-        onChange={(e) => handleDescriptionChange(e.target.value)}
-        placeholder="Descripción corta del juego..."
-        disabled={isLoadingDetails}
-      />
-    </div>
-
-    <div className="manual-field">
-      <label htmlFor={`cover-url-input-${gameId}`} className="manual-label">Portada por URL / Archivo:</label>
-      <div className="manual-cover-row">
+  return (
+    <div className="slot-manual-controls">
+      <div className="manual-field">
+        <label htmlFor={`manual-title-input-${gameId}`} className="manual-label">Editar Nombre Manual:</label>
         <input
-          id={`cover-url-input-${gameId}`}
+          id={`manual-title-input-${gameId}`}
           type="text"
-          className="manual-input small-input"
-          placeholder="Pegar URL de portada..."
-          value={customCoverUrl}
-          onChange={(e) => setCustomCoverUrl(e.target.value)}
-          disabled={isLoadingDetails}
+          className="manual-input"
+          value={game.title || ''}
+          onChange={(e) => handleTitleChange(e.target.value)}
+          disabled={isLoadingDetails || disabled}
         />
-        <motion.button
-          type="button"
-          className={`btn-apply-cover ${isLoadingDetails ? 'disabled' : ''}`}
-          onClick={() => !isLoadingDetails && handleApplyCustomCover()}
-          disabled={isLoadingDetails}
-          whileHover={{ scale: isLoadingDetails ? 1 : 1.05 }}
-          whileTap={{ scale: isLoadingDetails ? 1 : 0.95 }}
-        >
-          Ok
-        </motion.button>
-        <motion.label
-          htmlFor={`file-cover-input-${gameId}`}
-          className={`file-cover-btn ${isLoadingDetails ? 'disabled' : ''}`}
-          title={isLoadingDetails ? 'Sincronizando con Steam...' : 'Subir imagen local (máx 2 MB)'}
-          whileHover={{ scale: isLoadingDetails ? 1 : 1.05 }}
-          whileTap={{ scale: isLoadingDetails ? 1 : 0.95 }}
-        >
-          <span>📁</span>
-          <input
-            id={`file-cover-input-${gameId}`}
-            type="file"
-            accept="image/*"
-            onChange={handleFileUpload}
-            disabled={isLoadingDetails}
-          />
-        </motion.label>
       </div>
-      {uploadError && <div className="slot-upload-error">⚠️ {uploadError}</div>}
+
+      <div className="manual-field">
+        <label htmlFor={`desc-input-${gameId}`} className="manual-label">Editar Descripción Manual:</label>
+        <textarea
+          id={`desc-input-${gameId}`}
+          className="manual-input manual-textarea"
+          rows={3}
+          value={game.description || ''}
+          onChange={(e) => handleDescriptionChange(e.target.value)}
+          placeholder="Descripción corta del juego..."
+          disabled={isLoadingDetails || disabled}
+        />
+      </div>
+
+      <div className="manual-field">
+        <label htmlFor={`cover-url-input-${gameId}`} className="manual-label">Portada por URL / Archivo:</label>
+        <div className="manual-cover-row">
+          <input
+            id={`cover-url-input-${gameId}`}
+            type="text"
+            className="manual-input small-input"
+            placeholder="Pegar URL de portada..."
+            value={customCoverUrl}
+            onChange={(e) => setCustomCoverUrl(e.target.value)}
+            disabled={isLoadingDetails || disabled}
+          />
+          <motion.button
+            type="button"
+            className={`btn-apply-cover ${isLoadingDetails || disabled ? 'disabled' : ''}`}
+            onClick={() => !isLoadingDetails && !disabled && handleApplyCustomCover()}
+            disabled={isLoadingDetails || disabled}
+            whileHover={{ scale: isLoadingDetails || disabled ? 1 : 1.05 }}
+            whileTap={{ scale: isLoadingDetails || disabled ? 1 : 0.95 }}
+          >
+            Ok
+          </motion.button>
+          <motion.label
+            htmlFor={`file-cover-input-${gameId}`}
+            className={`file-cover-btn ${isLoadingDetails || disabled ? 'disabled' : ''}`}
+            title={fileUploadTitle}
+            whileHover={{ scale: isLoadingDetails || disabled ? 1 : 1.05 }}
+            whileTap={{ scale: isLoadingDetails || disabled ? 1 : 0.95 }}
+          >
+            <span>📁</span>
+            <input
+              id={`file-cover-input-${gameId}`}
+              type="file"
+              accept="image/*"
+              onChange={handleFileUpload}
+              disabled={isLoadingDetails || disabled}
+            />
+          </motion.label>
+        </div>
+        {uploadError && <div className="slot-upload-error">⚠️ {uploadError}</div>}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 const SingleGameSlotEditor = ({
   slotIndex,
@@ -496,6 +528,7 @@ const SingleGameSlotEditor = ({
   onDeleteGame,
   canDelete,
   minGames,
+  disabled = false,
 }: SingleGameSlotEditorProps) => {
   const {
     searchTerm,
@@ -545,6 +578,7 @@ const SingleGameSlotEditor = ({
 
   // Handle selecting a game from Steam Search results
   const handleSelectSteamGame = async (item: SteamSearchResultItem) => {
+    if (disabled) return;
     const requestId = ++selectionRequestRef.current;
     setIsLoadingDetails(true);
 
@@ -587,16 +621,19 @@ const SingleGameSlotEditor = ({
 
   // Handle manual title edit
   const handleTitleChange = (newTitle: string) => {
+    if (disabled) return;
     onUpdateGame(gameId, { ...game, title: newTitle });
   };
 
   // Handle manual description edit
   const handleDescriptionChange = (newDesc: string) => {
+    if (disabled) return;
     onUpdateGame(gameId, { ...game, description: newDesc });
   };
 
   // Handle custom cover image URL with protocol validation
   const handleApplyCustomCover = () => {
+    if (disabled) return;
     const trimmedUrl = customCoverUrl.trim();
     if (!trimmedUrl) return;
 
@@ -612,6 +649,7 @@ const SingleGameSlotEditor = ({
 
   // Handle local file image upload with size limit and Canvas optimization
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (disabled) return;
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -651,6 +689,7 @@ const SingleGameSlotEditor = ({
         isLoadingDetails={isLoadingDetails}
         minGames={minGames}
         onDeleteGame={onDeleteGame}
+        disabled={disabled}
       />
 
       <SlotPreview game={game} isLoadingDetails={isLoadingDetails} />
@@ -668,6 +707,7 @@ const SingleGameSlotEditor = ({
         handleSearchTermChange={handleSearchTermChange}
         handleKeyDown={handleKeyDown}
         handleSelectSteamGame={handleSelectSteamGame}
+        disabled={disabled}
       />
 
       <ManualEditControls
@@ -681,6 +721,7 @@ const SingleGameSlotEditor = ({
         handleDescriptionChange={handleDescriptionChange}
         handleApplyCustomCover={handleApplyCustomCover}
         handleFileUpload={handleFileUpload}
+        disabled={disabled}
       />
     </div>
   );

@@ -11,9 +11,8 @@ import { DeleteUserConfirmModal } from './DeleteUserConfirmModal';
 import { DashboardSkeleton } from './DashboardSkeleton';
 import { AdminPinModal } from './AdminPinModal';
 import { useModalFocusTrap } from '../hooks/useModalFocusTrap';
-import { calculateResults } from '../data/votingData';
+import { calculateResults, removeGameFromVotingSession, addGameToVotingSession } from '../data/votingData';
 import type { Voter, Game, VotingHistoryRecord, AuraRank, FreezePriceState, SteamPriceInfo, GameResult } from '../types/voting';
-import { getMaxVotePoints } from '../types/voting';
 import { FaCog } from "react-icons/fa";
 import { formatCopPrice } from '../services/steamStoreApi';
 
@@ -166,11 +165,18 @@ const ResetAuraConfirmModal = ({
   onCancel,
 }: ResetAuraConfirmModalProps) => {
   const [isResetting, setIsResetting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const cancelButtonRef = useRef<HTMLButtonElement>(null);
+
+  const handleCancel = () => {
+    if (isResetting) return;
+    setErrorMessage(null);
+    onCancel();
+  };
 
   const modalRef = useModalFocusTrap<HTMLDivElement>({
     initialFocusRef: cancelButtonRef,
-    onEscape: isResetting ? undefined : onCancel,
+    onEscape: isResetting ? undefined : handleCancel,
     disabled: isResetting,
     initialFocusDelay: 100,
   });
@@ -179,9 +185,13 @@ const ResetAuraConfirmModal = ({
     if (isResetting) return;
 
     setIsResetting(true);
+    setErrorMessage(null);
 
     try {
       await onConfirm();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al restablecer Aura';
+      setErrorMessage(message);
     } finally {
       setIsResetting(false);
     }
@@ -196,7 +206,7 @@ const ResetAuraConfirmModal = ({
       transition={{ duration: 0.25 }}
       onClick={() => {
         if (!isResetting) {
-          onCancel();
+          handleCancel();
         }
       }}
     >
@@ -225,11 +235,7 @@ const ResetAuraConfirmModal = ({
           <motion.button
             type="button"
             className="modal-close-btn"
-            onClick={() => {
-              if (!isResetting) {
-                onCancel();
-              }
-            }}
+            onClick={handleCancel}
             aria-label="Cerrar"
             disabled={isResetting}
             whileHover={isResetting ? {} : { scale: 1.15 }}
@@ -246,6 +252,15 @@ const ResetAuraConfirmModal = ({
             <p className="delete-warning-note">
               <span aria-hidden="true">📊</span> <strong>Nota:</strong> Esta acción no afectará el historial de votaciones ni los juegos guardados. Solo se modificarán los niveles de Aura.
             </p>
+            {errorMessage && (
+              <div className="finish-modal-error-banner" role="alert" style={{ marginTop: '12px' }}>
+                <span className="finish-modal-error-icon" aria-hidden="true">❌</span>
+                <div className="finish-modal-error-content">
+                  <span className="finish-modal-error-title">Error al restablecer</span>
+                  <p className="finish-modal-error-text">{errorMessage}</p>
+                </div>
+              </div>
+            )}
           </section>
         </div>
 
@@ -254,11 +269,7 @@ const ResetAuraConfirmModal = ({
             ref={cancelButtonRef}
             type="button"
             className="btn-modal-cancel"
-            onClick={() => {
-              if (!isResetting) {
-                onCancel();
-              }
-            }}
+            onClick={handleCancel}
             disabled={isResetting}
             whileHover={isResetting ? {} : { scale: 1.03 }}
             whileTap={isResetting ? {} : { scale: 0.97 }}
@@ -342,6 +353,22 @@ function getVoterCountBadgeText(isEditMode: boolean, isMobile: boolean, count: n
   return isMobile ? '⚙️ Editá integrantes y juegos' : '🖐️ Arrastrá tarjetas / Editá juegos arriba';
 }
 
+function hasCurrentDashboardData(
+  voters: Voter[],
+  gamesMap: Record<string, Game>,
+  history: VotingHistoryRecord[],
+  steamApiKey: string,
+  freezeState: FreezePriceState
+): boolean {
+  return (
+    voters.length > 0 ||
+    history.length > 0 ||
+    Object.keys(gamesMap).length > 0 ||
+    Boolean(steamApiKey && steamApiKey.trim().length > 0) ||
+    Boolean(freezeState.isPrecioCongelado)
+  );
+}
+
 function confirmBackupOverwrite(hasExistingData: boolean): boolean {
   if (!hasExistingData) return true;
   return window.confirm(
@@ -409,10 +436,8 @@ function useAutoUnfreezeWatcher(
       void Promise.resolve().then(() => {
         void autoUnfreezePrice('cambio en lista de juegos');
       });
-    }
-
-    // 2. Si el juego ganador cambió
-    if (
+    } else if (
+      // 2. Si el juego ganador cambió
       freezeState.isPrecioCongelado &&
       freezeState.gameId &&
       winnerId &&
@@ -421,10 +446,11 @@ function useAutoUnfreezeWatcher(
       void Promise.resolve().then(() => {
         void autoUnfreezePrice('cambio de juego ganador');
       });
-    }
-
-    // 3. Si se limpiaron todos los votos de la sesión
-    if (freezeState.isPrecioCongelado && totalAssignedPoints === 0) {
+    } else if (
+      // 3. Si se limpiaron todos los votos de la sesión
+      freezeState.isPrecioCongelado &&
+      totalAssignedPoints === 0
+    ) {
       void Promise.resolve().then(() => {
         void autoUnfreezePrice('votos reiniciados');
       });
@@ -446,50 +472,73 @@ function useAutoUnfreezeWatcher(
 
 function useVotersDragAndDrop(
   setVoters: React.Dispatch<React.SetStateAction<Voter[]>>,
-  isMobile: boolean
+  isMobile: boolean,
+  disabled = false
 ) {
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const draggedIndexRef = useRef<number | null>(null);
 
   const handleDragStart = useCallback((e: React.DragEvent, index: number) => {
+    if (disabled) {
+      e.preventDefault();
+      return;
+    }
+    draggedIndexRef.current = index;
     setDraggedIndex(index);
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', index.toString());
-  }, []);
+  }, [disabled]);
 
   const handleDragOver = useCallback((e: React.DragEvent, index: number) => {
+    if (disabled) {
+      return;
+    }
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     setDragOverIndex((prev) => (prev !== index ? index : prev));
-  }, []);
+  }, [disabled]);
 
   const handleDrop = useCallback((e: React.DragEvent, targetIndex: number) => {
     e.preventDefault();
-    setDraggedIndex((currentDragged) => {
-      if (currentDragged === null || currentDragged === targetIndex) {
-        setDragOverIndex(null);
-        return null;
-      }
-
-      setVoters((prevVoters) => {
-        const updated = [...prevVoters];
-        const [draggedItem] = updated.splice(currentDragged, 1);
-        updated.splice(targetIndex, 0, draggedItem);
-        return updated;
-      });
-
+    if (disabled) {
+      draggedIndexRef.current = null;
       setDragOverIndex(null);
-      return null;
+      setDraggedIndex(null);
+      return;
+    }
+
+    const dataIndexStr = e.dataTransfer.getData('text/plain');
+    const parsedDataIndex = dataIndexStr !== '' ? Number.parseInt(dataIndexStr, 10) : null;
+    const sourceIndex = draggedIndexRef.current ?? (parsedDataIndex !== null && !Number.isNaN(parsedDataIndex) ? parsedDataIndex : null);
+
+    draggedIndexRef.current = null;
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+
+    if (sourceIndex === null || sourceIndex === targetIndex) {
+      return;
+    }
+
+    setVoters((prevVoters) => {
+      if (sourceIndex < 0 || sourceIndex >= prevVoters.length || targetIndex < 0 || targetIndex >= prevVoters.length) {
+        return prevVoters;
+      }
+      const updated = [...prevVoters];
+      const [draggedItem] = updated.splice(sourceIndex, 1);
+      updated.splice(targetIndex, 0, draggedItem);
+      return updated;
     });
-  }, [setVoters]);
+  }, [setVoters, disabled]);
 
   const handleDragEnd = useCallback(() => {
+    draggedIndexRef.current = null;
     setDraggedIndex(null);
     setDragOverIndex(null);
   }, []);
 
   const getDragProps = useCallback((index: number) => {
-    if (isMobile) {
+    if (isMobile || disabled) {
       return { draggable: false, isDragging: false, isDragOver: false };
     }
     return {
@@ -501,7 +550,7 @@ function useVotersDragAndDrop(
       isDragging: draggedIndex === index,
       isDragOver: dragOverIndex === index,
     };
-  }, [isMobile, handleDragStart, handleDragOver, handleDrop, handleDragEnd, draggedIndex, dragOverIndex]);
+  }, [isMobile, disabled, handleDragStart, handleDragOver, handleDrop, handleDragEnd, draggedIndex, dragOverIndex]);
 
   return { getDragProps };
 }
@@ -628,11 +677,180 @@ interface EditModeTopBarProps {
   onImportFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   importFileInputRef: React.RefObject<HTMLInputElement | null>;
   isSaving: boolean;
+  isImporting: boolean;
   onResetAllVotes: () => void;
   onResetData: () => void;
   onOpenResetAuraConfirm: () => void;
   onCloseEditMode: () => void;
 }
+
+const EditBarBadgeSection: React.FC<{ isImporting: boolean }> = ({ isImporting }) => (
+  <div className="edit-bar-left">
+    <span className="edit-badge">
+      {isImporting ? '⏳ IMPORTACIÓN EN CURSO' : '⚙️ MODO EDICIÓN ACTIVO'}
+    </span>
+    <span className="edit-help-text">
+      {isImporting
+        ? 'Restaurando y sincronizando datos desde el backup. Modificaciones bloqueadas temporalmente.'
+        : 'Buscá juegos en Steam, edita perfiles y arrastrá tarjetas. Autoguardado activo.'}
+    </span>
+  </div>
+);
+
+const AddVoterButton: React.FC<{
+  voterCount: number;
+  isImporting: boolean;
+  onAddVoter: () => void;
+}> = ({ voterCount, isImporting, onAddVoter }) => {
+  const isMaxReached = voterCount >= MAX_VOTERS;
+  const isDisabled = isMaxReached || isImporting;
+
+  let title = 'Añadir nuevo integrante';
+  if (isImporting) {
+    title = 'Importación de backup en curso...';
+  } else if (isMaxReached) {
+    title = `Máximo de ${MAX_VOTERS} integrantes alcanzado (límite Steam Families)`;
+  }
+
+  return (
+    <motion.button
+      type="button"
+      className="btn-add-voter"
+      onClick={onAddVoter}
+      disabled={isDisabled}
+      title={title}
+      whileHover={isDisabled ? {} : { scale: 1.03 }}
+      whileTap={isDisabled ? {} : { scale: 0.97 }}
+    >
+      ➕ Añadir Integrante ({voterCount}/{MAX_VOTERS})
+    </motion.button>
+  );
+};
+
+const BackupControls: React.FC<{
+  isSaving: boolean;
+  isImporting: boolean;
+  onExportBackup: () => void;
+  onImportClick: () => void;
+  onImportFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  importFileInputRef: React.RefObject<HTMLInputElement | null>;
+}> = ({
+  isSaving,
+  isImporting,
+  onExportBackup,
+  onImportClick,
+  onImportFileChange,
+  importFileInputRef,
+}) => {
+  const isImportDisabled = isSaving || isImporting;
+
+  return (
+    <div className="backup-btn-group">
+      <motion.button
+        type="button"
+        className="btn-backup btn-export"
+        onClick={onExportBackup}
+        disabled={isImporting}
+        title={isImporting ? 'Importación de backup en curso...' : 'Descargar backup completo en JSON'}
+        whileHover={isImporting ? {} : { scale: 1.03 }}
+        whileTap={isImporting ? {} : { scale: 0.97 }}
+      >
+        📥 Exportar Backup
+      </motion.button>
+      <motion.button
+        type="button"
+        className="btn-backup btn-import"
+        onClick={onImportClick}
+        disabled={isImportDisabled}
+        title={isImporting ? 'Importando backup...' : 'Restaurar datos desde un archivo JSON'}
+        whileHover={isImportDisabled ? {} : { scale: 1.03 }}
+        whileTap={isImportDisabled ? {} : { scale: 0.97 }}
+      >
+        {isImporting ? '⏳ Importando...' : '📤 Importar Backup'}
+      </motion.button>
+      <input
+        ref={importFileInputRef}
+        type="file"
+        accept=".json"
+        onChange={onImportFileChange}
+        disabled={isImporting}
+        style={{ display: 'none' }}
+      />
+    </div>
+  );
+};
+
+const EditBarActionButtons: React.FC<{
+  isImporting: boolean;
+  onResetAllVotes: () => void;
+  onResetData: () => void;
+  onOpenResetAuraConfirm: () => void;
+  onCloseEditMode: () => void;
+}> = ({
+  isImporting,
+  onResetAllVotes,
+  onResetData,
+  onOpenResetAuraConfirm,
+  onCloseEditMode,
+}) => (
+  <>
+    <motion.button
+      type="button"
+      className="btn-reset-votes"
+      onClick={onResetAllVotes}
+      disabled={isImporting}
+      title={
+        isImporting
+          ? 'Importación de backup en curso...'
+          : 'Reiniciar a 0 puntos todos los votos de los integrantes para comenzar un nuevo ciclo de votación'
+      }
+      whileHover={isImporting ? {} : { scale: 1.03 }}
+      whileTap={isImporting ? {} : { scale: 0.97 }}
+    >
+      🧹 Reiniciar Votos (Nuevo Ciclo)
+    </motion.button>
+
+    <motion.button
+      type="button"
+      className="btn-reset-data"
+      onClick={onResetData}
+      disabled={isImporting}
+      title={isImporting ? 'Importación de backup en curso...' : 'Restablecer todos los datos'}
+      whileHover={isImporting ? {} : { scale: 1.03 }}
+      whileTap={isImporting ? {} : { scale: 0.97 }}
+    >
+      Restablecer
+    </motion.button>
+
+    <motion.button
+      type="button"
+      className="btn-reset-aura"
+      onClick={onOpenResetAuraConfirm}
+      disabled={isImporting}
+      title={
+        isImporting
+          ? 'Importación de backup en curso...'
+          : 'Restablece el Aura de todos los integrantes a Socio Regular (0 Cuotas, 1.0x)'
+      }
+      whileHover={isImporting ? {} : { scale: 1.03 }}
+      whileTap={isImporting ? {} : { scale: 0.97 }}
+    >
+      🔄 Restablecer Aura
+    </motion.button>
+
+    <motion.button
+      type="button"
+      className="btn-save-edit"
+      onClick={onCloseEditMode}
+      disabled={isImporting}
+      title={isImporting ? 'Importación de backup en curso...' : 'Guardar y cerrar modo edición'}
+      whileHover={isImporting ? {} : { scale: 1.03 }}
+      whileTap={isImporting ? {} : { scale: 0.97 }}
+    >
+      ✓ Guardar / Listo
+    </motion.button>
+  </>
+);
 
 const EditModeTopBar: React.FC<EditModeTopBarProps> = ({
   voterCount,
@@ -644,6 +862,7 @@ const EditModeTopBar: React.FC<EditModeTopBarProps> = ({
   onImportFileChange,
   importFileInputRef,
   isSaving,
+  isImporting,
   onResetAllVotes,
   onResetData,
   onOpenResetAuraConfirm,
@@ -657,25 +876,10 @@ const EditModeTopBar: React.FC<EditModeTopBarProps> = ({
     exit={{ opacity: 0, y: -20, height: 0 }}
     transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
   >
-    <div className="edit-bar-left">
-      <span className="edit-badge">⚙️ MODO EDICIÓN ACTIVO</span>
-      <span className="edit-help-text">
-        Buscá juegos en Steam, edita perfiles y arrastrá tarjetas. Autoguardado activo.
-      </span>
-    </div>
+    <EditBarBadgeSection isImporting={isImporting} />
 
     <div className="edit-bar-controls">
-      <motion.button
-        type="button"
-        className="btn-add-voter"
-        onClick={onAddVoter}
-        disabled={voterCount >= MAX_VOTERS}
-        title={voterCount >= MAX_VOTERS ? `Máximo de ${MAX_VOTERS} integrantes alcanzado (límite Steam Families)` : 'Añadir nuevo integrante'}
-        whileHover={{ scale: 1.03 }}
-        whileTap={{ scale: 0.97 }}
-      >
-        ➕ Añadir Integrante ({voterCount}/{MAX_VOTERS})
-      </motion.button>
+      <AddVoterButton voterCount={voterCount} isImporting={isImporting} onAddVoter={onAddVoter} />
 
       <div className="api-key-input-container">
         <label htmlFor="steam-api-key-input">Steam Web API Key (opcional):</label>
@@ -686,84 +890,264 @@ const EditModeTopBar: React.FC<EditModeTopBarProps> = ({
           value={steamApiKey}
           onChange={(e) => onApiKeyChange(e.target.value)}
           className="api-key-input"
+          disabled={isImporting}
         />
       </div>
 
-      <div className="backup-btn-group">
-        <motion.button
-          type="button"
-          className="btn-backup btn-export"
-          onClick={onExportBackup}
-          title="Descargar backup completo en JSON"
-          whileHover={{ scale: 1.03 }}
-          whileTap={{ scale: 0.97 }}
-        >
-          📥 Exportar Backup
-        </motion.button>
-        <motion.button
-          type="button"
-          className="btn-backup btn-import"
-          onClick={onImportClick}
-          disabled={isSaving}
-          title="Restaurar datos desde un archivo JSON"
-          whileHover={isSaving ? {} : { scale: 1.03 }}
-          whileTap={isSaving ? {} : { scale: 0.97 }}
-        >
-          📤 Importar Backup
-        </motion.button>
-        <input
-          ref={importFileInputRef}
-          type="file"
-          accept=".json"
-          onChange={onImportFileChange}
-          style={{ display: 'none' }}
-        />
-      </div>
+      <BackupControls
+        isSaving={isSaving}
+        isImporting={isImporting}
+        onExportBackup={onExportBackup}
+        onImportClick={onImportClick}
+        onImportFileChange={onImportFileChange}
+        importFileInputRef={importFileInputRef}
+      />
 
-      <motion.button
-        type="button"
-        className="btn-reset-votes"
-        onClick={onResetAllVotes}
-        title="Reiniciar a 0 puntos todos los votos de los integrantes para comenzar un nuevo ciclo de votación"
-        whileHover={{ scale: 1.03 }}
-        whileTap={{ scale: 0.97 }}
-      >
-        🧹 Reiniciar Votos (Nuevo Ciclo)
-      </motion.button>
-
-      <motion.button
-        type="button"
-        className="btn-reset-data"
-        onClick={onResetData}
-        whileHover={{ scale: 1.03 }}
-        whileTap={{ scale: 0.97 }}
-      >
-        Restablecer
-      </motion.button>
-
-      <motion.button
-        type="button"
-        className="btn-reset-aura"
-        onClick={onOpenResetAuraConfirm}
-        title="Restablece el Aura de todos los integrantes a Socio Regular (0 Cuotas, 1.0x)"
-        whileHover={{ scale: 1.03 }}
-        whileTap={{ scale: 0.97 }}
-      >
-        🔄 Restablecer Aura
-      </motion.button>
-
-      <motion.button
-        type="button"
-        className="btn-save-edit"
-        onClick={onCloseEditMode}
-        whileHover={{ scale: 1.03 }}
-        whileTap={{ scale: 0.97 }}
-      >
-        ✓ Guardar / Listo
-      </motion.button>
+      <EditBarActionButtons
+        isImporting={isImporting}
+        onResetAllVotes={onResetAllVotes}
+        onResetData={onResetData}
+        onOpenResetAuraConfirm={onOpenResetAuraConfirm}
+        onCloseEditMode={onCloseEditMode}
+      />
     </div>
   </motion.div>
 );
+
+interface GearButtonProps {
+  canManageContent: boolean;
+  isEditMode: boolean;
+  isImporting: boolean;
+  onToggleEditMode: () => void;
+}
+
+const GearButton: React.FC<GearButtonProps> = ({
+  canManageContent,
+  isEditMode,
+  isImporting,
+  onToggleEditMode,
+}) => {
+  if (!canManageContent) return null;
+
+  let title = 'Activar Modo Edición (Oculto)';
+  if (isImporting) {
+    title = '⏳ Importación en curso...';
+  } else if (isEditMode) {
+    title = 'Desactivar Modo Edición';
+  }
+
+  return (
+    <motion.button
+      type="button"
+      className={`hidden-gear-btn ${isEditMode ? 'active' : ''}`}
+      onClick={onToggleEditMode}
+      disabled={isImporting}
+      title={title}
+      aria-label="Modo Edición"
+      whileHover={isImporting ? {} : { scale: 1.1, rotate: 15 }}
+      whileTap={isImporting ? {} : { scale: 0.9 }}
+    >
+      <FaCog size={20} />
+    </motion.button>
+  );
+};
+
+interface TopActionNavigationProps {
+  canManageContent: boolean;
+  hasWinner: boolean;
+  isImporting: boolean;
+  onOpenFinishModal: () => void;
+}
+
+const TopActionNavigation: React.FC<TopActionNavigationProps> = ({
+  canManageContent,
+  hasWinner,
+  isImporting,
+  onOpenFinishModal,
+}) => {
+  if (!canManageContent) return null;
+
+  const isDisabled = !hasWinner || isImporting;
+
+  let title = 'No hay un juego ganador disponible para finalizar la votación';
+  if (isImporting) {
+    title = '⏳ Importación en curso...';
+  } else if (hasWinner) {
+    title = 'Finalizar votación y asignar cuotas';
+  }
+
+  return (
+    <div className="top-action-navigation">
+      <motion.button
+        type="button"
+        className="btn-action-primary btn-finish-voting"
+        onClick={() => {
+          if (!isDisabled) {
+            onOpenFinishModal();
+          }
+        }}
+        disabled={isDisabled}
+        title={title}
+        whileHover={isDisabled ? {} : { scale: 1.04, y: -2 }}
+        whileTap={isDisabled ? {} : { scale: 0.95 }}
+      >
+        🏆 Finalizar Votación
+      </motion.button>
+    </div>
+  );
+};
+
+interface HistoryFooterButtonProps {
+  isImporting: boolean;
+  onOpenHistoryModal: () => void;
+}
+
+const HistoryFooterButton: React.FC<HistoryFooterButtonProps> = ({
+  isImporting,
+  onOpenHistoryModal,
+}) => (
+  <div className="history-footer-action">
+    <motion.button
+      type="button"
+      className="btn-history-glow"
+      onClick={() => {
+        if (!isImporting) {
+          onOpenHistoryModal();
+        }
+      }}
+      disabled={isImporting}
+      title={isImporting ? '⏳ Importación en curso...' : 'Ver historial de votaciones'}
+      whileHover={isImporting ? {} : { scale: 1.04, y: -2 }}
+      whileTap={isImporting ? {} : { scale: 0.96 }}
+    >
+      📜 Ver historial
+    </motion.button>
+  </div>
+);
+
+interface DashboardModalsProps {
+  showFinishModal: boolean;
+  hasWinner: boolean;
+  results: GameResult[];
+  voters: Voter[];
+  freezeState: FreezePriceState;
+  onConfirmFinish: (updatedVoters: Voter[], historyRecord: VotingHistoryRecord) => Promise<void>;
+  onCloseFinishModal: () => void;
+  showHistoryModal: boolean;
+  history: VotingHistoryRecord[];
+  onClearHistory: () => Promise<void>;
+  onDeleteHistoryRecord: (recordId: string) => Promise<void>;
+  onCloseHistoryModal: () => void;
+  canManageContent: boolean;
+  voterToDelete: Voter | null;
+  onCancelDeleteVoter: () => void;
+  onConfirmDeleteVoter: () => void;
+  showResetAuraConfirm: boolean;
+  onConfirmResetAura: () => Promise<void>;
+  onCancelResetAura: () => void;
+  showPinModal: boolean;
+  onPinCancel: () => void;
+  onPinSubmit: (password: string) => Promise<AuthResult>;
+}
+
+const DashboardModals: React.FC<DashboardModalsProps> = ({
+  showFinishModal,
+  hasWinner,
+  results,
+  voters,
+  freezeState,
+  onConfirmFinish,
+  onCloseFinishModal,
+  showHistoryModal,
+  history,
+  onClearHistory,
+  onDeleteHistoryRecord,
+  onCloseHistoryModal,
+  canManageContent,
+  voterToDelete,
+  onCancelDeleteVoter,
+  onConfirmDeleteVoter,
+  showResetAuraConfirm,
+  onConfirmResetAura,
+  onCancelResetAura,
+  showPinModal,
+  onPinCancel,
+  onPinSubmit,
+}) => (
+  <>
+    <AnimatePresence>
+      {canManageContent && showFinishModal && hasWinner && (
+        <FinishVotingModal
+          key="finish-modal"
+          allResults={results}
+          voters={voters}
+          isPrecioCongelado={freezeState.isPrecioCongelado}
+          precioCongelado={freezeState.precioCongelado}
+          descuentoCongelado={freezeState.descuentoCongelado}
+          precioCongeladoFormatted={freezeState.precioCongeladoFormatted}
+          onConfirmFinish={onConfirmFinish}
+          onClose={onCloseFinishModal}
+        />
+      )}
+
+      {showHistoryModal && (
+        <VotingHistoryModal
+          key="history-modal"
+          history={history}
+          onClearHistory={onClearHistory}
+          onDeleteRecord={onDeleteHistoryRecord}
+          onClose={onCloseHistoryModal}
+          canManageContent={canManageContent}
+        />
+      )}
+
+      {canManageContent && voterToDelete && (
+        <DeleteUserConfirmModal
+          key={`delete-user-${voterToDelete.id}`}
+          voter={voterToDelete}
+          onCancel={onCancelDeleteVoter}
+          onConfirm={onConfirmDeleteVoter}
+        />
+      )}
+
+      {canManageContent && showResetAuraConfirm && (
+        <ResetAuraConfirmModal
+          key="reset-aura-modal"
+          onConfirm={onConfirmResetAura}
+          onCancel={onCancelResetAura}
+        />
+      )}
+    </AnimatePresence>
+
+    <AnimatePresence>
+      {showPinModal && (
+        <AdminPinModal
+          key="admin-pin-modal"
+          onCancel={onPinCancel}
+          onAuthenticate={onPinSubmit}
+        />
+      )}
+    </AnimatePresence>
+  </>
+);
+
+function serializeDashboardState(
+  voters: Voter[],
+  gamesMap: Record<string, Game>,
+  freezeState: FreezePriceState
+): string {
+  const sortedGameKeys = Object.keys(gamesMap).sort((a, b) => a.localeCompare(b));
+  const sortedGames: Record<string, Game> = {};
+  for (const key of sortedGameKeys) {
+    sortedGames[key] = gamesMap[key];
+  }
+
+  return JSON.stringify({
+    voters,
+    gamesMap: sortedGames,
+    freezeState,
+  });
+}
 
 // ─── Componente principal ─────────────────────────────────
 export const SteamVotingDashboard: React.FC = () => {
@@ -775,6 +1159,7 @@ export const SteamVotingDashboard: React.FC = () => {
   const [isFreezingLoading, setIsFreezingLoading] = useState<boolean>(false);
 
   const [isEditMode, setIsEditMode] = useState<boolean>(false);
+  const [isImporting, setIsImporting] = useState<boolean>(false);
   const [showFinishModal, setShowFinishModal] = useState<boolean>(false);
   const [showHistoryModal, setShowHistoryModal] = useState<boolean>(false);
   const [adminAccess, setAdminAccess] = useState(() => getAdminAccessState());
@@ -793,7 +1178,7 @@ export const SteamVotingDashboard: React.FC = () => {
     getMobileServerSnapshot
   );
 
-  const { getDragProps } = useVotersDragAndDrop(setVoters, isMobile);
+  const { getDragProps } = useVotersDragAndDrop(setVoters, isMobile, isImporting);
 
   // Auto-ocultar el indicador de sincronización tras 5 segundos al completarse o fallar
   useEffect(() => {
@@ -814,9 +1199,12 @@ export const SteamVotingDashboard: React.FC = () => {
   }, []);
 
   const isMountedRef = useRef<boolean>(true);
+  const isImportingRef = useRef<boolean>(false);
+  const isUnfreezingRef = useRef<boolean>(false);
   const saveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const apiKeyDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const skipNextSaveRef = useRef<boolean>(false);
+  const lastPersistedDashboardSignatureRef = useRef<string>('');
+  const lastPersistedApiKeyRef = useRef<string>('');
   const importFileInputRef = useRef<HTMLInputElement | null>(null);
   // Ref para resolver la Promise del modal de PIN y reutilizarla ante llamadas simultáneas
   const pinModalResolveRef = useRef<((value: boolean) => void) | null>(null);
@@ -857,7 +1245,8 @@ export const SteamVotingDashboard: React.FC = () => {
 
 
   const handleApplyInitialData = useCallback((data: InitialDashboardData) => {
-    skipNextSaveRef.current = true;
+    lastPersistedDashboardSignatureRef.current = serializeDashboardState(data.voters, data.gamesMap, data.freezeState);
+    lastPersistedApiKeyRef.current = data.apiKey;
     setVoters(data.voters);
     setGamesMap(data.gamesMap);
     setHistory(data.history);
@@ -913,12 +1302,15 @@ export const SteamVotingDashboard: React.FC = () => {
   }, [handleApplyInitialData, handleInitialLoadError]);
 
   useEffect(() => {
-    if (!canManageContent && isEditMode) {
+    if (!canManageContent) {
       void Promise.resolve().then(() => {
         setIsEditMode(false);
+        setShowFinishModal(false);
+        setVoterToDelete(null);
+        setShowResetAuraConfirm(false);
       });
     }
-  }, [canManageContent, isEditMode]);
+  }, [canManageContent]);
 
   // ─── Sincronización con debounce coordinado ──────────────
   const debouncedSaveDashboard = useCallback(
@@ -926,23 +1318,34 @@ export const SteamVotingDashboard: React.FC = () => {
       if (saveDebounceRef.current) {
         clearTimeout(saveDebounceRef.current);
       }
-      if (skipNextSaveRef.current) {
-        skipNextSaveRef.current = false;
+      if (isImportingRef.current) {
         return;
       }
+
+      const currentSignature = serializeDashboardState(votersToSave, gamesToSave, currentFreezeState);
+      if (currentSignature === lastPersistedDashboardSignatureRef.current) {
+        return;
+      }
+
       void Promise.resolve().then(() => {
-        if (isMountedRef.current) {
+        if (isMountedRef.current && !isImportingRef.current) {
           setSyncState({ status: 'saving', message: 'Guardando...' });
         }
       });
       saveDebounceRef.current = setTimeout(async () => {
         try {
+          if (isImportingRef.current) return;
           const result = await saveActiveVotingState(votersToSave, gamesToSave, currentFreezeState);
-          if (isMountedRef.current && result.status !== 'idle') {
-            setSyncState(result);
+          if (isMountedRef.current && !isImportingRef.current) {
+            if (result.status === 'synced' || result.status === 'local') {
+              lastPersistedDashboardSignatureRef.current = currentSignature;
+            }
+            if (result.status !== 'idle') {
+              setSyncState(result);
+            }
           }
         } catch (err) {
-          if (isMountedRef.current) {
+          if (isMountedRef.current && !isImportingRef.current) {
             console.error('[Dashboard] Error en guardado automático:', err);
             setSyncState({ status: 'error', message: 'Error en sincronización automática' });
           }
@@ -956,13 +1359,21 @@ export const SteamVotingDashboard: React.FC = () => {
     if (apiKeyDebounceRef.current) {
       clearTimeout(apiKeyDebounceRef.current);
     }
+    if (isImportingRef.current) {
+      return;
+    }
+    if (apiKey === lastPersistedApiKeyRef.current) {
+      return;
+    }
     apiKeyDebounceRef.current = setTimeout(() => {
       try {
+        if (isImportingRef.current) return;
         if (isMountedRef.current) {
           saveApiKey(apiKey);
+          lastPersistedApiKeyRef.current = apiKey;
         }
       } catch (err) {
-        if (isMountedRef.current) {
+        if (isMountedRef.current && !isImportingRef.current) {
           console.error('[Dashboard] Error guardando API key:', err);
           setSyncState({ status: 'error', message: 'Error al guardar la clave API' });
         }
@@ -971,16 +1382,16 @@ export const SteamVotingDashboard: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (initialLoadStatus === 'loaded' && canManageContent) {
+    if (initialLoadStatus === 'loaded' && canManageContent && !isImporting) {
       debouncedSaveDashboard(voters, gamesMap, freezeState);
     }
-  }, [voters, gamesMap, freezeState, initialLoadStatus, canManageContent, debouncedSaveDashboard]);
+  }, [voters, gamesMap, freezeState, initialLoadStatus, canManageContent, debouncedSaveDashboard, isImporting]);
 
   useEffect(() => {
-    if (initialLoadStatus === 'loaded') {
+    if (initialLoadStatus === 'loaded' && !isImporting) {
       debouncedSaveApiKey(steamApiKey);
     }
-  }, [steamApiKey, initialLoadStatus, debouncedSaveApiKey]);
+  }, [steamApiKey, initialLoadStatus, debouncedSaveApiKey, isImporting]);
 
   // ─── Calcular resultados ─────────────────────────────────
   const results = useMemo(() => calculateResults(voters, gamesMap), [voters, gamesMap]);
@@ -1001,7 +1412,7 @@ export const SteamVotingDashboard: React.FC = () => {
 
   // ─── Reconciliar votos de los integrantes con gamesMap (autocorregir desalineaciones/IDs huérfanos) ───
   useEffect(() => {
-    if (initialLoadStatus !== 'loaded') return;
+    if (initialLoadStatus !== 'loaded' || isImporting) return;
     const gameIds = Object.keys(gamesMap);
     if (gameIds.length === 0 || voters.length === 0) return;
 
@@ -1009,14 +1420,24 @@ export const SteamVotingDashboard: React.FC = () => {
 
     if (changed) {
       void Promise.resolve().then(() => {
-        setVoters(updatedVoters);
+        if (!isImportingRef.current) {
+          setVoters(updatedVoters);
+        }
       });
     }
-  }, [gamesMap, voters, initialLoadStatus]);
+  }, [gamesMap, voters, initialLoadStatus, isImporting]);
 
   // ─── Descongelado automático al iniciar o modificar nuevo ciclo de votación ───
   const autoUnfreezePrice = useCallback(async (reason: string) => {
-    if (!canManageContent || !freezeState.isPrecioCongelado) return;
+    if (
+      !canManageContent ||
+      !freezeState.isPrecioCongelado ||
+      isImportingRef.current ||
+      isUnfreezingRef.current
+    ) {
+      return;
+    }
+    isUnfreezingRef.current = true;
 
     if (import.meta.env.DEV) {
       console.log(`[Dashboard] Descongelamiento automático: ${reason}`);
@@ -1040,7 +1461,7 @@ export const SteamVotingDashboard: React.FC = () => {
       const syncRes = await unfreezePriceState();
 
       if (syncRes.status === 'synced' || syncRes.status === 'local') {
-        skipNextSaveRef.current = true;
+        lastPersistedDashboardSignatureRef.current = serializeDashboardState(voters, gamesMap, resetFreezeState);
         setFreezeState(resetFreezeState);
         setSyncState({
           status: syncRes.status,
@@ -1061,8 +1482,10 @@ export const SteamVotingDashboard: React.FC = () => {
         status: 'error',
         message: `Error al descongelar precio (${reason})`,
       });
+    } finally {
+      isUnfreezingRef.current = false;
     }
-  }, [canManageContent, freezeState]);
+  }, [canManageContent, freezeState, voters, gamesMap]);
 
   // ─── Procedimiento para congelar el precio del juego ganador ───
   const freezePrice = useCallback(async (currentLivePrice: SteamPriceInfo | null): Promise<FreezePriceState | null> => {
@@ -1105,7 +1528,7 @@ export const SteamVotingDashboard: React.FC = () => {
 
   // ─── Toggle interactivo de congelamiento de precio (Modo Edición) ───
   const handleToggleFreezePrice = useCallback(async (currentLivePrice: SteamPriceInfo | null) => {
-    if (!canManageContent) return;
+    if (!canManageContent || isImportingRef.current) return;
 
     setIsFreezingLoading(true);
     const previousFreezeState = freezeState;
@@ -1114,7 +1537,7 @@ export const SteamVotingDashboard: React.FC = () => {
       if (!previousFreezeState.isPrecioCongelado) {
         const frozenState = await freezePrice(currentLivePrice);
         if (frozenState) {
-          skipNextSaveRef.current = true;
+          lastPersistedDashboardSignatureRef.current = serializeDashboardState(voters, gamesMap, frozenState);
           setFreezeState(frozenState);
         } else {
           setFreezeState(previousFreezeState);
@@ -1122,7 +1545,7 @@ export const SteamVotingDashboard: React.FC = () => {
       } else {
         const success = await unfreezePrice();
         if (success) {
-          skipNextSaveRef.current = true;
+          lastPersistedDashboardSignatureRef.current = serializeDashboardState(voters, gamesMap, DEFAULT_FREEZE_STATE);
           setFreezeState(DEFAULT_FREEZE_STATE);
         } else {
           setFreezeState(previousFreezeState);
@@ -1135,11 +1558,11 @@ export const SteamVotingDashboard: React.FC = () => {
     } finally {
       setIsFreezingLoading(false);
     }
-  }, [canManageContent, freezeState, freezePrice, unfreezePrice]);
+  }, [canManageContent, freezeState, freezePrice, unfreezePrice, voters, gamesMap]);
 
   useAutoUnfreezeWatcher(
-    initialLoadStatus,
-    canManageContent,
+    isImporting ? 'loading' : initialLoadStatus,
+    canManageContent && !isImporting,
     gamesMap,
     results,
     freezeState,
@@ -1149,83 +1572,43 @@ export const SteamVotingDashboard: React.FC = () => {
 
   // ─── Handlers ─────────────────────────────────────────────
   const handleUpdateVoter = useCallback((updatedVoter: Voter) => {
+    if (!canManageContent || isImportingRef.current) return;
     setVoters((prev) => prev.map((v) => (v.id === updatedVoter.id ? updatedVoter : v)));
-  }, []);
+  }, [canManageContent]);
 
   const handleUpdateGame = useCallback((gameId: string, updatedGame: Game) => {
+    if (!canManageContent || isImportingRef.current) return;
     setGamesMap((prev) => ({
       ...prev,
       [gameId]: updatedGame,
     }));
-    void autoUnfreezePrice('juego modificado');
-  }, [autoUnfreezePrice]);
+    if (freezeState.isPrecioCongelado) {
+      void autoUnfreezePrice('juego modificado');
+    }
+  }, [canManageContent, freezeState.isPrecioCongelado, autoUnfreezePrice]);
 
   const handleAddGame = useCallback(() => {
-    const currentCount = Object.keys(gamesMap).length;
-    if (currentCount >= MAX_GAMES) return;
+    if (!canManageContent || isImportingRef.current) return;
 
-    const randomBytes = new Uint8Array(6);
-    crypto.getRandomValues(randomBytes);
-    const randomSuffix = Array.from(randomBytes).map((b) => b.toString(16).padStart(2, '0')).join('');
-    const newGameId = `game_${Date.now()}_${randomSuffix}`;
+    const transition = addGameToVotingSession(gamesMap, voters, MAX_GAMES);
+    if (!transition.success) return;
 
-    const newGame: Game = {
-      id: newGameId,
-      title: `Nuevo Juego ${currentCount + 1}`,
-      genre: 'Por definir',
-      coverImage: 'https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/730/capsule_sm_120.jpg',
-      description: 'Buscá un juego en Steam o editá los campos manualmente.',
-    };
-
-    setGamesMap((prev) => ({ ...prev, [newGameId]: newGame }));
-
-    setVoters((prevVoters) =>
-      prevVoters.map((voter) => ({
-        ...voter,
-        votes: [...voter.votes, { gameId: newGameId, points: 0 }],
-      }))
-    );
-    void autoUnfreezePrice('nuevo juego agregado');
-  }, [gamesMap, autoUnfreezePrice]);
+    setGamesMap(transition.gamesMap);
+    setVoters(transition.voters);
+  }, [canManageContent, gamesMap, voters]);
 
   const handleDeleteGame = useCallback((gameId: string) => {
-    if (
-      !gamesMap[gameId] ||
-      Object.keys(gamesMap).length <= MIN_GAMES
-    ) {
-      return;
-    }
+    if (!canManageContent || isImportingRef.current) return;
 
-    setGamesMap((prev) => {
-      const currentCount = Object.keys(prev).length;
-      if (currentCount <= MIN_GAMES) return prev;
+    const transition = removeGameFromVotingSession(gamesMap, voters, gameId, MIN_GAMES);
+    if (!transition.success) return;
 
-      const next = { ...prev };
-      delete next[gameId];
-      return next;
-    });
-
-    // Nuevo máximo de puntos después de eliminar el juego
-    const newGameCount = Object.keys(gamesMap).length - 1;
-    const newMaxPoints = getMaxVotePoints(newGameCount);
-
-    // Quitar el voto del juego eliminado y ajustar (clamping) los puntos
-    // de los votos restantes al nuevo máximo proporcional.
-    setVoters((prevVoters) =>
-      prevVoters.map((voter) => ({
-        ...voter,
-        votes: voter.votes
-          .filter((v) => v.gameId !== gameId)
-          .map((v) => ({
-            ...v,
-            points: Math.min(v.points, newMaxPoints),
-          })),
-      }))
-    );
-    void autoUnfreezePrice('juego eliminado');
-  }, [gamesMap, autoUnfreezePrice]);
+    setGamesMap(transition.gamesMap);
+    setVoters(transition.voters);
+  }, [canManageContent, gamesMap, voters]);
 
   const handleResetAllVotes = useCallback(() => {
+    if (!canManageContent || isImportingRef.current) return;
     const confirmReset = window.confirm(
       '¿Deseas reiniciar los votos de todos los integrantes para iniciar un nuevo ciclo de votación?\n\nLos puntos asignados volverán a 0 y el precio congelado se liberará automáticamente.'
     );
@@ -1237,8 +1620,7 @@ export const SteamVotingDashboard: React.FC = () => {
         votes: voter.votes.map((v) => ({ ...v, points: 0 })),
       }))
     );
-    void autoUnfreezePrice('nuevo ciclo de votación / votos reiniciados');
-  }, [autoUnfreezePrice]);
+  }, [canManageContent]);
 
   // ─── Desbloqueo de admin vía modal BottomSheet (reemplaza window.prompt) ───
   const requestAdminUnlockViaModal = useCallback((forceOpen = false): Promise<boolean> => {
@@ -1290,9 +1672,13 @@ export const SteamVotingDashboard: React.FC = () => {
   );
 
   const handleLogoutAdmin = useCallback(async () => {
+    if (isImportingRef.current) return;
     await logoutAdmin();
     setAdminAccess(getAdminAccessState());
     setIsEditMode(false);
+    setShowFinishModal(false);
+    setVoterToDelete(null);
+    setShowResetAuraConfirm(false);
   }, []);
 
   // Handler cuando el usuario cancela el modal de PIN
@@ -1308,6 +1694,7 @@ export const SteamVotingDashboard: React.FC = () => {
   useAdminShortcut(requestAdminUnlockViaModal, setIsEditMode);
 
   const handleToggleEditMode = useCallback(() => {
+    if (isImportingRef.current) return;
     if (!canManageContent) {
       // Desbloqueo asíncrono vía modal BottomSheet
       void requestAdminUnlockViaModal().then((unlocked) => {
@@ -1326,6 +1713,7 @@ export const SteamVotingDashboard: React.FC = () => {
     updatedVoters: Voter[],
     historyRecord: VotingHistoryRecord
   ) => {
+    if (!canManageContent || isImportingRef.current) return;
     // 1. Cancelar temporizador pendiente e invalidar escrituras en vuelo en el servicio de persistencia
     if (saveDebounceRef.current) {
       clearTimeout(saveDebounceRef.current);
@@ -1340,12 +1728,7 @@ export const SteamVotingDashboard: React.FC = () => {
 
     // 3. Si la persistencia fue exitosa (remota o fallback local), reflejar el nuevo estado en la interfaz
     if (result.status === 'synced' || result.status === 'local') {
-      // Evitar que el setState de React dispare un re-guardado redundante por debounce
-      skipNextSaveRef.current = true;
-
-      setVoters(updatedVoters);
-      setHistory((prev) => [historyRecord, ...prev]);
-      setFreezeState({
+      const resetFreeze: FreezePriceState = {
         isPrecioCongelado: false,
         precioCongelado: null,
         descuentoCongelado: null,
@@ -1354,16 +1737,22 @@ export const SteamVotingDashboard: React.FC = () => {
         precioOriginalCongeladoFormatted: null,
         congeladoAt: null,
         gameId: null,
-      });
+      };
+      lastPersistedDashboardSignatureRef.current = serializeDashboardState(updatedVoters, gamesMap, resetFreeze);
+
+      setVoters(updatedVoters);
+      setHistory((prev) => [historyRecord, ...prev]);
+      setFreezeState(resetFreeze);
       setShowFinishModal(false);
     } else {
       throw new Error(
         result.message || 'No se pudo guardar la votación. No se aplicaron los cambios en los datos.'
       );
     }
-  }, [gamesMap]);
+  }, [canManageContent, gamesMap]);
 
   const handleClearHistory = useCallback(async () => {
+    if (!canManageContent || isImportingRef.current) return;
     if (saveDebounceRef.current) {
       clearTimeout(saveDebounceRef.current);
     }
@@ -1377,7 +1766,7 @@ export const SteamVotingDashboard: React.FC = () => {
       setSyncState(result);
 
       if (result.status === 'synced' || result.status === 'local') {
-        skipNextSaveRef.current = true;
+        lastPersistedDashboardSignatureRef.current = serializeDashboardState(updatedVoters, gamesMap, freezeState);
         setVoters(updatedVoters);
         setHistory([]);
       } else {
@@ -1387,8 +1776,8 @@ export const SteamVotingDashboard: React.FC = () => {
       // Recuperación explícita: sincronizar la interfaz con Firestore tras fallo parcial o total
       try {
         const [freshVoters, freshHistory] = await Promise.all([loadVoters(), loadHistory()]);
-        skipNextSaveRef.current = true;
         if (freshVoters && freshVoters.length > 0) {
+          lastPersistedDashboardSignatureRef.current = serializeDashboardState(freshVoters, gamesMap, freezeState);
           setVoters(freshVoters);
         }
         setHistory(freshHistory);
@@ -1399,9 +1788,10 @@ export const SteamVotingDashboard: React.FC = () => {
       setSyncState({ status: 'error', message });
       throw err;
     }
-  }, [history, voters]);
+  }, [canManageContent, history, voters, gamesMap, freezeState]);
 
   const handleDeleteHistoryRecord = useCallback(async (recordId: string) => {
+    if (!canManageContent || isImportingRef.current) return;
     const recordToDelete = history.find((r) => r.id === recordId);
     if (!recordToDelete) {
       setSyncState({ status: 'error', message: 'Registro de votación no encontrado' });
@@ -1434,7 +1824,7 @@ export const SteamVotingDashboard: React.FC = () => {
 
       // 3. Modificar el estado local ÚNICAMENTE cuando la persistencia haya finalizado con éxito
       if (result.status === 'synced' || result.status === 'local') {
-        skipNextSaveRef.current = true;
+        lastPersistedDashboardSignatureRef.current = serializeDashboardState(updatedVoters, gamesMap, freezeState);
         setVoters(updatedVoters);
         setHistory((prev) => prev.filter((r) => r.id !== recordId));
       } else {
@@ -1447,17 +1837,15 @@ export const SteamVotingDashboard: React.FC = () => {
       setSyncState({ status: 'error', message });
       throw err;
     }
-  }, [history, voters]);
+  }, [canManageContent, history, voters, gamesMap, freezeState]);
 
   const handleResetData = useCallback(async () => {
+    if (!canManageContent || isImportingRef.current) return;
     if (!window.confirm('¿Deseas restablecer los datos originales de todos los integrantes y juegos?')) {
       return;
     }
 
-    if (saveDebounceRef.current) {
-      clearTimeout(saveDebounceRef.current);
-    }
-    invalidatePendingWrites();
+    cancelPendingWritesAndDebounce();
 
     setSyncState({ status: 'saving', message: 'Restableciendo todos los datos...' });
 
@@ -1466,7 +1854,8 @@ export const SteamVotingDashboard: React.FC = () => {
       setSyncState(result);
 
       if (result.status === 'synced' || result.status === 'local') {
-        skipNextSaveRef.current = true;
+        lastPersistedDashboardSignatureRef.current = serializeDashboardState([], {}, DEFAULT_FREEZE_STATE);
+        lastPersistedApiKeyRef.current = '';
         setVoters([]);
         setGamesMap({});
         setSteamApiKey('');
@@ -1479,7 +1868,6 @@ export const SteamVotingDashboard: React.FC = () => {
       // Recuperación explícita: sincronizar el historial de la interfaz con Firestore tras fallo parcial
       try {
         const freshHistory = await loadHistory();
-        skipNextSaveRef.current = true;
         setHistory(freshHistory);
       } catch {
         // Ignorar fallo secundario de recarga para conservar el mensaje del error principal
@@ -1487,9 +1875,10 @@ export const SteamVotingDashboard: React.FC = () => {
       const message = err instanceof Error ? err.message : 'Error al restablecer los datos';
       setSyncState({ status: 'error', message });
     }
-  }, []);
+  }, [canManageContent, cancelPendingWritesAndDebounce]);
 
   const handleResetAllAura = useCallback(async () => {
+    if (!canManageContent || isImportingRef.current) return;
     if (saveDebounceRef.current) {
       clearTimeout(saveDebounceRef.current);
     }
@@ -1505,7 +1894,7 @@ export const SteamVotingDashboard: React.FC = () => {
       setSyncState(result);
 
       if (result.status === 'synced' || result.status === 'local') {
-        skipNextSaveRef.current = true;
+        lastPersistedDashboardSignatureRef.current = serializeDashboardState(updatedVoters, gamesMap, freezeState);
         setVoters(updatedVoters);
         setShowResetAuraConfirm(false);
       } else {
@@ -1518,12 +1907,10 @@ export const SteamVotingDashboard: React.FC = () => {
       setVoters(previousVoters);
       throw err;
     }
-  }, [voters, gamesMap, freezeState]);
-
-
+  }, [canManageContent, voters, gamesMap, freezeState]);
 
   const handleAddVoter = () => {
-    if (voters.length >= MAX_VOTERS) return;
+    if (!canManageContent || isImportingRef.current || voters.length >= MAX_VOTERS) return;
     const randomBytes = new Uint8Array(6);
     crypto.getRandomValues(randomBytes);
     const randomSuffix = Array.from(randomBytes).map((b) => b.toString(16).padStart(2, '0')).join('');
@@ -1544,11 +1931,12 @@ export const SteamVotingDashboard: React.FC = () => {
   };
 
   const handleRequestDeleteVoter = (voter: Voter) => {
+    if (!canManageContent || isImportingRef.current) return;
     setVoterToDelete(voter);
   };
 
   const handleConfirmDeleteVoter = () => {
-    if (!voterToDelete) return;
+    if (!canManageContent || isImportingRef.current || !voterToDelete) return;
     if (voters.length <= MIN_VOTERS) {
       setVoterToDelete(null);
       return;
@@ -1561,10 +1949,9 @@ export const SteamVotingDashboard: React.FC = () => {
     setVoterToDelete(null);
   };
 
-
-
   // ─── Backup: Exportar ─────────────────────────────────────
   const handleExportBackup = () => {
+    if (!canManageContent || isImportingRef.current) return;
     const backup = createBackupData(voters, gamesMap, history, steamApiKey);
     downloadBackup(backup);
     setSyncState({ status: 'synced', message: 'Backup exportado ✅' });
@@ -1572,6 +1959,7 @@ export const SteamVotingDashboard: React.FC = () => {
 
   // ─── Backup: Importar ─────────────────────────────────────
   const handleImportClick = () => {
+    if (!canManageContent || isImportingRef.current) return;
     importFileInputRef.current?.click();
   };
 
@@ -1579,14 +1967,25 @@ export const SteamVotingDashboard: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // 1. Cancelar los temporizadores de autoguardado pendientes del dashboard antes de iniciar la importación
-    cancelPendingWritesAndDebounce();
+    if (!canManageContent || isImportingRef.current) {
+      resetImportInput();
+      return;
+    }
 
-    const hasData = voters.length > 0 || history.length > 0;
+    const hasData = hasCurrentDashboardData(voters, gamesMap, history, steamApiKey, freezeState);
     if (!confirmBackupOverwrite(hasData)) {
       resetImportInput();
       return;
     }
+
+    // ÚNICAMENTE tras confirmación afirmativa del usuario:
+    // Cancelar modales abiertos, temporizadores de autoguardado e iniciar estado exclusivo de importación
+    setVoterToDelete(null);
+    setShowResetAuraConfirm(false);
+    setShowFinishModal(false);
+    cancelPendingWritesAndDebounce();
+    setIsImporting(true);
+    isImportingRef.current = true;
 
     try {
       setSyncState({ status: 'saving', message: 'Importando y sincronizando backup...' });
@@ -1599,7 +1998,8 @@ export const SteamVotingDashboard: React.FC = () => {
       }
 
       // 3. Aplicar el estado importado y reflejar fielmente el syncState retornado por el servicio
-      skipNextSaveRef.current = true;
+      lastPersistedDashboardSignatureRef.current = serializeDashboardState(result.voters, result.gamesMap, DEFAULT_FREEZE_STATE);
+      lastPersistedApiKeyRef.current = result.steamApiKey;
       setVoters(result.voters);
       setGamesMap(result.gamesMap);
       setHistory(result.history);
@@ -1611,6 +2011,8 @@ export const SteamVotingDashboard: React.FC = () => {
       console.error('[Dashboard] Error al importar backup:', err);
       setSyncState({ status: 'error', message: `❌ ${errorMsg}` });
     } finally {
+      setIsImporting(false);
+      isImportingRef.current = false;
       resetImportInput();
     }
   };
@@ -1643,43 +2045,24 @@ export const SteamVotingDashboard: React.FC = () => {
 
       <InstallPrompt />
 
-      {canManageContent && (
-        <motion.button
-          type="button"
-          className={`hidden-gear-btn ${isEditMode ? 'active' : ''}`}
-          onClick={handleToggleEditMode}
-          title={isEditMode ? 'Desactivar Modo Edición' : 'Activar Modo Edición (Oculto)'}
-          aria-label="Modo Edición"
-          whileHover={{ scale: 1.1, rotate: 15 }}
-          whileTap={{ scale: 0.9 }}
-        >
-          <FaCog size={20} />
-        </motion.button>
-      )}
+      <GearButton
+        canManageContent={canManageContent}
+        isEditMode={isEditMode}
+        isImporting={isImporting}
+        onToggleEditMode={handleToggleEditMode}
+      />
 
       <AdminSessionBadge adminAccess={adminAccess} onLogout={handleLogoutAdmin} />
 
-
-      {/* Botones de acción principales */}
-      <div className="top-action-navigation">
-        {canManageContent && (
-          <motion.button
-            type="button"
-            className="btn-action-primary btn-finish-voting"
-            onClick={() => {
-              if (hasWinner) {
-                setShowFinishModal(true);
-              }
-            }}
-            disabled={!hasWinner}
-            title={hasWinner ? 'Finalizar votación y asignar cuotas' : 'No hay un juego ganador disponible para finalizar la votación'}
-            whileHover={hasWinner ? { scale: 1.04, y: -2 } : {}}
-            whileTap={hasWinner ? { scale: 0.95 } : {}}
-          >
-            🏆 Finalizar Votación
-          </motion.button>
-        )}
-      </div>
+      <TopActionNavigation
+        canManageContent={canManageContent}
+        hasWinner={hasWinner}
+        isImporting={isImporting}
+        onOpenFinishModal={() => {
+          if (!canManageContent || isImporting) return;
+          setShowFinishModal(true);
+        }}
+      />
 
       {/* Barra de edición */}
       <AnimatePresence>
@@ -1694,9 +2077,13 @@ export const SteamVotingDashboard: React.FC = () => {
             onImportFileChange={handleImportFileChange}
             importFileInputRef={importFileInputRef}
             isSaving={syncState.status === 'saving'}
+            isImporting={isImporting}
             onResetAllVotes={handleResetAllVotes}
             onResetData={handleResetData}
-            onOpenResetAuraConfirm={() => setShowResetAuraConfirm(true)}
+            onOpenResetAuraConfirm={() => {
+              if (!canManageContent || isImporting) return;
+              setShowResetAuraConfirm(true);
+            }}
             onCloseEditMode={() => setIsEditMode(false)}
           />
         )}
@@ -1722,6 +2109,7 @@ export const SteamVotingDashboard: React.FC = () => {
                 onDeleteGame={handleDeleteGame}
                 minGames={MIN_GAMES}
                 maxGames={MAX_GAMES}
+                disabled={isImporting}
               />
             </motion.div>
           )}
@@ -1749,6 +2137,7 @@ export const SteamVotingDashboard: React.FC = () => {
                   onUpdateVoter={handleUpdateVoter}
                   onRequestDelete={handleRequestDeleteVoter}
                   canDelete={voters.length > MIN_VOTERS}
+                  disabled={isImporting}
                   {...getDragProps(index)}
                 />
               ))}
@@ -1767,81 +2156,43 @@ export const SteamVotingDashboard: React.FC = () => {
           descuentoCongelado={freezeState.descuentoCongelado}
           precioCongeladoFormatted={freezeState.precioCongeladoFormatted}
           onToggleFreezePrice={handleToggleFreezePrice}
-          isFreezingLoading={isFreezingLoading}
+          isFreezingLoading={isFreezingLoading || isImporting}
         />
 
-        <div className="history-footer-action">
-          <motion.button
-            type="button"
-            className="btn-history-glow"
-            onClick={() => setShowHistoryModal(true)}
-            whileHover={{ scale: 1.04, y: -2 }}
-            whileTap={{ scale: 0.96 }}
-          >
-            📜 Ver historial
-          </motion.button>
-        </div>
+        <HistoryFooterButton
+          isImporting={isImporting}
+          onOpenHistoryModal={() => setShowHistoryModal(true)}
+        />
 
         <footer className="steam-footer">
           <p>© 2026 Steam Co-Op Game Voting • Diseñado con paleta oficial de Steam & Acentos Neón</p>
         </footer>
       </div>
 
-      {/* Modales */}
-      <AnimatePresence>
-        {showFinishModal && hasWinner && (
-          <FinishVotingModal
-            key="finish-modal"
-            allResults={results}
-            voters={voters}
-            isPrecioCongelado={freezeState.isPrecioCongelado}
-            precioCongelado={freezeState.precioCongelado}
-            descuentoCongelado={freezeState.descuentoCongelado}
-            precioCongeladoFormatted={freezeState.precioCongeladoFormatted}
-            onConfirmFinish={handleConfirmFinishVoting}
-            onClose={() => setShowFinishModal(false)}
-          />
-        )}
-
-        {showHistoryModal && (
-          <VotingHistoryModal
-            key="history-modal"
-            history={history}
-            onClearHistory={handleClearHistory}
-            onDeleteRecord={handleDeleteHistoryRecord}
-            onClose={() => setShowHistoryModal(false)}
-            canManageContent={canManageContent}
-          />
-        )}
-
-        {voterToDelete && (
-          <DeleteUserConfirmModal
-            key={`delete-user-${voterToDelete.id}`}
-            voter={voterToDelete}
-            onCancel={handleCancelDeleteVoter}
-            onConfirm={handleConfirmDeleteVoter}
-          />
-        )}
-
-        {showResetAuraConfirm && (
-          <ResetAuraConfirmModal
-            key="reset-aura-modal"
-            onConfirm={handleResetAllAura}
-            onCancel={() => setShowResetAuraConfirm(false)}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* Modal de PIN de administrador (BottomSheet animado) */}
-      <AnimatePresence>
-        {showPinModal && (
-          <AdminPinModal
-            key="admin-pin-modal"
-            onCancel={handlePinCancel}
-            onAuthenticate={handlePinSubmit}
-          />
-        )}
-      </AnimatePresence>
+      <DashboardModals
+        showFinishModal={showFinishModal}
+        hasWinner={hasWinner}
+        results={results}
+        voters={voters}
+        freezeState={freezeState}
+        onConfirmFinish={handleConfirmFinishVoting}
+        onCloseFinishModal={() => setShowFinishModal(false)}
+        showHistoryModal={showHistoryModal}
+        history={history}
+        onClearHistory={handleClearHistory}
+        onDeleteHistoryRecord={handleDeleteHistoryRecord}
+        onCloseHistoryModal={() => setShowHistoryModal(false)}
+        canManageContent={canManageContent}
+        voterToDelete={voterToDelete}
+        onCancelDeleteVoter={handleCancelDeleteVoter}
+        onConfirmDeleteVoter={handleConfirmDeleteVoter}
+        showResetAuraConfirm={showResetAuraConfirm}
+        onConfirmResetAura={handleResetAllAura}
+        onCancelResetAura={() => setShowResetAuraConfirm(false)}
+        showPinModal={showPinModal}
+        onPinCancel={handlePinCancel}
+        onPinSubmit={handlePinSubmit}
+      />
     </div>
   );
 };

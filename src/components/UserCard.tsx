@@ -30,23 +30,67 @@ interface UserCardProps {
   // Delete user props
   onRequestDelete?: (voter: Voter) => void;
   canDelete?: boolean;
+  disabled?: boolean;
 }
 
-export const UserCard: React.FC<UserCardProps> = React.memo(({
+const getBadgeClass = (rank: AuraRank) => {
+  switch (rank) {
+    case 'Socio VIP':
+    case 'VIP':
+      return 'aura-badge vip';
+    case 'Socio Regular':
+    case 'Regular':
+      return 'aura-badge regular';
+    case 'En Observación':
+    case 'Observación':
+      return 'aura-badge observacion';
+    case 'Voto Mínimo':
+      return 'aura-badge minimo';
+    case 'Congelado':
+      return 'aura-badge congelado';
+    default:
+      return 'aura-badge';
+  }
+};
+
+const getPointOptionLabel = (pts: number, maxPoints: number, isAutoZero: boolean): string => {
+  if (pts === maxPoints) {
+    return `⭐ ${pts} Pts (Fav)`;
+  }
+  if (pts === 0) {
+    return isAutoZero ? '✨ 0 Pts (Auto)' : '⚪ 0 Pts';
+  }
+  return `🔸 ${pts} Pts`;
+};
+
+interface UserCardEditPanelProps {
+  voter: Voter;
+  gamesMap: Record<string, Game>;
+  apiKey: string;
+  disabled: boolean;
+  onUpdateVoter?: (updatedVoter: Voter) => void;
+  displayVotes: Voter['votes'];
+  pointOptions: number[];
+  maxPoints: number;
+  usedPositivePoints: Set<number>;
+  autoZeroGameId: string | null;
+  onPointsChange: (gameId: string, newPoints: number) => void;
+  onClearVotes: () => void;
+}
+
+const UserCardEditPanel: React.FC<UserCardEditPanelProps> = ({
   voter,
-  gamesMap = {} as Record<string, Game>,
-  isEditMode = false,
-  apiKey = '',
+  gamesMap,
+  apiKey,
+  disabled,
   onUpdateVoter,
-  draggable = true,
-  onDragStart,
-  onDragOver,
-  onDrop,
-  onDragEnd,
-  isDragging = false,
-  isDragOver = false,
-  onRequestDelete,
-  canDelete = true,
+  displayVotes,
+  pointOptions,
+  maxPoints,
+  usedPositivePoints,
+  autoZeroGameId,
+  onPointsChange,
+  onClearVotes,
 }) => {
   const [steamInput, setSteamInput] = useState(voter.steamId64 || '');
   const [isLoadingSteam, setIsLoadingSteam] = useState(false);
@@ -56,28 +100,8 @@ export const UserCard: React.FC<UserCardProps> = React.memo(({
   });
   const [customAvatarUrl, setCustomAvatarUrl] = useState('');
 
-  const getBadgeClass = (rank: AuraRank) => {
-    switch (rank) {
-      case 'Socio VIP':
-      case 'VIP':
-        return 'aura-badge vip';
-      case 'Socio Regular':
-      case 'Regular':
-        return 'aura-badge regular';
-      case 'En Observación':
-      case 'Observación':
-        return 'aura-badge observacion';
-      case 'Voto Mínimo':
-        return 'aura-badge minimo';
-      case 'Congelado':
-        return 'aura-badge congelado';
-      default:
-        return 'aura-badge';
-    }
-  };
-
-  // Steam API Auto-fetch handler
   const handleFetchSteam = async () => {
+    if (disabled) return;
     if (!steamInput.trim()) {
       setSteamStatus({ type: 'error', msg: 'Ingresa un SteamID64.' });
       return;
@@ -120,8 +144,8 @@ export const UserCard: React.FC<UserCardProps> = React.memo(({
     }
   };
 
-  // Local File Avatar Upload
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (disabled) return;
     const file = e.target.files?.[0];
     if (file && onUpdateVoter) {
       const reader = new FileReader();
@@ -137,8 +161,8 @@ export const UserCard: React.FC<UserCardProps> = React.memo(({
     }
   };
 
-  // Avatar URL apply
   const handleApplyUrl = () => {
+    if (disabled) return;
     if (customAvatarUrl.trim() && onUpdateVoter) {
       onUpdateVoter({
         ...voter,
@@ -148,24 +172,169 @@ export const UserCard: React.FC<UserCardProps> = React.memo(({
     }
   };
 
+  return (
+    <div className="card-edit-panel">
+      <div className="edit-field-group">
+        <label htmlFor="steam-id-input" className="edit-label">🌐 SteamID64 (Auto-Perfil Steam):</label>
+        <input
+          id="steam-id-input"
+          type="text"
+          className="edit-input"
+          placeholder="Ej: 76561198000000001"
+          value={steamInput}
+          onChange={(e) => setSteamInput(e.target.value)}
+          disabled={disabled}
+        />
+        <button
+          type="button"
+          className="steam-fetch-btn"
+          onClick={handleFetchSteam}
+          disabled={isLoadingSteam || disabled}
+        >
+          {isLoadingSteam ? 'Cargando...' : 'Cargar Steam'}
+        </button>
+        {steamStatus.msg && (
+          <div className={`steam-status-msg ${steamStatus.type}`}>{steamStatus.msg}</div>
+        )}
+      </div>
+
+      <div className="edit-field-group">
+        <label htmlFor="voter-name-input" className="edit-label">👤 Nombre de usuario:</label>
+        <input
+          id="voter-name-input"
+          type="text"
+          className="edit-input"
+          value={voter.name}
+          onChange={(e) => onUpdateVoter?.({ ...voter, name: e.target.value })}
+          disabled={disabled}
+        />
+      </div>
+
+      <div className="edit-field-group">
+        <label htmlFor="voter-avatar-url" className="edit-label">🖼️ Cambiar Foto de Avatar:</label>
+        <div className="avatar-options-grid">
+          <label className={`file-upload-btn ${disabled ? 'disabled' : ''}`}>
+            <span>📁 Subir desde equipo</span>
+            <input type="file" accept="image/*" onChange={handleFileUpload} disabled={disabled} />
+          </label>
+          <div className="url-avatar-row">
+            <input
+              id="voter-avatar-url"
+              type="text"
+              className="edit-input small-input"
+              placeholder="O pegar URL de imagen..."
+              value={customAvatarUrl}
+              onChange={(e) => setCustomAvatarUrl(e.target.value)}
+              disabled={disabled}
+            />
+            <button type="button" className="apply-url-btn" onClick={handleApplyUrl} disabled={disabled}>
+              Ok
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="edit-field-group">
+        <span className="edit-label">✦ Estado de Aura (Calculado Automáticamente):</span>
+        <div className="edit-aura-info-box">
+          <span className={getBadgeClass(voter.auraRank)}>
+            <span className="badge-icon">✦</span> {voter.auraRank} ({voter.multiplier}x)
+          </span>
+          <span className="aura-balance-pill">
+            Saldo: <strong>{voter.auraQuotaBalance >= 0 ? `+${voter.auraQuotaBalance}` : voter.auraQuotaBalance} Cuotas</strong>
+          </span>
+        </div>
+      </div>
+
+      <div className="edit-field-group">
+        <div className="edit-votes-header-row">
+          <span className="edit-label">🎮 Asignación de Puntos por Juego:</span>
+          <button
+            type="button"
+            className="btn-clear-user-votes"
+            onClick={onClearVotes}
+            disabled={disabled}
+            title={disabled ? 'Modificación bloqueada durante la importación' : 'Reiniciar a 0 puntos todos los votos de este integrante'}
+          >
+            🧹 Limpiar votos
+          </button>
+        </div>
+        <div className="game-votes-editor">
+          {displayVotes.map((vote) => {
+            const game = gamesMap[vote.gameId];
+            const isAutoZero = vote.gameId === autoZeroGameId;
+
+            return (
+              <motion.div
+                key={vote.gameId}
+                className={`game-vote-edit-row ${isAutoZero ? 'auto-zero-row' : ''}`}
+                layout
+              >
+                <div className="game-edit-title-group">
+                  <span className="game-edit-name">{game?.title || vote.gameId}</span>
+                </div>
+
+                <select
+                  className={`points-select ${isAutoZero ? 'auto-zero-select' : ''}`}
+                  value={vote.points}
+                  onChange={(e) => onPointsChange(vote.gameId, Number(e.target.value))}
+                  disabled={disabled}
+                >
+                  {pointOptions.map((pts) => {
+                    const isDisabled =
+                      pts > 0 && pts !== vote.points && usedPositivePoints.has(pts);
+                    const label = `${getPointOptionLabel(pts, maxPoints, isAutoZero)}${isDisabled ? ' 🔒' : ''}`;
+
+                    return (
+                      <option key={pts} value={pts} disabled={isDisabled}>
+                        {label}
+                      </option>
+                    );
+                  })}
+                </select>
+              </motion.div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export const UserCard: React.FC<UserCardProps> = React.memo(({
+  voter,
+  gamesMap = {} as Record<string, Game>,
+  isEditMode = false,
+  apiKey = '',
+  onUpdateVoter,
+  draggable = true,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd,
+  isDragging = false,
+  isDragOver = false,
+  onRequestDelete,
+  canDelete = true,
+  disabled = false,
+}) => {
   const gameCount = Object.keys(gamesMap).length;
   const pointOptions = getVotePointOptions(gameCount);
   const maxPoints = pointOptions[0] ?? 0;
 
   // Sanitizar puntos existentes: si un voto tiene un valor mayor al máximo actual,
   // se muestra 0 para evitar selects fuera de rango.
-  const sanitizedVotes = voter.votes.map((v) => ({
+  const displayVotes = voter.votes.map((v) => ({
     ...v,
     points: v.points > maxPoints ? 0 : v.points,
   }));
-  const displayVotes = sanitizedVotes;
 
   const usedPositivePoints = getUsedPositivePoints(displayVotes, maxPoints);
   const autoZeroGameId = getAutoZeroGameId(displayVotes, gameCount);
 
   // Game Points Handler con Regla 1 (puntuación única) y Regla 2 (autocompletado 0)
   const handlePointsChange = (gameId: string, newPoints: number) => {
-    if (!onUpdateVoter) return;
+    if (disabled || !onUpdateVoter) return;
 
     const updatedVotes = updateVoterVotes(displayVotes, gameId, newPoints, gameCount);
 
@@ -176,13 +345,22 @@ export const UserCard: React.FC<UserCardProps> = React.memo(({
   };
 
   const handleClearUserVotes = () => {
-    if (!onUpdateVoter) return;
+    if (disabled || !onUpdateVoter) return;
     const clearedVotes = voter.votes.map((v) => ({ ...v, points: 0 }));
     onUpdateVoter({
       ...voter,
       votes: clearedVotes,
     });
   };
+
+  const isCardDraggable = draggable && !disabled;
+
+  let deleteButtonTitle = `Eliminar a ${voter.name} del grupo`;
+  if (disabled) {
+    deleteButtonTitle = 'Modificación bloqueada durante la importación';
+  } else if (!canDelete) {
+    deleteButtonTitle = 'Debe haber al menos 2 integrantes en el grupo';
+  }
 
   return (
     <motion.div
@@ -191,22 +369,22 @@ export const UserCard: React.FC<UserCardProps> = React.memo(({
       className={`user-card rank-${voter.auraRank.toLowerCase()} ${isEditMode ? 'editing-mode' : ''} ${
         isDragging ? 'is-dragging' : ''
       } ${isDragOver ? 'is-drag-over' : ''}`}
-      draggable={draggable}
-      onDragStart={draggable ? (onDragStart as (event: unknown, info: unknown) => void) : undefined}
-      onDragOver={draggable ? onDragOver : undefined}
-      onDrop={draggable ? onDrop : undefined}
-      onDragEnd={draggable ? (onDragEnd as (event: unknown, info: unknown) => void) : undefined}
+      draggable={isCardDraggable}
+      onDragStart={isCardDraggable ? (onDragStart as (event: unknown, info: unknown) => void) : undefined}
+      onDragOver={isCardDraggable ? onDragOver : undefined}
+      onDrop={isCardDraggable ? onDrop : undefined}
+      onDragEnd={isCardDraggable ? (onDragEnd as (event: unknown, info: unknown) => void) : undefined}
       initial={{ opacity: 0, y: 20, scale: 0.95 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.2 } }}
       transition={{ type: 'spring', stiffness: 350, damping: 25 }}
-      whileHover={!isDragging ? { y: -4, transition: { duration: 0.2 } } : undefined}
+      whileHover={!isDragging && !disabled ? { y: -4, transition: { duration: 0.2 } } : undefined}
     >
       {/* Glow highlight top corner */}
       <div className="card-ambient-glow"></div>
 
       {/* DRAG HANDLE INDICATOR AT TOP RIGHT */}
-      {draggable && (
+      {isCardDraggable && (
         <div className="drag-handle-pill" title="Arrastra para reordenar esta tarjeta">
           <MdDragIndicator className="drag-icon" aria-hidden="true" />
         </div>
@@ -217,13 +395,9 @@ export const UserCard: React.FC<UserCardProps> = React.memo(({
         <button
           type="button"
           className="delete-voter-btn"
-          onClick={() => onRequestDelete(voter)}
-          disabled={!canDelete}
-          title={
-            !canDelete
-              ? `Debe haber al menos 2 integrantes en el grupo`
-              : `Eliminar a ${voter.name} del grupo`
-          }
+          onClick={() => !disabled && onRequestDelete(voter)}
+          disabled={!canDelete || disabled}
+          title={deleteButtonTitle}
           aria-label={`Eliminar a ${voter.name}`}
         >
           <FaTimes />
@@ -263,136 +437,20 @@ export const UserCard: React.FC<UserCardProps> = React.memo(({
 
       {/* EDIT MODE CONTROLS */}
       {isEditMode && (
-        <div className="card-edit-panel">
-          <div className="edit-field-group">
-            <label htmlFor="steam-id-input" className="edit-label">🌐 SteamID64 (Auto-Perfil Steam):</label>
-            <input
-              id="steam-id-input"
-              type="text"
-              className="edit-input"
-              placeholder="Ej: 76561198000000001"
-              value={steamInput}
-              onChange={(e) => setSteamInput(e.target.value)}
-            />
-            <button
-              type="button"
-              className="steam-fetch-btn"
-              onClick={handleFetchSteam}
-              disabled={isLoadingSteam}
-            >
-              {isLoadingSteam ? 'Cargando...' : 'Cargar Steam'}
-            </button>
-            {steamStatus.msg && (
-              <div className={`steam-status-msg ${steamStatus.type}`}>{steamStatus.msg}</div>
-            )}
-          </div>
-
-          <div className="edit-field-group">
-            <label htmlFor="voter-name-input" className="edit-label">👤 Nombre de usuario:</label>
-            <input
-              id="voter-name-input"
-              type="text"
-              className="edit-input"
-              value={voter.name}
-              onChange={(e) => onUpdateVoter?.({ ...voter, name: e.target.value })}
-            />
-          </div>
-
-          <div className="edit-field-group">
-            <label htmlFor="voter-avatar-url" className="edit-label">🖼️ Cambiar Foto de Avatar:</label>
-            <div className="avatar-options-grid">
-              <label className="file-upload-btn">
-                <span>📁 Subir desde equipo</span>
-                <input type="file" accept="image/*" onChange={handleFileUpload} />
-              </label>
-              <div className="url-avatar-row">
-                <input
-                  id="voter-avatar-url"
-                  type="text"
-                  className="edit-input small-input"
-                  placeholder="O pegar URL de imagen..."
-                  value={customAvatarUrl}
-                  onChange={(e) => setCustomAvatarUrl(e.target.value)}
-                />
-                <button type="button" className="apply-url-btn" onClick={handleApplyUrl}>
-                  Ok
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="edit-field-group">
-            <span className="edit-label">✦ Estado de Aura (Calculado Automáticamente):</span>
-            <div className="edit-aura-info-box">
-              <span className={getBadgeClass(voter.auraRank)}>
-                <span className="badge-icon">✦</span> {voter.auraRank} ({voter.multiplier}x)
-              </span>
-              <span className="aura-balance-pill">
-                Saldo: <strong>{voter.auraQuotaBalance >= 0 ? `+${voter.auraQuotaBalance}` : voter.auraQuotaBalance} Cuotas</strong>
-              </span>
-            </div>
-          </div>
-
-          <div className="edit-field-group">
-            <div className="edit-votes-header-row">
-              <span className="edit-label">🎮 Asignación de Puntos por Juego:</span>
-              <button
-                type="button"
-                className="btn-clear-user-votes"
-                onClick={handleClearUserVotes}
-                title="Reiniciar a 0 puntos todos los votos de este integrante"
-              >
-                🧹 Limpiar votos
-              </button>
-            </div>
-            <div className="game-votes-editor">
-              {displayVotes.map((vote) => {
-                const game = gamesMap[vote.gameId];
-                const isAutoZero = vote.gameId === autoZeroGameId;
-
-                return (
-                  <motion.div
-                    key={vote.gameId}
-                    className={`game-vote-edit-row ${isAutoZero ? 'auto-zero-row' : ''}`}
-                    layout
-                  >
-                    <div className="game-edit-title-group">
-                      <span className="game-edit-name">{game?.title || vote.gameId}</span>
-                    </div>
-
-                    <select
-                      className={`points-select ${isAutoZero ? 'auto-zero-select' : ''}`}
-                      value={vote.points}
-                      onChange={(e) => handlePointsChange(vote.gameId, Number(e.target.value))}
-                    >
-                      {pointOptions.map((pts) => {
-                        const isDisabled =
-                          pts > 0 && pts !== vote.points && usedPositivePoints.has(pts);
-                        let label = `🔸 ${pts} Pts`;
-                        if (pts === maxPoints) {
-                          label = `⭐ ${pts} Pts (Fav)`;
-                        } else if (pts === 0) {
-                          label = isAutoZero ? '✨ 0 Pts (Auto)' : '⚪ 0 Pts';
-                        }
-
-                        if (isDisabled) {
-                          label += ' 🔒';
-                        }
-
-                        return (
-                          <option key={pts} value={pts} disabled={isDisabled}>
-                            {label}
-                          </option>
-                        );
-                      })}
-                    </select>
-                  </motion.div>
-                );
-              })}
-            </div>
-          </div>
-
-        </div>
+        <UserCardEditPanel
+          voter={voter}
+          gamesMap={gamesMap}
+          apiKey={apiKey}
+          disabled={disabled}
+          onUpdateVoter={onUpdateVoter}
+          displayVotes={displayVotes}
+          pointOptions={pointOptions}
+          maxPoints={maxPoints}
+          usedPositivePoints={usedPositivePoints}
+          autoZeroGameId={autoZeroGameId}
+          onPointsChange={handlePointsChange}
+          onClearVotes={handleClearUserVotes}
+        />
       )}
 
       {/* NORMAL VOTES DISPLAY */}
