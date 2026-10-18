@@ -38,6 +38,8 @@ import {
   invalidatePendingWrites,
   loadInitialDashboardData,
   type InitialDashboardData,
+  loadVoters,
+  loadHistory,
   clearHistory as clearHistoryStore,
   deleteHistoryRecord,
   resetAllData,
@@ -47,7 +49,6 @@ import {
   importBackup,
   DEFAULT_FREEZE_STATE,
   type SyncState,
-  type ImportBackupResult,
 } from '../services/dataStore';
 import {
   getAdminAccessState,
@@ -837,20 +838,6 @@ export const SteamVotingDashboard: React.FC = () => {
     }
   }, []);
 
-  const applyImportResult = useCallback((result: ImportBackupResult) => {
-    if (result.syncState.status === 'read-only') {
-      setSyncState(result.syncState);
-      return;
-    }
-
-    skipNextSaveRef.current = true;
-    setVoters(result.voters);
-    setGamesMap(result.gamesMap);
-    setHistory(result.history);
-    setSteamApiKey(result.steamApiKey);
-    setFreezeState(DEFAULT_FREEZE_STATE);
-    setSyncState(result.syncState);
-  }, []);
 
   // Limpieza al desmontar el componente: cancelar temporizadores e invalidar escrituras pendientes
   useEffect(() => {
@@ -1397,6 +1384,17 @@ export const SteamVotingDashboard: React.FC = () => {
         throw new Error(result.message || 'No se pudo limpiar el historial.');
       }
     } catch (err) {
+      // Recuperación explícita: sincronizar la interfaz con Firestore tras fallo parcial o total
+      try {
+        const [freshVoters, freshHistory] = await Promise.all([loadVoters(), loadHistory()]);
+        skipNextSaveRef.current = true;
+        if (freshVoters && freshVoters.length > 0) {
+          setVoters(freshVoters);
+        }
+        setHistory(freshHistory);
+      } catch {
+        // Ignorar fallo secundario de recarga para conservar el mensaje del error principal
+      }
       const message = err instanceof Error ? err.message : 'Error al limpiar el historial';
       setSyncState({ status: 'error', message });
       throw err;
@@ -1478,6 +1476,14 @@ export const SteamVotingDashboard: React.FC = () => {
         throw new Error(result.message || 'No se pudieron restablecer los datos en la base de datos.');
       }
     } catch (err) {
+      // Recuperación explícita: sincronizar el historial de la interfaz con Firestore tras fallo parcial
+      try {
+        const freshHistory = await loadHistory();
+        skipNextSaveRef.current = true;
+        setHistory(freshHistory);
+      } catch {
+        // Ignorar fallo secundario de recarga para conservar el mensaje del error principal
+      }
       const message = err instanceof Error ? err.message : 'Error al restablecer los datos';
       setSyncState({ status: 'error', message });
     }
@@ -1573,18 +1579,33 @@ export const SteamVotingDashboard: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // 1. Cancelar los temporizadores de autoguardado pendientes del dashboard antes de iniciar la importación
+    cancelPendingWritesAndDebounce();
+
     const hasData = voters.length > 0 || history.length > 0;
     if (!confirmBackupOverwrite(hasData)) {
       resetImportInput();
       return;
     }
 
-    cancelPendingWritesAndDebounce();
-
     try {
       setSyncState({ status: 'saving', message: 'Importando y sincronizando backup...' });
       const result = await importBackup(file);
-      applyImportResult(result);
+
+      // 2. Comprobar el estado devuelto por el servicio para evitar mostrar éxito si es de solo lectura o error
+      if (result.syncState.status === 'read-only' || result.syncState.status === 'error') {
+        setSyncState(result.syncState);
+        return;
+      }
+
+      // 3. Aplicar el estado importado y reflejar fielmente el syncState retornado por el servicio
+      skipNextSaveRef.current = true;
+      setVoters(result.voters);
+      setGamesMap(result.gamesMap);
+      setHistory(result.history);
+      setSteamApiKey(result.steamApiKey);
+      setFreezeState(DEFAULT_FREEZE_STATE);
+      setSyncState(result.syncState);
     } catch (err) {
       const errorMsg = getErrorMessage(err, 'Error desconocido al importar el backup');
       console.error('[Dashboard] Error al importar backup:', err);

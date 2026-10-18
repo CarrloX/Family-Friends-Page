@@ -321,44 +321,57 @@ function handleDestructiveSyncError(
 
 type BatchOperation = (batch: ReturnType<typeof writeBatch>) => void;
 
+const delay = (ms: number): Promise<void> =>
+  new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+
+async function commitChunkWithRetry(
+  db: Firestore,
+  chunk: BatchOperation[],
+  retriesLeft = 2,
+  attempt = 1
+): Promise<void> {
+  try {
+    const batch = writeBatch(db);
+    chunk.forEach((op) => op(batch));
+    await batch.commit();
+  } catch (err) {
+    if (retriesLeft <= 0 || isPermissionDeniedError(err)) {
+      throw err;
+    }
+    await delay(attempt * 300);
+    await commitChunkWithRetry(db, chunk, retriesLeft - 1, attempt + 1);
+  }
+}
+
 /**
  * Divide un array de operaciones en chunks del tamaño de FIRESTORE_BATCH_LIMIT
- * y los confirma secuencialmente. Usar for...of sobre chunks pre-computados evita
- * el antipatrón "await dentro de un bucle while" (SonarLint S9382).
+ * y los confirma secuencialmente con reintentos automáticos para fallos transitorios.
+ * Usar for...of sobre chunks pre-computados evita el antipatrón "await dentro de un bucle while" (SonarLint S9382).
  */
 async function commitBatchedOperations(
   db: Firestore,
-  operations: BatchOperation[]
+  operations: BatchOperation[],
+  onChunkCommitted?: (startIndex: number, count: number) => void
 ): Promise<void> {
   const chunks: BatchOperation[][] = [];
   for (let i = 0; i < operations.length; i += FIRESTORE_BATCH_LIMIT) {
     chunks.push(operations.slice(i, i + FIRESTORE_BATCH_LIMIT));
   }
 
+  let offset = 0;
   await chunks.reduce<Promise<void>>(
-    (chain, chunk) => chain.then(() => {
-      const batch = writeBatch(db);
-      chunk.forEach((op) => op(batch));
-      return batch.commit();
-    }),
+    (chain, chunk) => {
+      const currentOffset = offset;
+      offset += chunk.length;
+      return chain.then(async () => {
+        await commitChunkWithRetry(db, chunk);
+        onChunkCommitted?.(currentOffset, chunk.length);
+      });
+    },
     Promise.resolve()
   );
-}
-
-/**
- * Elimina todos los documentos de una colección en Firestore dividiéndolos en lotes seguros
- * (FIRESTORE_BATCH_LIMIT = 400 operaciones por batch) para evitar exceder el límite de 500 de Firestore.
- */
-async function batchDeleteCollection(
-  db: Firestore,
-  collectionName: string
-): Promise<void> {
-  const colRef = collection(db, collectionName);
-  const snap = await getDocs(colRef);
-  if (snap.empty) return;
-
-  const ops: BatchOperation[] = snap.docs.map((d) => (batch) => batch.delete(d.ref));
-  await commitBatchedOperations(db, ops);
 }
 
 // ============================================================
@@ -885,7 +898,7 @@ export async function loadVoters(): Promise<Voter[]> {
   if (isFirebaseReady()) {
     try {
       const activeVoting = await fetchFirestoreActiveVoting();
-      if (activeVoting?.voters && activeVoting.voters.length > 0) {
+      if (activeVoting) {
         return activeVoting.voters;
       }
 
@@ -1009,7 +1022,7 @@ export async function loadGames(): Promise<Record<string, Game>> {
   if (isFirebaseReady()) {
     try {
       const activeVoting = await fetchFirestoreActiveVoting();
-      if (activeVoting?.gamesMap && Object.keys(activeVoting.gamesMap).length > 0) {
+      if (activeVoting) {
         return activeVoting.gamesMap;
       }
 
@@ -1271,14 +1284,14 @@ function resolveInitialVoters(
   parsedActive: ActiveVotingStateResult | null,
   groupData: GrupoDocument | null
 ): Voter[] {
-  if (parsedActive?.voters && parsedActive.voters.length > 0) {
+  if (parsedActive) {
     return parsedActive.voters;
   }
-  if (groupData?.voters && Array.isArray(groupData.voters) && groupData.voters.length > 0) {
+
+  if (Array.isArray(groupData?.voters)) {
     return groupData.voters;
   }
-  // Cuando la lectura remota tuvo éxito pero no hay votantes en Firestore (están vacíos o reseteados),
-  // el estado remoto válido es una lista vacía. NO recurrir a la caché local antigua.
+
   return [];
 }
 
@@ -1286,21 +1299,22 @@ function resolveInitialGamesMap(
   parsedActive: ActiveVotingStateResult | null,
   groupData: GrupoDocument | null
 ): Record<string, Game> {
-  if (parsedActive?.gamesMap && Object.keys(parsedActive.gamesMap).length > 0) {
+  if (parsedActive) {
     return parsedActive.gamesMap;
   }
-  if (groupData?.gamesMap && typeof groupData.gamesMap === 'object' && Object.keys(groupData.gamesMap).length > 0) {
+
+  if (groupData?.gamesMap && typeof groupData.gamesMap === 'object') {
     return sanitizeGamesMap(groupData.gamesMap);
   }
-  if (groupData?.games && Array.isArray(groupData.games) && groupData.games.length > 0) {
+
+  if (Array.isArray(groupData?.games)) {
     const rebuilt: Record<string, Game> = {};
     for (const g of groupData.games) {
       rebuilt[g.id] = sanitizeGame(g);
     }
     return rebuilt;
   }
-  // Cuando la lectura remota tuvo éxito pero no hay juegos en Firestore (están vacíos o reseteados),
-  // el estado remoto válido es un catálogo vacío. NO recurrir a la caché local antigua.
+
   return {};
 }
 
@@ -1345,7 +1359,7 @@ function loadLocalFallbackDashboardData(apiKey: string): InitialDashboardData {
 
   // Si cachedActive existe y tiene votantes, aseguramos que sus saldos de Aura
   // estén sincronizados con la lista principal de miembros persistida en LS_KEY_VOTERS
-  let cachedVoters = cachedActive?.voters || localVoters;
+  let cachedVoters = cachedActive ? cachedActive.voters : localVoters;
   if (cachedActive?.voters && localVoters.length > 0) {
     const localMemberMap = new Map(localVoters.map((v) => [v.id, v]));
     cachedVoters = cachedActive.voters.map((v) => {
@@ -1361,7 +1375,7 @@ function loadLocalFallbackDashboardData(apiKey: string): InitialDashboardData {
     });
   }
 
-  const cachedGamesMap = cachedActive?.gamesMap || sanitizeGamesMap(readLocal<Record<string, Game>>(LS_KEY_GAMES, {}));
+  const cachedGamesMap = cachedActive ? cachedActive.gamesMap : sanitizeGamesMap(readLocal<Record<string, Game>>(LS_KEY_GAMES, {}));
   const cachedHistory = getSortedLocalHistory();
   const cachedFreeze = cachedActive?.freezeState || DEFAULT_FREEZE_STATE;
 
@@ -1536,67 +1550,157 @@ export async function deleteHistoryRecord(
  * Limpia el historial de votaciones y actualiza opcionalmente el estado de Aura
  * de los integrantes de forma segura por lotes en Firestore y localStorage.
  */
+function applyVotersUpdateToBatch(
+  batch: ReturnType<typeof writeBatch>,
+  db: Firestore,
+  updatedVoters?: Voter[]
+): void {
+  if (!updatedVoters) return;
+  const cleanVoters = removeUndefinedDeep(updatedVoters);
+  const now = Timestamp.now();
+  const votersDocRef = doc(db, COLLECTION_GROUP, DOC_MIEMBROS);
+  const activeDocRef = doc(db, COLLECTION_ACTIVE_VOTING, DOC_ACTIVE_VOTING);
+  batch.set(votersDocRef, { voters: cleanVoters, lastUpdated: now }, { merge: true });
+  batch.set(activeDocRef, { voters: cleanVoters, lastUpdated: now }, { merge: true });
+}
+
+function registerDocIds(
+  set: Set<string>,
+  docs: Array<{ id: string; data?: () => Record<string, unknown> }>
+): void {
+  for (const d of docs) {
+    set.add(d.id);
+    if (typeof d.data === 'function') {
+      const data = d.data();
+      if (data && typeof data.id === 'string') {
+        set.add(data.id);
+      }
+    }
+  }
+}
+
+function removeRecordsFromLocalHistory(deletedIds: Set<string>): void {
+  if (deletedIds.size === 0) return;
+  const current = readLocal<VotingHistoryRecord[]>(LS_KEY_HISTORY, []);
+  if (current.length === 0) return;
+  const updated = current.filter((r) => !deletedIds.has(r.id));
+  writeLocal(LS_KEY_HISTORY, updated);
+}
+
+function saveClearHistoryLocal(updatedVoters?: Voter[]): boolean {
+  const okHistory = removeLocal(LS_KEY_HISTORY);
+  const okVoters = updatedVoters ? updateLocalVoters(updatedVoters) : true;
+  return okHistory && okVoters;
+}
+
+function handleClearHistoryFailure(
+  err: unknown,
+  auraPersisted: boolean,
+  updatedVoters: Voter[] | undefined,
+  deletedDocIds: Set<string>,
+  totalDocsCount: number
+): SyncState {
+  if (auraPersisted && updatedVoters) {
+    updateLocalVoters(updatedVoters);
+  }
+  removeRecordsFromLocalHistory(deletedDocIds);
+
+  const detail = extractErrorMessage(err, 'Error en operaciones de Firestore');
+
+  if (auraPersisted) {
+    return {
+      status: 'error',
+      message: `Aura restaurado en el servidor (${deletedDocIds.size} de ${totalDocsCount} registros eliminados), pero falló la depuración de los lotes restantes: ${detail}. Puedes reintentar la limpieza para completar la depuración.`,
+    };
+  }
+
+  if (deletedDocIds.size > 0) {
+    return {
+      status: 'error',
+      message: `Limpieza parcial: se eliminaron ${deletedDocIds.size} de ${totalDocsCount} registros en el servidor, pero ocurrió un error: ${detail}. Reintenta la limpieza para eliminar los registros restantes.`,
+    };
+  }
+
+  return handleDestructiveSyncError(err, 'Error limpiando historial en Firestore');
+}
+
+async function executeClearHistoryInFirestore(
+  db: Firestore,
+  updatedVoters?: Voter[]
+): Promise<SyncState> {
+  let auraPersisted = false;
+  const deletedDocIds = new Set<string>();
+  let totalDocsCount = 0;
+
+  try {
+    const historyColRef = collection(db, COLLECTION_HISTORY);
+    const historySnap = await getDocs(historyColRef);
+    const historyDocs = historySnap.docs;
+    totalDocsCount = historyDocs.length;
+
+    const baseOpsCount = updatedVoters ? 2 : 0;
+    const totalOps = baseOpsCount + historyDocs.length;
+
+    // CASO 1: Para historiales de hasta 398 documentos (totalOps <= 400), lote único atómico
+    if (totalOps <= FIRESTORE_BATCH_LIMIT) {
+      const batch = writeBatch(db);
+      applyVotersUpdateToBatch(batch, db, updatedVoters);
+      historyDocs.forEach((d) => batch.delete(d.ref));
+      await batch.commit();
+      registerDocIds(deletedDocIds, historyDocs);
+      auraPersisted = Boolean(updatedVoters);
+    } else {
+      // CASO 2: Para historiales grandes (> 398 documentos con votantes):
+      // Fase 1: Restaurar Aura en grupo y sesión activa junto al primer lote
+      const firstBatchSliceSize = Math.max(0, FIRESTORE_BATCH_LIMIT - baseOpsCount);
+      const firstBatchDocs = historyDocs.slice(0, firstBatchSliceSize);
+      const remainingDocs = historyDocs.slice(firstBatchSliceSize);
+
+      const firstBatch = writeBatch(db);
+      applyVotersUpdateToBatch(firstBatch, db, updatedVoters);
+      firstBatchDocs.forEach((d) => firstBatch.delete(d.ref));
+      await firstBatch.commit();
+      auraPersisted = Boolean(updatedVoters);
+      registerDocIds(deletedDocIds, firstBatchDocs);
+
+      // Fase 2: Eliminar documentos restantes con reintentos y tracking de confirmación
+      const deleteOps: BatchOperation[] = remainingDocs.map((d) => (b) => b.delete(d.ref));
+      await commitBatchedOperations(db, deleteOps, (startIndex, count) => {
+        registerDocIds(deletedDocIds, remainingDocs.slice(startIndex, startIndex + count));
+      });
+    }
+
+    saveClearHistoryLocal(updatedVoters);
+    if (import.meta.env.DEV) {
+      console.log('[Store] Historial limpiado y votantes actualizados correctamente en Firestore.');
+    }
+    return {
+      status: 'synced',
+      message: updatedVoters ? 'Historial limpiado y Aura restaurado' : 'Historial limpiado',
+    };
+  } catch (err) {
+    return handleClearHistoryFailure(err, auraPersisted, updatedVoters, deletedDocIds, totalDocsCount);
+  }
+}
+
+/**
+ * Limpia el historial de votaciones y actualiza opcionalmente el estado de Aura
+ * de los integrantes de forma segura por lotes en Firestore y localStorage.
+ */
 export async function clearHistory(updatedVoters?: Voter[]): Promise<SyncState> {
   return executeCoordinatedWrite(async () => {
     if (!canWriteToPersistence()) {
       return buildReadOnlyState();
     }
 
-    const saveLocalFallback = (): boolean => {
-      const okHistory = removeLocal(LS_KEY_HISTORY);
-      let okVoters = true;
-      if (updatedVoters) {
-        okVoters = updateLocalVoters(updatedVoters);
-      }
-      return okHistory && okVoters;
-    };
-
     if (isFirebaseReady()) {
-      try {
-        const db = getFirestoreInstance()!;
-
-        // 1. Eliminar documentos del historial por lotes seguros (evita exceder límite de 500)
-        await batchDeleteCollection(db, COLLECTION_HISTORY);
-
-        // 2. Si se debe restaurar Aura de los integrantes, actualizar documentos de grupo y sesión
-        if (updatedVoters) {
-          const batch = writeBatch(db);
-          const cleanVoters = removeUndefinedDeep(updatedVoters);
-          const votersDocRef = doc(db, COLLECTION_GROUP, DOC_MIEMBROS);
-          batch.set(
-            votersDocRef,
-            { voters: cleanVoters, lastUpdated: Timestamp.now() },
-            { merge: true }
-          );
-          const activeDocRef = doc(db, COLLECTION_ACTIVE_VOTING, DOC_ACTIVE_VOTING);
-          batch.set(
-            activeDocRef,
-            { voters: cleanVoters, lastUpdated: Timestamp.now() },
-            { merge: true }
-          );
-          await batch.commit();
-        }
-
-        saveLocalFallback();
-        if (import.meta.env.DEV) {
-          console.log('[Store] Historial limpiado y votantes actualizados correctamente en Firestore.');
-        }
-        return {
-          status: 'synced',
-          message: updatedVoters ? 'Historial limpiado y Aura restaurado' : 'Historial limpiado',
-        };
-      } catch (err) {
-        return handleDestructiveSyncError(
-          err,
-          'Error limpiando historial en Firestore'
-        );
-      }
+      return executeClearHistoryInFirestore(getFirestoreInstance()!, updatedVoters);
     }
 
-    const ok = saveLocalFallback();
-    if (!ok) {
+    if (!saveClearHistoryLocal(updatedVoters)) {
       return { status: 'error', message: 'Error al limpiar historial localmente: almacenamiento no disponible o lleno' };
     }
+
     return {
       status: 'local',
       message: updatedVoters ? 'Historial limpiado y Aura restaurado (modo local)' : 'Historial limpiado (modo local)',
@@ -1782,9 +1886,9 @@ interface BackupSyncPayload {
 }
 
 /**
- * Sincroniza atómicamente o por lotes seguros el contenido de un respaldo en Firestore.
- * Garantiza que nunca se eliminen registros antiguos antes de que todos los nuevos registros
- * del respaldo hayan sido confirmados exitosamente.
+ * Sincroniza atómicamente el contenido de un respaldo en Firestore en un único lote indivisible.
+ * Si las operaciones requeridas exceden el límite atómico de Firestore (400 operaciones), rechaza la importación
+ * para garantizar de forma absoluta que nunca se produzca una importación parcial o un historial mezclado ante fallos de red.
  */
 async function syncBackupToFirestore(
   db: Firestore,
@@ -1829,54 +1933,23 @@ async function syncBackupToFirestore(
 
   const newRecordIdSet = new Set(newHistoryEntries.map((e) => e.recordId));
 
-  // Huérfanos: documentos existentes en Firestore que no existen en el nuevo backup
-  const docsToDelete = snap.docs.filter((d) => {
-    const dataId = d.data().id;
-    return !newRecordIdSet.has(d.id) && (!dataId || !newRecordIdSet.has(dataId));
-  });
+  // Huérfanos y legados: cualquier documento en Firestore cuyo ID no coincida con los IDs canónicos del backup
+  const docsToDelete = snap.docs.filter((d) => !newRecordIdSet.has(d.id));
 
   const totalOps = 2 + newHistoryEntries.length + docsToDelete.length;
 
-  // CASO 1: Si todas las operaciones caben en un único lote (<= 400),
-  // se ejecuta en un único batch 100% indivisible y atómico.
-  if (totalOps <= FIRESTORE_BATCH_LIMIT) {
-    const batch = writeBatch(db);
-    batch.set(groupDocRef, groupPayload);
-    batch.set(activeDocRef, activePayload);
-    docsToDelete.forEach((d) => batch.delete(d.ref));
-    newHistoryEntries.forEach((entry) => batch.set(entry.docRef, entry.payload));
-    await batch.commit();
-    return;
-  }
-
-  // CASO 2: Para respaldos grandes (> 400 operaciones):
-  // 1. Guardar primero el grupo y la votación activa junto con el primer bloque de historial.
-  // 2. Insertar todos los bloques restantes de historial.
-  // 3. Solo cuando T0DO el historial nuevo está persistido, podar los huérfanos.
-  //
-  // El primer lote incluye las 2 escrituras base + tantas entradas de historial como quepan.
-  const firstBatchHistorySlice = newHistoryEntries.slice(0, FIRESTORE_BATCH_LIMIT - 2);
-  const remainingEntries = newHistoryEntries.slice(FIRESTORE_BATCH_LIMIT - 2);
-
-  const firstBatch = writeBatch(db);
-  firstBatch.set(groupDocRef, groupPayload);
-  firstBatch.set(activeDocRef, activePayload);
-  firstBatchHistorySlice.forEach((entry) => firstBatch.set(entry.docRef, entry.payload));
-  await firstBatch.commit();
-
-  // Confirmar el resto del historial nuevo en lotes adicionales
-  if (remainingEntries.length > 0) {
-    const historyOps: BatchOperation[] = remainingEntries.map(
-      (entry) => (batch) => batch.set(entry.docRef, entry.payload)
+  if (totalOps > FIRESTORE_BATCH_LIMIT) {
+    throw new Error(
+      `El respaldo requiere ${totalOps} operaciones, superando el límite atómico de ${FIRESTORE_BATCH_LIMIT} operaciones de Firestore. Para garantizar que no quede un historial parcial o mezclado, divide o limpia el historial antes de importarlo.`
     );
-    await commitBatchedOperations(db, historyOps);
   }
 
-  // Podar huérfanos solo después de confirmar todo el historial nuevo
-  if (docsToDelete.length > 0) {
-    const deleteOps: BatchOperation[] = docsToDelete.map((d) => (batch) => batch.delete(d.ref));
-    await commitBatchedOperations(db, deleteOps);
-  }
+  const batch = writeBatch(db);
+  batch.set(groupDocRef, groupPayload);
+  batch.set(activeDocRef, activePayload);
+  docsToDelete.forEach((d) => batch.delete(d.ref));
+  newHistoryEntries.forEach((entry) => batch.set(entry.docRef, entry.payload));
+  await batch.commit();
 }
 
 export interface ImportBackupResult {
@@ -1997,54 +2070,108 @@ export async function importBackup(file: File): Promise<ImportBackupResult> {
 /**
  * Limpia todos los datos (reset) de forma atómica en Firestore y localStorage.
  */
+function saveResetAllDataLocal(): boolean {
+  const ok1 = removeLocal(LS_KEY_VOTERS);
+  const ok2 = removeLocal(LS_KEY_GAMES);
+  const ok3 = removeLocal(LS_KEY_HISTORY);
+  const ok4 = removeLocal(LS_KEY_API_KEY);
+  const ok5 = removeLocal(LS_KEY_ACTIVE_VOTING);
+  return ok1 && ok2 && ok3 && ok4 && ok5;
+}
+
+function handleResetAllDataFailure(
+  err: unknown,
+  deletedDocIds: Set<string>,
+  totalDocsCount: number
+): SyncState {
+  removeRecordsFromLocalHistory(deletedDocIds);
+
+  const detail = extractErrorMessage(err, 'Error al restablecer datos en Firestore');
+
+  if (deletedDocIds.size > 0) {
+    return {
+      status: 'error',
+      message: `El restablecimiento quedó incompleto: se eliminaron ${deletedDocIds.size} de ${totalDocsCount} registros del historial en Firestore, pero los datos de integrantes y votación activa no se alteraron (${detail}). Reintenta el restablecimiento para completar la operación.`,
+    };
+  }
+
+  return handleDestructiveSyncError(err, 'Error al restablecer datos en Firestore');
+}
+
+async function executeResetAllDataInFirestore(db: Firestore): Promise<SyncState> {
+  const deletedDocIds = new Set<string>();
+  let totalDocsCount = 0;
+
+  try {
+    const docRef = doc(db, COLLECTION_GROUP, DOC_MIEMBROS);
+    const activeDocRef = doc(db, COLLECTION_ACTIVE_VOTING, DOC_ACTIVE_VOTING);
+
+    const historyColRef = collection(db, COLLECTION_HISTORY);
+    const historySnap = await getDocs(historyColRef);
+    const historyDocs = historySnap.docs;
+    totalDocsCount = historyDocs.length;
+
+    const totalOps = 2 + historyDocs.length;
+
+    // CASO 1: Para historiales de hasta 398 documentos (totalOps <= 400), único lote atómico
+    if (totalOps <= FIRESTORE_BATCH_LIMIT) {
+      const batch = writeBatch(db);
+      const now = Timestamp.now();
+      batch.set(docRef, { voters: [], gamesMap: {}, lastUpdated: now });
+      batch.set(activeDocRef, { voters: [], gamesMap: {}, lastUpdated: now });
+      historyDocs.forEach((d) => batch.delete(d.ref));
+      await batch.commit();
+      registerDocIds(deletedDocIds, historyDocs);
+    } else {
+      // CASO 2: Para historiales grandes (> 398 documentos):
+      // 1. Depuramos bloques iniciales de historial
+      const finalBatchHistorySliceSize = FIRESTORE_BATCH_LIMIT - 2;
+      const initialDocsCount = historyDocs.length - finalBatchHistorySliceSize;
+      const initialHistoryDocs = historyDocs.slice(0, initialDocsCount);
+      const finalHistoryDocs = historyDocs.slice(initialDocsCount);
+
+      const deleteOps: BatchOperation[] = initialHistoryDocs.map((d) => (b) => b.delete(d.ref));
+      await commitBatchedOperations(db, deleteOps, (startIndex, count) => {
+        registerDocIds(deletedDocIds, initialHistoryDocs.slice(startIndex, startIndex + count));
+      });
+
+      // 2. Lote final atómico: últimos documentos de historial + reseteo de grupo y sesión
+      const finalBatch = writeBatch(db);
+      const now = Timestamp.now();
+      finalBatch.set(docRef, { voters: [], gamesMap: {}, lastUpdated: now });
+      finalBatch.set(activeDocRef, { voters: [], gamesMap: {}, lastUpdated: now });
+      finalHistoryDocs.forEach((d) => finalBatch.delete(d.ref));
+      await finalBatch.commit();
+      registerDocIds(deletedDocIds, finalHistoryDocs);
+    }
+
+    saveResetAllDataLocal();
+    if (import.meta.env.DEV) {
+      console.log('[Store] Datos restablecidos completamente en Firestore.');
+    }
+    return { status: 'synced', message: 'Datos restablecidos' };
+  } catch (err) {
+    return handleResetAllDataFailure(err, deletedDocIds, totalDocsCount);
+  }
+}
+
+/**
+ * Limpia todos los datos (reset) de forma atómica en Firestore y localStorage.
+ */
 export async function resetAllData(): Promise<SyncState> {
   return executeCoordinatedWrite(async () => {
     if (!canWriteToPersistence()) {
       return buildReadOnlyState();
     }
 
-    const saveLocalFallback = (): boolean => {
-      const ok1 = removeLocal(LS_KEY_VOTERS);
-      const ok2 = removeLocal(LS_KEY_GAMES);
-      const ok3 = removeLocal(LS_KEY_HISTORY);
-      const ok4 = removeLocal(LS_KEY_API_KEY);
-      const ok5 = removeLocal(LS_KEY_ACTIVE_VOTING);
-      return ok1 && ok2 && ok3 && ok4 && ok5;
-    };
-
     if (isFirebaseReady()) {
-      try {
-        const db = getFirestoreInstance()!;
-
-        // 1. Limpiar documento de grupo y sesión de votación activa en un batch atómico
-        const batch = writeBatch(db);
-        const docRef = doc(db, COLLECTION_GROUP, DOC_MIEMBROS);
-        batch.set(docRef, { voters: [], gamesMap: {}, lastUpdated: Timestamp.now() });
-
-        const activeDocRef = doc(db, COLLECTION_ACTIVE_VOTING, DOC_ACTIVE_VOTING);
-        batch.set(activeDocRef, { voters: [], gamesMap: {}, lastUpdated: Timestamp.now() });
-        await batch.commit();
-
-        // 2. Limpiar todos los documentos de la colección de historial por lotes seguros (evita límite de 500)
-        await batchDeleteCollection(db, COLLECTION_HISTORY);
-
-        saveLocalFallback();
-        if (import.meta.env.DEV) {
-          console.log('[Store] Datos restablecidos completamente en Firestore.');
-        }
-        return { status: 'synced', message: 'Datos restablecidos' };
-      } catch (err) {
-        return handleDestructiveSyncError(
-          err,
-          'Error al restablecer datos en Firestore'
-        );
-      }
+      return executeResetAllDataInFirestore(getFirestoreInstance()!);
     }
 
-    const ok = saveLocalFallback();
-    if (!ok) {
+    if (!saveResetAllDataLocal()) {
       return { status: 'error', message: 'Error al restablecer datos localmente: almacenamiento no disponible o lleno' };
     }
+
     return { status: 'local', message: 'Datos restablecidos (modo local)' };
   }, { isBarrier: true });
 }
