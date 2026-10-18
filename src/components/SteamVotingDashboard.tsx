@@ -10,6 +10,10 @@ import { VotingHistoryModal } from './VotingHistoryModal';
 import { DeleteUserConfirmModal } from './DeleteUserConfirmModal';
 import { DashboardSkeleton } from './DashboardSkeleton';
 import { AdminPinModal } from './AdminPinModal';
+import { SyncIndicator } from './SyncIndicator';
+import { InitialLoadErrorView } from './InitialLoadErrorView';
+import { AdminSessionBadge } from './AdminSessionBadge';
+import { EditModeTopBar } from './EditModeTopBar';
 import { useModalFocusTrap } from '../hooks/useModalFocusTrap';
 import { calculateResults, removeGameFromVotingSession, addGameToVotingSession } from '../data/votingData';
 import type { Voter, Game, VotingHistoryRecord, AuraRank, FreezePriceState, SteamPriceInfo, GameResult } from '../types/voting';
@@ -54,7 +58,6 @@ import {
   loginAdminWithPassword,
   logoutAdmin,
   type AuthResult,
-  type AdminAccessState,
 } from '../services/accessControl';
 import { subscribeToAuthState } from '../services/firebaseConfig';
 
@@ -290,37 +293,7 @@ const ResetAuraConfirmModal = ({
   );
 };
 
-const SYNC_STATUS_CONFIG: Record<string, { icon: string; className: string }> = {
-  saving: { icon: '⏳', className: 'sync-indicator sync-saving' },
-  synced: { icon: '✅', className: 'sync-indicator sync-synced' },
-  error: { icon: '❌', className: 'sync-indicator sync-error' },
-  local: { icon: '💾', className: 'sync-indicator sync-local' },
-};
 
-const SyncIndicator: React.FC<{ syncState: SyncState }> = ({ syncState }) => {
-  const { status, message } = syncState;
-  const isVisible = status !== 'idle';
-  const config = SYNC_STATUS_CONFIG[status] ?? { icon: '✅', className: 'sync-indicator' };
-
-  return (
-    <AnimatePresence>
-      {isVisible && (
-        <motion.div
-          key="sync-indicator"
-          className={config.className}
-          title={message}
-          initial={{ opacity: 0, y: 12, scale: 0.95 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: 8, scale: 0.95 }}
-          transition={{ duration: 0.25, ease: 'easeOut' }}
-        >
-          <span className="sync-icon">{config.icon}</span>
-          <span className="sync-text">{message}</span>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
-};
 
 // ─── Funciones auxiliares puras ───────────────────────────
 function reconcileVoterVotes(voters: Voter[], gameIds: string[]): { changed: boolean; updatedVoters: Voter[] } {
@@ -554,365 +527,6 @@ function useVotersDragAndDrop(
 
   return { getDragProps };
 }
-
-interface InitialLoadErrorViewProps {
-  syncState: SyncState;
-  errorMessage: string;
-  onRetry: () => void;
-}
-
-const InitialLoadErrorView: React.FC<InitialLoadErrorViewProps> = ({
-  syncState,
-  errorMessage,
-  onRetry,
-}) => (
-  <div className="steam-dashboard-container initial-error-container">
-    <div className="bg-gradient-overlay" />
-    <div className="bg-grid-lines" />
-
-    <SyncIndicator syncState={syncState} />
-
-    <main className="initial-error-card-wrapper" role="alert" aria-live="assertive">
-      <div className="initial-load-error-card">
-        <div className="initial-error-badge">
-          <span className="initial-error-icon" aria-hidden="true">⚠️</span>
-          <span className="initial-error-tag">Error de Conexión Remota</span>
-        </div>
-
-        <h1 className="initial-error-title">No se pudieron cargar los datos</h1>
-
-        <p className="initial-error-desc">
-          Ocurrió un error al leer la información desde el servidor. Para proteger la integridad de tus datos y evitar sobreescribir la información existente con una lista vacía, el autoguardado se encuentra <strong>suspendido</strong>.
-        </p>
-
-        {errorMessage && (
-          <div className="initial-error-detail">
-            <span className="initial-error-detail-label">Detalle del error:</span>
-            <code>{errorMessage}</code>
-          </div>
-        )}
-
-        <div className="initial-error-actions">
-          <motion.button
-            type="button"
-            className="btn-retry-initial-load"
-            onClick={onRetry}
-            whileHover={{ scale: 1.04, y: -2 }}
-            whileTap={{ scale: 0.96 }}
-          >
-            🔄 Reintentar conexión
-          </motion.button>
-        </div>
-      </div>
-    </main>
-  </div>
-);
-
-interface AdminSessionBadgeProps {
-  adminAccess: AdminAccessState;
-  onLogout: () => void;
-}
-
-const AdminSessionBadge: React.FC<AdminSessionBadgeProps> = ({ adminAccess, onLogout }) => {
-  if (!adminAccess.isAuthenticated) return null;
-
-  return (
-    <motion.div
-      className="admin-session-badge"
-      initial={{ opacity: 0, x: -10 }}
-      animate={{ opacity: 1, x: 0 }}
-      style={{
-        position: 'fixed',
-        top: 14,
-        left: 14,
-        zIndex: 90,
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        background: 'rgba(23, 26, 33, 0.94)',
-        border: adminAccess.isAdmin
-          ? '1px solid rgba(168, 85, 247, 0.5)'
-          : '1px solid rgba(156, 163, 175, 0.3)',
-        boxShadow: adminAccess.isAdmin
-          ? '0 0 15px rgba(168, 85, 247, 0.25)'
-          : 'none',
-        borderRadius: 20,
-        padding: '6px 12px',
-        fontSize: '12px',
-        color: adminAccess.isAdmin ? '#c084fc' : '#9ca3af',
-        backdropFilter: 'blur(8px)',
-      }}
-    >
-      <span>
-        {adminAccess.isAdmin ? '🛡️ Admin' : '👤 Usuario'}: {adminAccess.adminEmail || 'Sesión activa'}
-      </span>
-      <button
-        type="button"
-        onClick={onLogout}
-        style={{
-          background: 'transparent',
-          border: 'none',
-          color: '#f87171',
-          cursor: 'pointer',
-          fontSize: '11px',
-          fontWeight: 600,
-          padding: '2px 6px',
-          borderRadius: 4,
-        }}
-        title="Cerrar sesión (Volver a solo lectura)"
-      >
-        Cerrar sesión
-      </button>
-    </motion.div>
-  );
-};
-
-interface EditModeTopBarProps {
-  voterCount: number;
-  steamApiKey: string;
-  onApiKeyChange: (key: string) => void;
-  onAddVoter: () => void;
-  onExportBackup: () => void;
-  onImportClick: () => void;
-  onImportFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  importFileInputRef: React.RefObject<HTMLInputElement | null>;
-  isSaving: boolean;
-  isImporting: boolean;
-  onResetAllVotes: () => void;
-  onResetData: () => void;
-  onOpenResetAuraConfirm: () => void;
-  onCloseEditMode: () => void;
-}
-
-const EditBarBadgeSection: React.FC<{ isImporting: boolean }> = ({ isImporting }) => (
-  <div className="edit-bar-left">
-    <span className="edit-badge">
-      {isImporting ? '⏳ IMPORTACIÓN EN CURSO' : '⚙️ MODO EDICIÓN ACTIVO'}
-    </span>
-    <span className="edit-help-text">
-      {isImporting
-        ? 'Restaurando y sincronizando datos desde el backup. Modificaciones bloqueadas temporalmente.'
-        : 'Buscá juegos en Steam, edita perfiles y arrastrá tarjetas. Autoguardado activo.'}
-    </span>
-  </div>
-);
-
-const AddVoterButton: React.FC<{
-  voterCount: number;
-  isImporting: boolean;
-  onAddVoter: () => void;
-}> = ({ voterCount, isImporting, onAddVoter }) => {
-  const isMaxReached = voterCount >= MAX_VOTERS;
-  const isDisabled = isMaxReached || isImporting;
-
-  let title = 'Añadir nuevo integrante';
-  if (isImporting) {
-    title = 'Importación de backup en curso...';
-  } else if (isMaxReached) {
-    title = `Máximo de ${MAX_VOTERS} integrantes alcanzado (límite Steam Families)`;
-  }
-
-  return (
-    <motion.button
-      type="button"
-      className="btn-add-voter"
-      onClick={onAddVoter}
-      disabled={isDisabled}
-      title={title}
-      whileHover={isDisabled ? {} : { scale: 1.03 }}
-      whileTap={isDisabled ? {} : { scale: 0.97 }}
-    >
-      ➕ Añadir Integrante ({voterCount}/{MAX_VOTERS})
-    </motion.button>
-  );
-};
-
-const BackupControls: React.FC<{
-  isSaving: boolean;
-  isImporting: boolean;
-  onExportBackup: () => void;
-  onImportClick: () => void;
-  onImportFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  importFileInputRef: React.RefObject<HTMLInputElement | null>;
-}> = ({
-  isSaving,
-  isImporting,
-  onExportBackup,
-  onImportClick,
-  onImportFileChange,
-  importFileInputRef,
-}) => {
-  const isImportDisabled = isSaving || isImporting;
-
-  return (
-    <div className="backup-btn-group">
-      <motion.button
-        type="button"
-        className="btn-backup btn-export"
-        onClick={onExportBackup}
-        disabled={isImporting}
-        title={isImporting ? 'Importación de backup en curso...' : 'Descargar backup completo en JSON'}
-        whileHover={isImporting ? {} : { scale: 1.03 }}
-        whileTap={isImporting ? {} : { scale: 0.97 }}
-      >
-        📥 Exportar Backup
-      </motion.button>
-      <motion.button
-        type="button"
-        className="btn-backup btn-import"
-        onClick={onImportClick}
-        disabled={isImportDisabled}
-        title={isImporting ? 'Importando backup...' : 'Restaurar datos desde un archivo JSON'}
-        whileHover={isImportDisabled ? {} : { scale: 1.03 }}
-        whileTap={isImportDisabled ? {} : { scale: 0.97 }}
-      >
-        {isImporting ? '⏳ Importando...' : '📤 Importar Backup'}
-      </motion.button>
-      <input
-        ref={importFileInputRef}
-        type="file"
-        accept=".json"
-        onChange={onImportFileChange}
-        disabled={isImporting}
-        style={{ display: 'none' }}
-      />
-    </div>
-  );
-};
-
-const EditBarActionButtons: React.FC<{
-  isImporting: boolean;
-  onResetAllVotes: () => void;
-  onResetData: () => void;
-  onOpenResetAuraConfirm: () => void;
-  onCloseEditMode: () => void;
-}> = ({
-  isImporting,
-  onResetAllVotes,
-  onResetData,
-  onOpenResetAuraConfirm,
-  onCloseEditMode,
-}) => (
-  <>
-    <motion.button
-      type="button"
-      className="btn-reset-votes"
-      onClick={onResetAllVotes}
-      disabled={isImporting}
-      title={
-        isImporting
-          ? 'Importación de backup en curso...'
-          : 'Reiniciar a 0 puntos todos los votos de los integrantes para comenzar un nuevo ciclo de votación'
-      }
-      whileHover={isImporting ? {} : { scale: 1.03 }}
-      whileTap={isImporting ? {} : { scale: 0.97 }}
-    >
-      🧹 Reiniciar Votos (Nuevo Ciclo)
-    </motion.button>
-
-    <motion.button
-      type="button"
-      className="btn-reset-data"
-      onClick={onResetData}
-      disabled={isImporting}
-      title={isImporting ? 'Importación de backup en curso...' : 'Restablecer todos los datos'}
-      whileHover={isImporting ? {} : { scale: 1.03 }}
-      whileTap={isImporting ? {} : { scale: 0.97 }}
-    >
-      Restablecer
-    </motion.button>
-
-    <motion.button
-      type="button"
-      className="btn-reset-aura"
-      onClick={onOpenResetAuraConfirm}
-      disabled={isImporting}
-      title={
-        isImporting
-          ? 'Importación de backup en curso...'
-          : 'Restablece el Aura de todos los integrantes a Socio Regular (0 Cuotas, 1.0x)'
-      }
-      whileHover={isImporting ? {} : { scale: 1.03 }}
-      whileTap={isImporting ? {} : { scale: 0.97 }}
-    >
-      🔄 Restablecer Aura
-    </motion.button>
-
-    <motion.button
-      type="button"
-      className="btn-save-edit"
-      onClick={onCloseEditMode}
-      disabled={isImporting}
-      title={isImporting ? 'Importación de backup en curso...' : 'Guardar y cerrar modo edición'}
-      whileHover={isImporting ? {} : { scale: 1.03 }}
-      whileTap={isImporting ? {} : { scale: 0.97 }}
-    >
-      ✓ Guardar / Listo
-    </motion.button>
-  </>
-);
-
-const EditModeTopBar: React.FC<EditModeTopBarProps> = ({
-  voterCount,
-  steamApiKey,
-  onApiKeyChange,
-  onAddVoter,
-  onExportBackup,
-  onImportClick,
-  onImportFileChange,
-  importFileInputRef,
-  isSaving,
-  isImporting,
-  onResetAllVotes,
-  onResetData,
-  onOpenResetAuraConfirm,
-  onCloseEditMode,
-}) => (
-  <motion.div
-    key="edit-mode-bar"
-    className="edit-mode-top-bar"
-    initial={{ opacity: 0, y: -20, height: 0 }}
-    animate={{ opacity: 1, y: 0, height: 'auto' }}
-    exit={{ opacity: 0, y: -20, height: 0 }}
-    transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-  >
-    <EditBarBadgeSection isImporting={isImporting} />
-
-    <div className="edit-bar-controls">
-      <AddVoterButton voterCount={voterCount} isImporting={isImporting} onAddVoter={onAddVoter} />
-
-      <div className="api-key-input-container">
-        <label htmlFor="steam-api-key-input">Steam Web API Key (opcional):</label>
-        <input
-          id="steam-api-key-input"
-          type="password"
-          placeholder="Clave API de Steam..."
-          value={steamApiKey}
-          onChange={(e) => onApiKeyChange(e.target.value)}
-          className="api-key-input"
-          disabled={isImporting}
-        />
-      </div>
-
-      <BackupControls
-        isSaving={isSaving}
-        isImporting={isImporting}
-        onExportBackup={onExportBackup}
-        onImportClick={onImportClick}
-        onImportFileChange={onImportFileChange}
-        importFileInputRef={importFileInputRef}
-      />
-
-      <EditBarActionButtons
-        isImporting={isImporting}
-        onResetAllVotes={onResetAllVotes}
-        onResetData={onResetData}
-        onOpenResetAuraConfirm={onOpenResetAuraConfirm}
-        onCloseEditMode={onCloseEditMode}
-      />
-    </div>
-  </motion.div>
-);
 
 interface GearButtonProps {
   canManageContent: boolean;
@@ -2069,6 +1683,7 @@ export const SteamVotingDashboard: React.FC = () => {
         {canManageContent && isEditMode && (
           <EditModeTopBar
             voterCount={voters.length}
+            maxVoters={MAX_VOTERS}
             steamApiKey={steamApiKey}
             onApiKeyChange={setSteamApiKey}
             onAddVoter={handleAddVoter}
@@ -2080,10 +1695,7 @@ export const SteamVotingDashboard: React.FC = () => {
             isImporting={isImporting}
             onResetAllVotes={handleResetAllVotes}
             onResetData={handleResetData}
-            onOpenResetAuraConfirm={() => {
-              if (!canManageContent || isImporting) return;
-              setShowResetAuraConfirm(true);
-            }}
+            onOpenResetAuraConfirm={() => setShowResetAuraConfirm(true)}
             onCloseEditMode={() => setIsEditMode(false)}
           />
         )}
