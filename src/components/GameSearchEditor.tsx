@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import type { Game } from '../types/voting';
-import { searchSteamStore, fetchSteamGameDetails, type SteamSearchResultItem } from '../services/steamStoreApi';
+import { searchSteamStore, fetchSteamGameDetails, formatCopPrice, type SteamSearchResultItem } from '../services/steamStoreApi';
 import { GameThumbnail } from './GameThumbnail';
 
 interface GameSearchEditorProps {
@@ -308,7 +308,7 @@ const SlotPreview = ({ game, isLoadingDetails }: {
   game: Game;
   isLoadingDetails: boolean;
 }) => (
-  <div className={`slot-current-preview ${isLoadingDetails ? 'loading-details' : ''}`}>
+  <div className={`slot-current-preview ${isLoadingDetails ? 'loading-details' : ''} ${game.isBundle ? 'is-bundle-slot-preview' : ''}`}>
     <GameThumbnail
       game={game}
       alt={game.title}
@@ -316,12 +316,30 @@ const SlotPreview = ({ game, isLoadingDetails }: {
     />
     <div className="slot-preview-meta">
       <div className="slot-game-title">
-        {game.title || 'Seleccionar juego'}
+        <span className="slot-title-text">{game.title || 'Seleccionar juego'}</span>
+        {game.isBundle && (
+          <span className="bundle-badge neon-pulse" title="Paquete Especial / Bundle Activo">
+            📦 BUNDLE / PAQUETE
+          </span>
+        )}
         {isLoadingDetails && <span className="slot-loading-badge"> ⏳ Obteniendo detalles...</span>}
       </div>
+      {game.isBundle && game.bundleDescription && (
+        <div className="slot-bundle-desc-preview" title={game.bundleDescription}>
+          🎁 {game.bundleDescription}
+        </div>
+      )}
       <div className="slot-game-desc-snippet">
         {isLoadingDetails ? 'Sincronizando precio y descripción oficial...' : (game.description || 'Sin descripción')}
       </div>
+      {game.isBundle && game.price?.finalFormatted && (
+        <div className="slot-bundle-price-pill">
+          Precio Asignado: <strong>{game.price.finalFormatted}</strong>
+          {game.price.discountPercent && game.price.discountPercent > 0 ? (
+            <span className="bundle-pill-discount"> (-{game.price.discountPercent}%)</span>
+          ) : null}
+        </div>
+      )}
     </div>
   </div>
 );
@@ -520,6 +538,324 @@ const ManualEditControls = ({
   );
 };
 
+/* ── Sub-componente: configuración de Bundle / Paquete Especial ── */
+interface BundleConfigSectionProps {
+  gameId: string;
+  game: Game;
+  onUpdateGame: (gameId: string, newGame: Game) => void;
+  isLoadingDetails: boolean;
+  disabled?: boolean;
+}
+
+const BundleConfigSection = ({
+  gameId,
+  game,
+  onUpdateGame,
+  isLoadingDetails,
+  disabled = false,
+}: BundleConfigSectionProps) => {
+  const [bundleBannerInput, setBundleBannerInput] = useState('');
+  const [bundleBannerError, setBundleBannerError] = useState<string | null>(null);
+
+  const isBundle = Boolean(game.isBundle);
+
+  const handleToggleBundle = (enabled: boolean) => {
+    if (disabled || isLoadingDetails) return;
+    onUpdateGame(gameId, {
+      ...game,
+      isBundle: enabled,
+    });
+  };
+
+  const handleDescriptionChange = (desc: string) => {
+    if (disabled || isLoadingDetails) return;
+    onUpdateGame(gameId, {
+      ...game,
+      bundleDescription: desc,
+    });
+  };
+
+  const handleFinalPriceChange = (valStr: string) => {
+    if (disabled || isLoadingDetails) return;
+    const finalNum = valStr === '' ? 0 : Math.max(0, Number(valStr));
+    const currentInitial = game.price?.initial;
+    const initialNum = currentInitial && currentInitial > finalNum ? currentInitial : finalNum;
+    const discountPct = (initialNum > finalNum && initialNum > 0)
+      ? Math.round(((initialNum - finalNum) / initialNum) * 100)
+      : 0;
+
+    onUpdateGame(gameId, {
+      ...game,
+      price: {
+        isFree: finalNum === 0,
+        currency: 'COP',
+        final: finalNum,
+        initial: initialNum,
+        discountPercent: discountPct,
+        finalFormatted: finalNum === 0 ? 'Gratis' : formatCopPrice(finalNum),
+        initialFormatted: initialNum > finalNum ? formatCopPrice(initialNum) : undefined,
+      },
+    });
+  };
+
+  const handleOriginalPriceChange = (valStr: string) => {
+    if (disabled || isLoadingDetails) return;
+    const initialNum = valStr === '' ? (game.price?.final ?? 0) : Math.max(0, Number(valStr));
+    const finalNum = game.price?.final ?? 0;
+    const discountPct = (initialNum > finalNum && initialNum > 0)
+      ? Math.round(((initialNum - finalNum) / initialNum) * 100)
+      : 0;
+
+    onUpdateGame(gameId, {
+      ...game,
+      price: {
+        isFree: finalNum === 0,
+        currency: 'COP',
+        final: finalNum,
+        initial: initialNum,
+        discountPercent: discountPct,
+        finalFormatted: finalNum === 0 ? 'Gratis' : formatCopPrice(finalNum),
+        initialFormatted: initialNum > finalNum ? formatCopPrice(initialNum) : undefined,
+      },
+    });
+  };
+
+  const handleBundleUrlChange = (url: string) => {
+    if (disabled || isLoadingDetails) return;
+    onUpdateGame(gameId, {
+      ...game,
+      bundleUrl: url,
+    });
+  };
+
+  const handleApplyBannerUrl = () => {
+    if (disabled || isLoadingDetails) return;
+    const trimmed = bundleBannerInput.trim();
+    if (!trimmed) return;
+    if (!isValidImageUrl(trimmed)) {
+      setBundleBannerError('Ingresá una URL válida con protocolo https://');
+      return;
+    }
+    setBundleBannerError(null);
+    onUpdateGame(gameId, {
+      ...game,
+      bundleImage: trimmed,
+    });
+    setBundleBannerInput('');
+  };
+
+  const handleBannerFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (disabled || isLoadingDetails) return;
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+
+    if (!file.type.startsWith('image/')) {
+      setBundleBannerError('El archivo debe ser una imagen válida (JPG, PNG, WebP).');
+      return;
+    }
+    if (file.size > MAX_IMAGE_FILE_SIZE_BYTES) {
+      const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+      setBundleBannerError(`La imagen (${sizeMb} MB) supera el límite máximo de 2 MB.`);
+      return;
+    }
+    try {
+      setBundleBannerError(null);
+      const optimizedDataUrl = await compressAndResizeImage(file);
+      onUpdateGame(gameId, {
+        ...game,
+        bundleImage: optimizedDataUrl,
+      });
+    } catch {
+      setBundleBannerError('Error al procesar y comprimir el banner.');
+    }
+  };
+
+  const handleUseBaseImage = () => {
+    if (disabled || isLoadingDetails) return;
+    onUpdateGame(gameId, {
+      ...game,
+      bundleImage: undefined,
+    });
+  };
+
+  return (
+    <div className="bundle-config-section">
+      <div className="bundle-toggle-header">
+        <label className="bundle-switch-container" htmlFor={`bundle-toggle-${gameId}`}>
+          <input
+            id={`bundle-toggle-${gameId}`}
+            type="checkbox"
+            className="bundle-checkbox-input"
+            checked={isBundle}
+            onChange={(e) => handleToggleBundle(e.target.checked)}
+            disabled={isLoadingDetails || disabled}
+          />
+          <span className="bundle-slider-track"></span>
+          <span className="bundle-toggle-text">
+            <span className="bundle-toggle-icon">📦</span>
+            ¿Es un Bundle / Paquete Especial?
+          </span>
+        </label>
+        {isBundle && (
+          <span className="bundle-badge neon-pulse">BUNDLE ACTIVO</span>
+        )}
+      </div>
+
+      <AnimatePresence>
+        {isBundle && (
+          <motion.div
+            className="bundle-details-card"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.28, ease: 'easeOut' }}
+          >
+            {/* Texto descriptivo del paquete */}
+            <div className="manual-field">
+              <label htmlFor={`bundle-desc-${gameId}`} className="manual-label">
+                📝 Contenido / Descripción del Paquete:
+              </label>
+              <input
+                id={`bundle-desc-${gameId}`}
+                type="text"
+                className="manual-input"
+                placeholder="Ej: Incluye Juego Base + Pase de Personajes / Paquete Doble"
+                value={game.bundleDescription || ''}
+                onChange={(e) => handleDescriptionChange(e.target.value)}
+                disabled={isLoadingDetails || disabled}
+              />
+            </div>
+
+            {/* Precio Fijo o en Oferta del Bundle */}
+            <div className="bundle-pricing-grid">
+              <div className="manual-field">
+                <label htmlFor={`bundle-price-final-${gameId}`} className="manual-label">
+                  💰 Precio Final / Promocional del Bundle (COP):
+                </label>
+                <input
+                  id={`bundle-price-final-${gameId}`}
+                  type="number"
+                  min="0"
+                  step="1000"
+                  className="manual-input"
+                  placeholder="Ej: 140000 (o 0 si es Gratis)"
+                  value={game.price?.final !== undefined ? game.price.final : ''}
+                  onChange={(e) => handleFinalPriceChange(e.target.value)}
+                  disabled={isLoadingDetails || disabled}
+                />
+              </div>
+
+              <div className="manual-field">
+                <label htmlFor={`bundle-price-initial-${gameId}`} className="manual-label">
+                  🏷️ Precio Regular / Tachado (COP, opcional):
+                </label>
+                <input
+                  id={`bundle-price-initial-${gameId}`}
+                  type="number"
+                  min="0"
+                  step="1000"
+                  className="manual-input"
+                  placeholder="Ej: 210000"
+                  value={
+                    game.price?.initial && game.price.initial > (game.price.final ?? 0)
+                      ? game.price.initial
+                      : ''
+                  }
+                  onChange={(e) => handleOriginalPriceChange(e.target.value)}
+                  disabled={isLoadingDetails || disabled}
+                />
+              </div>
+            </div>
+
+            {game.price?.finalFormatted && (
+              <div className="bundle-price-summary-pill">
+                <span>Precio actual fijado: <strong>{game.price.finalFormatted}</strong></span>
+                {game.price.discountPercent && game.price.discountPercent > 0 ? (
+                  <span className="bundle-discount-tag">-{game.price.discountPercent}% OFF</span>
+                ) : null}
+              </div>
+            )}
+
+            {/* Banner del paquete vs imagen base */}
+            <div className="manual-field">
+              <label className="manual-label">🖼️ Imagen de portada del paquete:</label>
+              <div className="bundle-cover-options">
+                <button
+                  type="button"
+                  className={`bundle-cover-option-btn ${!game.bundleImage ? 'selected' : ''}`}
+                  onClick={handleUseBaseImage}
+                  disabled={isLoadingDetails || disabled}
+                >
+                  🕹️ Usar imagen oficial del juego base
+                </button>
+                <span className="bundle-cover-option-divider">o</span>
+                <span className="bundle-cover-custom-hint">
+                  {game.bundleImage ? '✨ Banner personalizado del paquete activo' : 'Vincular banner del paquete:'}
+                </span>
+              </div>
+
+              <div className="manual-cover-row bundle-custom-cover-row">
+                <input
+                  type="text"
+                  className="manual-input small-input"
+                  placeholder="Pegar URL de banner del paquete (https://)..."
+                  value={bundleBannerInput}
+                  onChange={(e) => setBundleBannerInput(e.target.value)}
+                  disabled={isLoadingDetails || disabled}
+                />
+                <motion.button
+                  type="button"
+                  className={`btn-apply-cover ${isLoadingDetails || disabled ? 'disabled' : ''}`}
+                  onClick={handleApplyBannerUrl}
+                  disabled={isLoadingDetails || disabled}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  Ok
+                </motion.button>
+                <motion.label
+                  className={`file-cover-btn ${isLoadingDetails || disabled ? 'disabled' : ''}`}
+                  title="Subir banner local (máx 2 MB)"
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <span>📁</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleBannerFileUpload}
+                    disabled={isLoadingDetails || disabled}
+                  />
+                </motion.label>
+              </div>
+              {bundleBannerError && (
+                <div className="slot-upload-error">⚠️ {bundleBannerError}</div>
+              )}
+            </div>
+
+            {/* Enlace directo al Bundle en Steam Store */}
+            <div className="manual-field">
+              <label htmlFor={`bundle-url-${gameId}`} className="manual-label">
+                🔗 Enlace al Bundle en Steam Store (opcional):
+              </label>
+              <input
+                id={`bundle-url-${gameId}`}
+                type="url"
+                className="manual-input"
+                placeholder="https://store.steampowered.com/bundle/..."
+                value={game.bundleUrl || ''}
+                onChange={(e) => handleBundleUrlChange(e.target.value)}
+                disabled={isLoadingDetails || disabled}
+              />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
 const SingleGameSlotEditor = ({
   slotIndex,
   gameId,
@@ -582,6 +918,10 @@ const SingleGameSlotEditor = ({
     const requestId = ++selectionRequestRef.current;
     setIsLoadingDetails(true);
 
+    const effectiveInitialPrice = (game.isBundle && game.price?.final !== undefined)
+      ? game.price
+      : item.price;
+
     const baseGame: Game = {
       ...game,
       appId: item.id,
@@ -589,7 +929,7 @@ const SingleGameSlotEditor = ({
       coverImage: item.header_image,
       tinyCoverImage: item.tiny_image,
       genre: 'Juego de Steam',
-      price: item.price,
+      price: effectiveInitialPrice,
       description: 'Cargando descripción oficial de Steam...',
     };
 
@@ -600,10 +940,13 @@ const SingleGameSlotEditor = ({
     try {
       const details = await fetchSteamGameDetails(item.id);
       if (requestId !== selectionRequestRef.current) return;
+      const effectiveDetailsPrice = (baseGame.isBundle && baseGame.price?.final !== undefined)
+        ? baseGame.price
+        : (details.price || item.price);
       onUpdateGame(gameId, {
         ...baseGame,
         genre: details.genres || 'Juego de Steam',
-        price: details.price || item.price,
+        price: effectiveDetailsPrice,
         description: details.description || `Juego oficial de la Tienda de Steam (${item.name}).`,
       });
     } catch {
@@ -721,6 +1064,14 @@ const SingleGameSlotEditor = ({
         handleDescriptionChange={handleDescriptionChange}
         handleApplyCustomCover={handleApplyCustomCover}
         handleFileUpload={handleFileUpload}
+        disabled={disabled}
+      />
+
+      <BundleConfigSection
+        gameId={gameId}
+        game={game}
+        onUpdateGame={onUpdateGame}
+        isLoadingDetails={isLoadingDetails}
         disabled={disabled}
       />
     </div>

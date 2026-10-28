@@ -680,10 +680,18 @@ export function sanitizeGame(game: Game): Game {
     cleanGenre = 'Juego de Steam';
   }
   const cleanCover = fixSteamCoverUrl(game.coverImage, game.appId);
+  const cleanBundleImage = game.bundleImage
+    ? fixSteamCoverUrl(game.bundleImage, game.appId) || game.bundleImage
+    : undefined;
+  const isBundle = Boolean(game.isBundle);
   const base: Game = {
     ...game,
     genre: cleanGenre,
     coverImage: cleanCover || game.coverImage,
+    isBundle: isBundle ? true : undefined,
+    bundleDescription: isBundle && game.bundleDescription ? game.bundleDescription.trim() : undefined,
+    bundleUrl: isBundle && game.bundleUrl ? game.bundleUrl.trim() : undefined,
+    bundleImage: isBundle ? cleanBundleImage : undefined,
   };
   return removeUndefinedDeep(base);
 }
@@ -755,12 +763,17 @@ export function sanitizeVotingHistoryRecord(
 
   const candidateGame = record.winningGame ?? resultsSnapshot[0]?.game ?? record.games?.[0];
   const winningGame = sanitizeGame(candidateGame as Game);
+  const isBundle = Boolean(winningGame?.isBundle || record.isBundle);
 
   const cleanRecord: VotingHistoryRecord = {
     ...record,
     createdAt,
     date: record.date || formattedDate,
     winningGame,
+    isBundle: isBundle ? true : undefined,
+    bundleDescription: isBundle ? (winningGame?.bundleDescription || record.bundleDescription) : undefined,
+    bundleImage: isBundle ? (winningGame?.bundleImage || record.bundleImage) : undefined,
+    bundleUrl: isBundle ? (winningGame?.bundleUrl || record.bundleUrl) : undefined,
     resultsSnapshot,
     votersSnapshots: Array.isArray(record.votersSnapshots) ? record.votersSnapshots : [],
   };
@@ -1072,11 +1085,20 @@ function buildHistoryDocPayload(record: VotingHistoryRecord, recordId: string) {
     ? Timestamp.fromDate(createdDate)
     : Timestamp.now();
 
+  const isBundle = Boolean(record.winningGame?.isBundle || record.isBundle);
+  const bundleDescription = record.winningGame?.bundleDescription || record.bundleDescription;
+  const bundleImage = record.winningGame?.bundleImage || record.bundleImage;
+  const bundleUrl = record.winningGame?.bundleUrl || record.bundleUrl;
+
   return removeUndefinedDeep({
     ...record,
     id: recordId,
     createdAt: createdAtTimestamp,
     date: record.date,
+    isBundle: isBundle ? true : undefined,
+    bundleDescription: isBundle ? bundleDescription : undefined,
+    bundleImage: isBundle ? bundleImage : undefined,
+    bundleUrl: isBundle ? bundleUrl : undefined,
     savedAt: Timestamp.now(),
   });
 }

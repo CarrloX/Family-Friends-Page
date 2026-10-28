@@ -129,6 +129,7 @@ const WinnerCoverImage: React.FC<WinnerCoverImageProps> = ({ src, alt, fallbacks
 
 interface WinnerImageContainerProps {
   appId?: number;
+  bundleUrl?: string;
   gameTitle: string;
   winnerHdCover?: string;
   winnerCoverFallbacks: string[];
@@ -136,6 +137,7 @@ interface WinnerImageContainerProps {
 
 const WinnerImageContainer: React.FC<WinnerImageContainerProps> = ({
   appId,
+  bundleUrl,
   gameTitle,
   winnerHdCover,
   winnerCoverFallbacks,
@@ -144,14 +146,16 @@ const WinnerImageContainer: React.FC<WinnerImageContainerProps> = ({
     <WinnerCoverImage src={winnerHdCover} alt={gameTitle} fallbacks={winnerCoverFallbacks} />
   );
 
-  if (appId) {
+  const targetUrl = bundleUrl || (appId ? `https://store.steampowered.com/app/${appId}` : undefined);
+
+  if (targetUrl) {
     return (
       <a
-        href={`https://store.steampowered.com/app/${appId}`}
+        href={targetUrl}
         target="_blank"
         rel="noopener noreferrer"
         className="winner-image-container winner-image-link"
-        title={`Abrir ${gameTitle} en la Tienda Oficial de Steam`}
+        title={`Abrir ${gameTitle} en Steam`}
       >
         {image}
         <div className="winner-badge-overlay">1º LUGAR</div>
@@ -170,14 +174,16 @@ const WinnerImageContainer: React.FC<WinnerImageContainerProps> = ({
 interface WinnerLivePriceBadgeProps {
   price: SteamPriceInfo;
   appId?: number;
+  bundleUrl?: string;
 }
 
-const WinnerLivePriceBadge: React.FC<WinnerLivePriceBadgeProps> = ({ price, appId }) => {
+const WinnerLivePriceBadge: React.FC<WinnerLivePriceBadgeProps> = ({ price, appId, bundleUrl }) => {
   const hasDiscount = Boolean(price.discountPercent && price.discountPercent > 0);
+  const targetUrl = bundleUrl || (appId ? `https://store.steampowered.com/app/${appId}` : undefined);
 
   return (
     <a
-      href={appId ? `https://store.steampowered.com/app/${appId}` : undefined}
+      href={targetUrl}
       target="_blank"
       rel="noopener noreferrer"
       className={`winner-steam-price-badge ${hasDiscount ? 'has-discount' : ''}`}
@@ -205,6 +211,7 @@ interface WinnerPriceActionsProps {
   effectivePrice: SteamPriceInfo | null;
   liveSteamPrice: SteamPriceInfo | null;
   appId?: number;
+  bundleUrl?: string;
   isPrecioCongelado: boolean;
   canManageContent: boolean;
   isEditMode: boolean;
@@ -216,6 +223,7 @@ const WinnerPriceActions: React.FC<WinnerPriceActionsProps> = ({
   effectivePrice,
   liveSteamPrice,
   appId,
+  bundleUrl,
   isPrecioCongelado,
   canManageContent,
   isEditMode,
@@ -239,7 +247,7 @@ const WinnerPriceActions: React.FC<WinnerPriceActionsProps> = ({
       </div>
     ) : (
       effectivePrice && (
-        <WinnerLivePriceBadge price={effectivePrice} appId={appId} />
+        <WinnerLivePriceBadge price={effectivePrice} appId={appId} bundleUrl={bundleUrl} />
       )
     )}
 
@@ -303,6 +311,7 @@ const WinnerCard: React.FC<WinnerCardProps> = ({
       <div className="winner-content">
         <WinnerImageContainer
           appId={appId}
+          bundleUrl={winner.game.bundleUrl}
           gameTitle={winner.game.title}
           winnerHdCover={winnerHdCover}
           winnerCoverFallbacks={winnerCoverFallbacks}
@@ -310,11 +319,19 @@ const WinnerCard: React.FC<WinnerCardProps> = ({
 
         <div className="winner-details">
           <div className="winner-meta-header">
-            {displayedGenre && <div className="winner-genre">{displayedGenre}</div>}
+            <div className="winner-badges-row">
+              {displayedGenre && <div className="winner-genre">{displayedGenre}</div>}
+              {winner.game.isBundle && (
+                <span className="bundle-badge bundle-badge-winner neon-pulse">
+                  📦 BUNDLE / PAQUETE ESPECIAL
+                </span>
+              )}
+            </div>
             <WinnerPriceActions
               effectivePrice={effectivePrice}
               liveSteamPrice={liveSteamPrice}
               appId={appId}
+              bundleUrl={winner.game.bundleUrl}
               isPrecioCongelado={isPrecioCongelado}
               canManageContent={canManageContent}
               isEditMode={isEditMode}
@@ -322,7 +339,13 @@ const WinnerCard: React.FC<WinnerCardProps> = ({
               onToggleFreezePrice={onToggleFreezePrice}
             />
           </div>
-          <h2 className="winner-title">{winner.game.title}</h2>
+          <h2 className="winner-title" title={winner.game.title}>{winner.game.title}</h2>
+          {winner.game.isBundle && winner.game.bundleDescription && (
+            <div className="winner-bundle-highlight-card">
+              <span className="winner-bundle-tag">🎁 CONTENIDO DEL PAQUETE:</span>
+              <p className="winner-bundle-text">{winner.game.bundleDescription}</p>
+            </div>
+          )}
           <p className="winner-description">{displayedDescription}</p>
 
           <div className="winner-stats-grid">
@@ -475,7 +498,12 @@ const PodiumList: React.FC<{ runnersUp: GameResult[] }> = ({ runnersUp }) => {
                   className="podium-thumb"
                 />
                 <div className="podium-info">
-                  <span className="podium-title">{result.game.title}</span>
+                  <div className="podium-title-row">
+                    <span className="podium-title" title={result.game.title}>{result.game.title}</span>
+                    {result.game.isBundle && (
+                      <span className="bundle-badge-mini" title="Paquete Especial / Bundle">📦 BUNDLE</span>
+                    )}
+                  </div>
                   <span className="podium-score">
                     <strong>{result.weightedPoints}</strong> pts ponderados ({result.rawPoints} pts base)
                   </span>
@@ -547,11 +575,15 @@ export const WinnerBanner: React.FC<WinnerBannerProps> = React.memo(({
 
   // Precio en vivo reportado actualmente por Steam
   const liveSteamPrice = useMemo(() => {
+    // Si es un bundle y tiene precio configurado, el precio del bundle tiene prioridad sobre Steam API del juego base
+    if (winner?.game?.isBundle && winner?.game?.price) {
+      return winner.game.price;
+    }
     if (fetchedDetails.appId === appId && fetchedDetails.price) {
       return fetchedDetails.price;
     }
     return winner?.game?.price || null;
-  }, [fetchedDetails, appId, winner?.game?.price]);
+  }, [fetchedDetails, appId, winner?.game?.price, winner?.game?.isBundle]);
 
   // Si isPrecioCongelado es true, la UI y los cálculos de cobro utilizarán EXCLUSIVAMENTE los valores congelados
   const effectivePrice = useMemo<SteamPriceInfo | null>(() => {
@@ -589,9 +621,11 @@ export const WinnerBanner: React.FC<WinnerBannerProps> = React.memo(({
     : results.some((r) => r.rawPoints > 0 || r.weightedPoints > 0);
 
   const cdnBase = 'https://cdn.akamai.steamstatic.com/steam/apps';
-  const winnerHdCover = appId
+  const winnerHdCover = (winner?.game?.isBundle && winner?.game?.bundleImage)
+    ? winner.game.bundleImage
+    : appId
     ? `${cdnBase}/${appId}/capsule_616x353.jpg`
-    : winner?.game?.coverImage;
+    : (winner?.game?.bundleImage || winner?.game?.coverImage);
 
   // Fallback chain for winner cover: robust multi-CDN fallback
   const winnerCoverFallbacks: string[] = winner?.game

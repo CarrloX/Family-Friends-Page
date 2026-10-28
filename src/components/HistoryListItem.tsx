@@ -21,6 +21,8 @@ export const HistoryListItem = React.memo(({
   onSelect,
   onRequestDelete,
 }: HistoryListItemProps) => {
+  const isBundle = Boolean(rec.isBundle || rec.winningGame?.isBundle);
+
   return (
     <motion.div
       layout
@@ -46,10 +48,15 @@ export const HistoryListItem = React.memo(({
           recordId={rec.id}
         />
         <div className="history-item-info">
-          <span className="history-item-winner">
-            <span aria-hidden="true">🏆</span>{' '}
-            {rec.winningGame?.title ?? 'Juego no disponible'}
-          </span>
+          <div className="history-item-winner-row">
+            <span className="history-item-winner">
+              <span aria-hidden="true">🏆</span>{' '}
+              {rec.winningGame?.title ?? 'Juego no disponible'}
+            </span>
+            {isBundle && (
+              <span className="bundle-badge-mini" title="Paquete Especial / Bundle">📦 BUNDLE</span>
+            )}
+          </div>
           <span className="history-item-date">{formatHistoryDate(rec)}</span>
         </div>
       </motion.button>

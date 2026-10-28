@@ -272,6 +272,14 @@ const UserCardEditPanel: React.FC<UserCardEditPanelProps> = ({
               >
                 <div className="game-edit-title-group">
                   <span className="game-edit-name">{game?.title || vote.gameId}</span>
+                  {game?.isBundle && (
+                    <span className="bundle-badge-mini" title="Paquete Especial / Bundle">📦 BUNDLE</span>
+                  )}
+                  {game?.isBundle && game.bundleDescription && (
+                    <span className="game-edit-bundle-desc" title={game.bundleDescription}>
+                      ({game.bundleDescription})
+                    </span>
+                  )}
                 </div>
 
                 <select

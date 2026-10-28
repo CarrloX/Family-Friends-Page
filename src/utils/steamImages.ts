@@ -79,6 +79,16 @@ export function getGameImageFallbacks(game?: Partial<Game>): string[] {
   const cleanedCover = fixSteamCoverUrl(game.coverImage, appId);
   const candidates: string[] = [];
 
+  // 0. Banner / Imagen personalizada del Bundle (si el candidato es bundle y tiene banner configurado)
+  if (game.bundleImage) {
+    const cleanedBundleCover = fixSteamCoverUrl(game.bundleImage, appId);
+    if (isCustomCoverUrl(cleanedBundleCover)) {
+      candidates.push(cleanedBundleCover);
+    } else if (cleanedBundleCover) {
+      candidates.push(cleanedBundleCover);
+    }
+  }
+
   // 1. Portada personalizada (data URL, upload local o URL externa)
   if (isCustomCoverUrl(cleanedCover)) {
     candidates.push(cleanedCover);

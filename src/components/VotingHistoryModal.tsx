@@ -111,8 +111,20 @@ const HistoryDetailsPanel: React.FC<HistoryDetailsPanelProps> = ({
             recordId={record.id}
           />
           <div className="winner-details-badge">
-            <span className="trophy-tag">🏆 JUEGO GANADOR</span>
-            <h3>{record.winningGame?.title}</h3>
+            <div className="winner-details-header-tags">
+              <span className="trophy-tag">🏆 JUEGO GANADOR</span>
+              {(record.isBundle || record.winningGame?.isBundle) && (
+                <span className="bundle-badge neon-pulse" title="Paquete Especial / Bundle">
+                  📦 BUNDLE / PAQUETE
+                </span>
+              )}
+            </div>
+            <h3 className="history-winner-title">{record.winningGame?.title}</h3>
+            {(record.bundleDescription || record.winningGame?.bundleDescription) && (
+              <p className="history-bundle-desc">
+                🎁 {record.bundleDescription || record.winningGame?.bundleDescription}
+              </p>
+            )}
             <div className="history-winner-tags-row">
               <span className="record-date-tag">🗓️ {formatHistoryDate(record)}</span>
               <HistoryWinnerPriceBadge record={record} />

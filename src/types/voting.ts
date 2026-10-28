@@ -29,6 +29,14 @@ export interface Game {
   tinyCoverImage?: string;
   description: string;
   price?: SteamPriceInfo;
+  /** Indica si la propuesta corresponde a un Bundle o Paquete Especial */
+  isBundle?: boolean;
+  /** Texto descriptivo o contenido del paquete (ej. "Incluye Juego Base + DLCs") */
+  bundleDescription?: string;
+  /** Enlace web o a Steam Store del paquete/bundle */
+  bundleUrl?: string;
+  /** Banner o imagen personalizada para el paquete (opcional; si se omite, usa la oficial del juego base) */
+  bundleImage?: string;
 }
 
 export interface GameVote {
@@ -96,6 +104,11 @@ export interface VotingHistoryRecord {
   precioCongelado?: number | null;
   descuentoCongelado?: number | null;
   precioCongeladoFormatted?: string | null;
+  /** Indicador canónico si el juego ganador fue un Bundle/Paquete Especial */
+  isBundle?: boolean;
+  bundleDescription?: string;
+  bundleImage?: string;
+  bundleUrl?: string;
   /** Campos legados opcionales para retrocompatibilidad con registros antiguos */
   gamesMap?: Record<string, Game>;
   games?: Game[];

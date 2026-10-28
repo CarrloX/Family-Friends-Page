@@ -18,18 +18,24 @@ export const CompetitorCard = React.memo(
 
     return (
       <div className={`competitor-card ${position === 0 ? 'winner-competitor' : ''}`}>
-      <GameThumbnail
-        game={game}
-        alt=""
-        className="competitor-thumb"
-        recordId={recordId}
-      />
-      <div className="competitor-info">
-        <span className="sr-only">Puesto {position + 1}</span>
-        <span className="competitor-medal" aria-hidden="true">{medal}</span>
-        <span className="competitor-title">{game.title}</span>
-        {pts !== null && <span className="competitor-pts">{pts} pts</span>}
+        <GameThumbnail
+          game={game}
+          alt=""
+          className="competitor-thumb"
+          recordId={recordId}
+        />
+        <div className="competitor-info">
+          <span className="sr-only">Puesto {position + 1}</span>
+          <span className="competitor-medal" aria-hidden="true">{medal}</span>
+          <div className="competitor-title-wrap">
+            <span className="competitor-title" title={game.title}>{game.title}</span>
+            {game.isBundle && (
+              <span className="bundle-badge-mini" title="Paquete Especial / Bundle">📦 BUNDLE</span>
+            )}
+          </div>
+          {pts !== null && <span className="competitor-pts">{pts} pts</span>}
+        </div>
       </div>
-    </div>
-  );
-});
+    );
+  }
+);

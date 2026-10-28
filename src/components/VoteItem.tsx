@@ -33,6 +33,7 @@ export const VoteItem: React.FC<VoteItemProps> = React.memo(({
   if (isLowPts) voteItemClass += ' low-item';
   if (is0Pts) voteItemClass += ' muted-item';
   if (isAutoZero) voteItemClass += ' auto-zero-item';
+  if (game.isBundle) voteItemClass += ' is-bundle-candidate';
 
   const renderPointsLabel = () => {
     if (isAutoZero) {
@@ -80,9 +81,24 @@ export const VoteItem: React.FC<VoteItemProps> = React.memo(({
 
       <div className="vote-game-info">
         <div className="game-title-row">
-          <span className="game-title">{game.title}</span>
+          <div className="game-title-text-group">
+            <span className="game-title" title={game.title}>{game.title}</span>
+            {game.isBundle && (
+              <span className="bundle-badge neon-pulse" title="Paquete Especial / Bundle">
+                📦 BUNDLE
+              </span>
+            )}
+          </div>
           {isMaxPts && <span className="favorite-badge">⭐ FAVORITO</span>}
         </div>
+
+        {game.isBundle && game.bundleDescription && (
+          <div className="bundle-desc-row">
+            <span className="bundle-desc-snippet" title={game.bundleDescription}>
+              🎁 {game.bundleDescription}
+            </span>
+          </div>
+        )}
 
         <div className="vote-points-row">
           {renderPointsLabel()}
@@ -90,6 +106,12 @@ export const VoteItem: React.FC<VoteItemProps> = React.memo(({
           {!is0Pts && (
             <span className="weighted-pts">
               ➜ <strong>{weightedScore}</strong> pts
+            </span>
+          )}
+
+          {game.isBundle && game.price?.finalFormatted && (
+            <span className="bundle-item-price-pill" title="Precio promocional del bundle">
+              🏷️ {game.price.finalFormatted}
             </span>
           )}
         </div>

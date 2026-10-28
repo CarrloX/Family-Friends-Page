@@ -793,12 +793,17 @@
 }
 
 .game-title {
-  font-size: 13px;
+  font-size: clamp(11.5px, 2.5vw, 13px);
   font-weight: 700;
   color: #ffffff;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
   text-overflow: ellipsis;
+  word-break: break-word;
+  line-height: 1.25;
+  white-space: normal;
   transition: color 0.3s ease;
 }
 
@@ -7396,3 +7401,436 @@ textarea.manual-input {
 }
 
 
+
+
+/* ============================================================
+   ESTILOS DE BUNDLES / PAQUETES ESPECIALES & RESPONSIVIDAD
+   ============================================================ */
+
+/* ── Badges Neón para Bundles ── */
+.bundle-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-display, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.22) 0%, rgba(168, 85, 247, 0.28) 100%);
+  border: 1px solid #38bdf8;
+  color: #e0f2fe;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.45), inset 0 0 6px rgba(168, 85, 247, 0.3);
+  text-shadow: 0 0 7px rgba(56, 189, 248, 0.85);
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.bundle-badge-mini {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.2) 0%, rgba(168, 85, 247, 0.25) 100%);
+  border: 1px solid rgba(56, 189, 248, 0.7);
+  color: #bae6fd;
+  box-shadow: 0 0 6px rgba(56, 189, 248, 0.35);
+  text-shadow: 0 0 5px rgba(56, 189, 248, 0.7);
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.bundle-badge-winner {
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border-color: #38bdf8;
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.6), inset 0 0 8px rgba(168, 85, 247, 0.4);
+  text-shadow: 0 0 10px rgba(56, 189, 248, 1);
+}
+
+@keyframes neonPulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 8px rgba(56, 189, 248, 0.4), inset 0 0 5px rgba(168, 85, 247, 0.25);
+    border-color: #38bdf8;
+  }
+  50% {
+    box-shadow: 0 0 16px rgba(56, 189, 248, 0.7), inset 0 0 9px rgba(168, 85, 247, 0.5);
+    border-color: #7dd3fc;
+  }
+}
+
+.neon-pulse {
+  animation: neonPulseGlow 2.5s ease-in-out infinite;
+}
+
+/* ── Tarjeta de Votación (VoteItem) con Bundle y Ajuste Responsivo ── */
+.vote-item.is-bundle-candidate {
+  border-left: 3px solid #38bdf8;
+}
+
+.game-title-text-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.bundle-desc-row {
+  margin-top: 1px;
+}
+
+.bundle-desc-snippet {
+  font-size: 10.5px;
+  color: #93c5fd;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: break-word;
+  line-height: 1.25;
+}
+
+.bundle-item-price-pill {
+  font-size: 10px;
+  font-weight: 700;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  padding: 1px 5px;
+  border-radius: 4px;
+  margin-left: auto;
+}
+
+/* ── Ajuste de Títulos Largos (Line-Clamp y Font Scaling) ── */
+.winner-title {
+  font-size: clamp(20px, 3.8vw, 36px);
+  word-break: break-word;
+  overflow-wrap: break-word;
+  line-height: 1.15;
+}
+
+.winner-badges-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.winner-bundle-highlight-card {
+  margin: 10px 0 12px;
+  padding: 10px 14px;
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.08) 0%, rgba(168, 85, 247, 0.12) 100%);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-left: 3px solid #38bdf8;
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3), inset 0 0 12px rgba(56, 189, 248, 0.08);
+}
+
+.winner-bundle-tag {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  color: #38bdf8;
+  text-transform: uppercase;
+  margin-bottom: 3px;
+}
+
+.winner-bundle-text {
+  font-size: 13.5px;
+  color: #e2e8f0;
+  line-height: 1.4;
+  margin: 0;
+  word-break: break-word;
+}
+
+/* ── Podio & Carrusel Competidores con Bundle ── */
+.podium-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.podium-title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: break-word;
+  line-height: 1.25;
+}
+
+.competitor-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.competitor-title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: break-word;
+  line-height: 1.25;
+}
+
+/* ── Historial con Bundle ── */
+.history-item-winner-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.history-item-winner {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: break-word;
+  line-height: 1.25;
+}
+
+.history-bundle-desc {
+  font-size: 12.5px;
+  color: #93c5fd;
+  margin: 4px 0 8px;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.history-winner-title {
+  font-size: clamp(18px, 3.2vw, 24px);
+  word-break: break-word;
+  line-height: 1.2;
+}
+
+/* ── Modal Finalizar Votación con Bundle ── */
+.winner-modal-tags-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.modal-winner-title {
+  font-size: clamp(16px, 2.8vw, 20px);
+  word-break: break-word;
+  line-height: 1.25;
+}
+
+.modal-bundle-desc {
+  font-size: 12px;
+  color: #93c5fd;
+  margin: 3px 0 6px;
+  word-break: break-word;
+  line-height: 1.3;
+}
+
+/* ── Formulario de Administración (GameSearchEditor) - Sección Bundle ── */
+.bundle-config-section {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px dashed rgba(56, 189, 248, 0.25);
+}
+
+.bundle-toggle-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.bundle-switch-container {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.bundle-checkbox-input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.bundle-slider-track {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  background-color: rgba(30, 41, 59, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  border-radius: 20px;
+  transition: all 0.25s ease;
+  flex-shrink: 0;
+}
+
+.bundle-slider-track::before {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  left: 2px;
+  top: 2px;
+  background-color: #cbd5e1;
+  border-radius: 50%;
+  transition: transform 0.25s ease, background-color 0.25s ease;
+}
+
+.bundle-checkbox-input:checked + .bundle-slider-track {
+  background-color: rgba(14, 165, 233, 0.45);
+  border-color: #38bdf8;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.4);
+}
+
+.bundle-checkbox-input:checked + .bundle-slider-track::before {
+  transform: translateX(18px);
+  background-color: #38bdf8;
+  box-shadow: 0 0 8px #38bdf8;
+}
+
+.bundle-toggle-text {
+  font-size: 13px;
+  font-weight: 700;
+  color: #e2e8f0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bundle-toggle-icon {
+  font-size: 14px;
+}
+
+.bundle-details-card {
+  margin-top: 10px;
+  padding: 14px;
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  border-radius: 10px;
+  box-shadow: inset 0 0 15px rgba(56, 189, 248, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.bundle-pricing-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+@media (max-width: 640px) {
+  .bundle-pricing-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.bundle-price-summary-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: rgba(56, 189, 248, 0.1);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: 6px;
+  font-size: 12px;
+  color: #e0f2fe;
+}
+
+.bundle-discount-tag {
+  background: #0284c7;
+  color: #ffffff;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.bundle-cover-options {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.bundle-cover-option-btn {
+  padding: 5px 10px;
+  background: rgba(30, 41, 59, 0.8);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  color: #cbd5e1;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.bundle-cover-option-btn.selected {
+  background: rgba(14, 165, 233, 0.25);
+  border-color: #38bdf8;
+  color: #38bdf8;
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.3);
+}
+
+.bundle-cover-option-divider {
+  font-size: 11px;
+  color: var(--steam-text-muted);
+}
+
+.bundle-cover-custom-hint {
+  font-size: 11.5px;
+  color: #93c5fd;
+}
+
+.bundle-custom-cover-row {
+  margin-top: 4px;
+}
+
+.slot-bundle-desc-preview {
+  font-size: 11px;
+  color: #93c5fd;
+  margin-top: 2px;
+  line-height: 1.3;
+  word-break: break-word;
+}
+
+.slot-bundle-price-tag {
+  font-size: 11px;
+  color: #38bdf8;
+  margin-top: 3px;
+}
+
+.bundle-pill-discount {
+  color: #4ade80;
+  font-weight: 800;
+}
+
+.game-edit-bundle-desc {
+  font-size: 11px;
+  color: #93c5fd;
+  font-weight: 400;
+}

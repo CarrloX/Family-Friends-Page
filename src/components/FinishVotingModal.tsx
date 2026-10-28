@@ -133,6 +133,10 @@ function buildFinishedSessionData(
     createdAt,
     date: formatHistoryDate(createdAt),
     winningGame,
+    isBundle: Boolean(winningGame.isBundle),
+    bundleDescription: winningGame.bundleDescription,
+    bundleImage: winningGame.bundleImage,
+    bundleUrl: winningGame.bundleUrl,
     resultsSnapshot: createResultsSnapshot(allResults),
     votersSnapshots: snapshots,
     isPrecioCongelado: freezeData.isPrecioCongelado,
@@ -185,8 +189,20 @@ const WinningGamePreview = ({
       className="winner-modal-thumb"
     />
     <div className="winner-modal-info">
-      <span className="winner-tag">1º LUGAR GANADOR</span>
-      <h4>{winningGame.title}</h4>
+      <div className="winner-modal-tags-row">
+        <span className="winner-tag">1º LUGAR GANADOR</span>
+        {winningGame.isBundle && (
+          <span className="bundle-badge neon-pulse" title="Paquete Especial / Bundle">
+            📦 BUNDLE / PAQUETE
+          </span>
+        )}
+      </div>
+      <h4 className="modal-winner-title">{winningGame.title}</h4>
+      {winningGame.isBundle && winningGame.bundleDescription && (
+        <p className="modal-bundle-desc">
+          🎁 {winningGame.bundleDescription}
+        </p>
+      )}
       <div className="winner-modal-meta-row">
         <span className="winner-points">{weightedPoints} Puntos Ponderados</span>
         {isPrecioCongelado && effectivePrice ? (
