@@ -521,6 +521,18 @@ const PodiumList: React.FC<{ runnersUp: GameResult[] }> = ({ runnersUp }) => {
   );
 };
 
+const STEAM_CDN_APPS = 'https://cdn.akamai.steamstatic.com/steam/apps';
+
+function resolveWinnerHdCover(winnerGame?: GameResult['game'], appId?: number): string | undefined {
+  if (winnerGame?.isBundle && winnerGame.bundleImage) {
+    return winnerGame.bundleImage;
+  }
+  if (appId) {
+    return `${STEAM_CDN_APPS}/${appId}/capsule_616x353.jpg`;
+  }
+  return winnerGame?.bundleImage || winnerGame?.coverImage;
+}
+
 export const WinnerBanner: React.FC<WinnerBannerProps> = React.memo(({
   results,
   votersCount = 0,
@@ -620,12 +632,7 @@ export const WinnerBanner: React.FC<WinnerBannerProps> = React.memo(({
     ? totalAssignedPoints > 0
     : results.some((r) => r.rawPoints > 0 || r.weightedPoints > 0);
 
-  const cdnBase = 'https://cdn.akamai.steamstatic.com/steam/apps';
-  const winnerHdCover = (winner?.game?.isBundle && winner?.game?.bundleImage)
-    ? winner.game.bundleImage
-    : appId
-    ? `${cdnBase}/${appId}/capsule_616x353.jpg`
-    : (winner?.game?.bundleImage || winner?.game?.coverImage);
+  const winnerHdCover = resolveWinnerHdCover(winner?.game, appId);
 
   // Fallback chain for winner cover: robust multi-CDN fallback
   const winnerCoverFallbacks: string[] = winner?.game

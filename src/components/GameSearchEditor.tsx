@@ -334,7 +334,11 @@ const SlotPreview = ({ game, isLoadingDetails }: {
       </div>
       {game.isBundle && game.price?.finalFormatted && (
         <div className="slot-bundle-price-pill">
-          Precio Asignado: <strong>{game.price.finalFormatted}</strong>
+          Precio Asignado:{' '}
+          {game.price.initialFormatted && game.price.initial && game.price.final && game.price.initial > game.price.final ? (
+            <span className="bundle-summary-initial-strikethrough">{game.price.initialFormatted} ➔ </span>
+          ) : null}
+          <strong>{game.price.finalFormatted}</strong>
           {game.price.discountPercent && game.price.discountPercent > 0 ? (
             <span className="bundle-pill-discount"> (-{game.price.discountPercent}%)</span>
           ) : null}
@@ -538,6 +542,25 @@ const ManualEditControls = ({
   );
 };
 
+// Helpers para normalizar entre pesos COP ingresados por el usuario y centavos de Steam
+function parsePriceToCents(val: number): number {
+  if (val <= 0) return 0;
+  // Si ya es un valor en centavos de Steam (> 10.000.000 centavos = > $100.000 COP con centavos)
+  if (val >= 10000000 && val % 100 === 0) {
+    return val;
+  }
+  return Math.round(val * 100);
+}
+
+function parsePriceFromCents(val?: number): string {
+  if (val === undefined || val === null || val === 0) return '';
+  // Si está en centavos de Steam (>= 100.000 centavos = $1.000 COP)
+  if (val >= 100000) {
+    return String(Math.round(val / 100));
+  }
+  return String(val);
+}
+
 /* ── Sub-componente: configuración de Bundle / Paquete Especial ── */
 interface BundleConfigSectionProps {
   gameId: string;
@@ -559,6 +582,16 @@ const BundleConfigSection = ({
 
   const isBundle = Boolean(game.isBundle);
 
+  // Valor calculado y persistente para el campo de precio regular / tachado
+  const regularPriceValue = (() => {
+    if (!game.price?.initial) return '';
+    // Si initial es igual a final y no hay descuento ni precio formateado previo, está vacío
+    if (game.price.initial === game.price.final && !game.price.discountPercent && !game.price.initialFormatted) {
+      return '';
+    }
+    return parsePriceFromCents(game.price.initial);
+  })();
+
   const handleToggleBundle = (enabled: boolean) => {
     if (disabled || isLoadingDetails) return;
     onUpdateGame(gameId, {
@@ -577,45 +610,74 @@ const BundleConfigSection = ({
 
   const handleFinalPriceChange = (valStr: string) => {
     if (disabled || isLoadingDetails) return;
-    const finalNum = valStr === '' ? 0 : Math.max(0, Number(valStr));
-    const currentInitial = game.price?.initial;
-    const initialNum = currentInitial && currentInitial > finalNum ? currentInitial : finalNum;
-    const discountPct = (initialNum > finalNum && initialNum > 0)
-      ? Math.round(((initialNum - finalNum) / initialNum) * 100)
+    const finalPesos = valStr === '' ? 0 : Math.max(0, Number(valStr));
+    const finalInCents = parsePriceToCents(finalPesos);
+
+    const currentInitialCents = game.price?.initial ?? 0;
+    const hasCustomInitial = Boolean(
+      game.price?.initialFormatted || (currentInitialCents > 0 && currentInitialCents !== (game.price?.final ?? 0))
+    );
+
+    const initialInCents = hasCustomInitial ? currentInitialCents : finalInCents;
+
+    const discountPct = (initialInCents > finalInCents && initialInCents > 0)
+      ? Math.round(((initialInCents - finalInCents) / initialInCents) * 100)
       : 0;
 
     onUpdateGame(gameId, {
       ...game,
       price: {
-        isFree: finalNum === 0,
+        isFree: finalInCents === 0,
         currency: 'COP',
-        final: finalNum,
-        initial: initialNum,
+        final: finalInCents,
+        initial: initialInCents,
         discountPercent: discountPct,
-        finalFormatted: finalNum === 0 ? 'Gratis' : formatCopPrice(finalNum),
-        initialFormatted: initialNum > finalNum ? formatCopPrice(initialNum) : undefined,
+        finalFormatted: finalInCents === 0 ? 'Gratis' : formatCopPrice(finalInCents),
+        initialFormatted: initialInCents > finalInCents ? formatCopPrice(initialInCents) : undefined,
       },
     });
   };
 
   const handleOriginalPriceChange = (valStr: string) => {
     if (disabled || isLoadingDetails) return;
-    const initialNum = valStr === '' ? (game.price?.final ?? 0) : Math.max(0, Number(valStr));
-    const finalNum = game.price?.final ?? 0;
-    const discountPct = (initialNum > finalNum && initialNum > 0)
-      ? Math.round(((initialNum - finalNum) / initialNum) * 100)
+
+    const currentFinalCents = game.price?.final ?? 0;
+    const currentFinalPesos = Number(parsePriceFromCents(currentFinalCents)) || 0;
+
+    if (valStr.trim() === '') {
+      onUpdateGame(gameId, {
+        ...game,
+        price: {
+          isFree: currentFinalCents === 0,
+          currency: 'COP',
+          final: currentFinalCents,
+          initial: currentFinalCents,
+          discountPercent: 0,
+          finalFormatted: currentFinalCents === 0 ? 'Gratis' : formatCopPrice(currentFinalCents),
+          initialFormatted: undefined,
+        },
+      });
+      return;
+    }
+
+    const inputPesos = Number(valStr);
+    if (Number.isNaN(inputPesos)) return;
+
+    const inputCents = parsePriceToCents(inputPesos);
+    const discountPct = (inputPesos > currentFinalPesos && inputPesos > 0)
+      ? Math.round(((inputPesos - currentFinalPesos) / inputPesos) * 100)
       : 0;
 
     onUpdateGame(gameId, {
       ...game,
       price: {
-        isFree: finalNum === 0,
+        isFree: currentFinalCents === 0,
         currency: 'COP',
-        final: finalNum,
-        initial: initialNum,
+        final: currentFinalCents,
+        initial: inputCents,
         discountPercent: discountPct,
-        finalFormatted: finalNum === 0 ? 'Gratis' : formatCopPrice(finalNum),
-        initialFormatted: initialNum > finalNum ? formatCopPrice(initialNum) : undefined,
+        finalFormatted: currentFinalCents === 0 ? 'Gratis' : formatCopPrice(currentFinalCents),
+        initialFormatted: inputPesos > currentFinalPesos ? formatCopPrice(inputCents) : undefined,
       },
     });
   };
@@ -693,7 +755,7 @@ const BundleConfigSection = ({
           />
           <span className="bundle-slider-track"></span>
           <span className="bundle-toggle-text">
-            <span className="bundle-toggle-icon">📦</span>
+            <span className="bundle-toggle-icon">📦</span>{' '}
             ¿Es un Bundle / Paquete Especial?
           </span>
         </label>
@@ -740,7 +802,7 @@ const BundleConfigSection = ({
                   step="1000"
                   className="manual-input"
                   placeholder="Ej: 140000 (o 0 si es Gratis)"
-                  value={game.price?.final !== undefined ? game.price.final : ''}
+                  value={parsePriceFromCents(game.price?.final)}
                   onChange={(e) => handleFinalPriceChange(e.target.value)}
                   disabled={isLoadingDetails || disabled}
                 />
@@ -757,11 +819,7 @@ const BundleConfigSection = ({
                   step="1000"
                   className="manual-input"
                   placeholder="Ej: 210000"
-                  value={
-                    game.price?.initial && game.price.initial > (game.price.final ?? 0)
-                      ? game.price.initial
-                      : ''
-                  }
+                  value={regularPriceValue}
                   onChange={(e) => handleOriginalPriceChange(e.target.value)}
                   disabled={isLoadingDetails || disabled}
                 />
@@ -770,7 +828,13 @@ const BundleConfigSection = ({
 
             {game.price?.finalFormatted && (
               <div className="bundle-price-summary-pill">
-                <span>Precio actual fijado: <strong>{game.price.finalFormatted}</strong></span>
+                <span>
+                  Precio actual fijado:{' '}
+                  {game.price.initialFormatted && game.price.initial && game.price.final && game.price.initial > game.price.final ? (
+                    <span className="bundle-summary-initial-strikethrough">{game.price.initialFormatted} ➔ </span>
+                  ) : null}
+                  <strong>{game.price.finalFormatted}</strong>
+                </span>
                 {game.price.discountPercent && game.price.discountPercent > 0 ? (
                   <span className="bundle-discount-tag">-{game.price.discountPercent}% OFF</span>
                 ) : null}
@@ -779,7 +843,7 @@ const BundleConfigSection = ({
 
             {/* Banner del paquete vs imagen base */}
             <div className="manual-field">
-              <label className="manual-label">🖼️ Imagen de portada del paquete:</label>
+              <span className="manual-label">🖼️ Imagen de portada del paquete:</span>
               <div className="bundle-cover-options">
                 <button
                   type="button"
@@ -1068,6 +1132,7 @@ const SingleGameSlotEditor = ({
       />
 
       <BundleConfigSection
+        key={gameId}
         gameId={gameId}
         game={game}
         onUpdateGame={onUpdateGame}

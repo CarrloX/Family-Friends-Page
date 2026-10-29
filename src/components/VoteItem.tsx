@@ -81,14 +81,7 @@ export const VoteItem: React.FC<VoteItemProps> = React.memo(({
 
       <div className="vote-game-info">
         <div className="game-title-row">
-          <div className="game-title-text-group">
-            <span className="game-title" title={game.title}>{game.title}</span>
-            {game.isBundle && (
-              <span className="bundle-badge neon-pulse" title="Paquete Especial / Bundle">
-                📦 BUNDLE
-              </span>
-            )}
-          </div>
+          <span className="game-title" title={game.title}>{game.title}</span>
           {isMaxPts && <span className="favorite-badge">⭐ FAVORITO</span>}
         </div>
 
@@ -109,9 +102,9 @@ export const VoteItem: React.FC<VoteItemProps> = React.memo(({
             </span>
           )}
 
-          {game.isBundle && game.price?.finalFormatted && (
-            <span className="bundle-item-price-pill" title="Precio promocional del bundle">
-              🏷️ {game.price.finalFormatted}
+          {game.isBundle && (
+            <span className="bundle-badge neon-pulse bundle-badge-in-points" title="Paquete Especial / Bundle">
+              📦 BUNDLE
             </span>
           )}
         </div>

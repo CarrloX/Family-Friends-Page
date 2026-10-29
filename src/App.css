@@ -1070,6 +1070,9 @@
   display: inline-flex;
   align-items: center;
   gap: 10px;
+  max-width: 100%;
+  box-sizing: border-box;
+  flex-wrap: wrap;
   background: rgba(23, 26, 33, 0.88);
   border: 1.5px solid rgba(102, 192, 244, 0.35);
   border-radius: 10px;
@@ -7512,6 +7515,14 @@ textarea.manual-input {
   margin-left: auto;
 }
 
+.bundle-badge-in-points {
+  margin-left: auto;
+  font-size: 8.5px;
+  padding: 1px 6px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 /* ── Ajuste de Títulos Largos (Line-Clamp y Font Scaling) ── */
 .winner-title {
   font-size: clamp(20px, 3.8vw, 36px);
@@ -7735,18 +7746,37 @@ textarea.manual-input {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
 }
 
 .bundle-pricing-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  flex-direction: column;
   gap: 10px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
-@media (max-width: 640px) {
-  .bundle-pricing-grid {
-    grid-template-columns: 1fr;
-  }
+.bundle-pricing-grid .manual-field {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.bundle-pricing-grid .manual-label {
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  line-height: 1.35;
+}
+
+.bundle-pricing-grid .manual-input {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .bundle-price-summary-pill {
@@ -7759,6 +7789,10 @@ textarea.manual-input {
   border-radius: 6px;
   font-size: 12px;
   color: #e0f2fe;
+  flex-wrap: wrap;
+  max-width: 100%;
+  box-sizing: border-box;
+  word-break: break-word;
 }
 
 .bundle-discount-tag {
