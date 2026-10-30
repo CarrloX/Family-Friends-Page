@@ -25,6 +25,7 @@ import { useAutoUnfreezeWatcher } from '../hooks/useAutoUnfreezeWatcher';
 import { reconcileVoterVotes } from '../utils/votingStateHelpers';
 import { calculateResults } from '../data/votingData';
 import type { Voter, Game, VotingHistoryRecord, FreezePriceState } from '../types/voting';
+import { areAllPositivePointsAssigned } from '../types/voting';
 
 function subscribeToMobileMediaQuery(callback: () => void) {
   const mql = window.matchMedia('(max-width: 768px)');
@@ -165,6 +166,17 @@ export const SteamVotingDashboard: React.FC = () => {
       return acc + voter.votes.reduce((sum, vote) => sum + (vote.points || 0), 0);
     }, 0);
   }, [voters]);
+
+  // ─── Determinar si aún existen votos vacíos o incompletos en la votación ───
+  const hasEmptyVotes = useMemo(() => {
+    const gameCount = Object.keys(gamesMap).length;
+    if (voters.length === 0 || gameCount < 2) return false;
+
+    return voters.some((voter) => {
+      if (!voter.votes || voter.votes.length < gameCount) return true;
+      return !areAllPositivePointsAssigned(voter.votes, gameCount);
+    });
+  }, [voters, gamesMap]);
 
   // Texto descriptivo del badge de integrantes según modo de edición y dispositivo
   const voterCountBadgeText = useMemo(
@@ -447,6 +459,7 @@ export const SteamVotingDashboard: React.FC = () => {
           results={results}
           votersCount={voters.length}
           totalAssignedPoints={totalAssignedPoints}
+          hasEmptyVotes={hasEmptyVotes}
           isEditMode={isEditMode}
           canManageContent={canManageContent}
           isPrecioCongelado={freezeState.isPrecioCongelado}

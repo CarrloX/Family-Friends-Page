@@ -20,6 +20,7 @@ interface WinnerBannerProps {
   results: GameResult[];
   votersCount?: number;
   totalAssignedPoints?: number;
+  hasEmptyVotes?: boolean;
   isEditMode?: boolean;
   canManageContent?: boolean;
   isPrecioCongelado?: boolean;
@@ -282,6 +283,7 @@ interface WinnerCardProps {
   isPrecioCongelado?: boolean;
   onToggleFreezePrice?: (livePrice: SteamPriceInfo | null) => Promise<void> | void;
   isFreezingLoading?: boolean;
+  hasEmptyVotes?: boolean;
 }
 
 const WinnerCard: React.FC<WinnerCardProps> = ({
@@ -300,12 +302,15 @@ const WinnerCard: React.FC<WinnerCardProps> = ({
   isPrecioCongelado = false,
   onToggleFreezePrice,
   isFreezingLoading = false,
+  hasEmptyVotes = false,
 }) => (
   <div className="winner-banner-glow">
     <div className="winner-banner">
-      <div className="winner-trophy-tag">
+      <div className={`winner-trophy-tag ${hasEmptyVotes ? 'in-voting' : ''}`}>
         <span className="trophy-icon">🏆</span>
-        <span className="trophy-text">JUEGO GANADOR DE LA VOTACIÓN</span>
+        <span className="trophy-text">
+          {hasEmptyVotes ? 'JUEGO GANADOR AÚN EN VOTACIÓN' : 'JUEGO GANADOR DE LA VOTACIÓN'}
+        </span>
       </div>
 
       <div className="winner-content">
@@ -537,6 +542,7 @@ export const WinnerBanner: React.FC<WinnerBannerProps> = React.memo(({
   results,
   votersCount = 0,
   totalAssignedPoints,
+  hasEmptyVotes = false,
   isEditMode = false,
   canManageContent = false,
   isPrecioCongelado = false,
@@ -670,6 +676,7 @@ export const WinnerBanner: React.FC<WinnerBannerProps> = React.memo(({
               isPrecioCongelado={isPrecioCongelado}
               onToggleFreezePrice={onToggleFreezePrice}
               isFreezingLoading={isFreezingLoading}
+              hasEmptyVotes={hasEmptyVotes}
             />
             <PodiumList runnersUp={runnersUp} />
           </motion.div>
