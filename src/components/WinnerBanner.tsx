@@ -497,21 +497,23 @@ const PodiumList: React.FC<{ runnersUp: GameResult[] }> = ({ runnersUp }) => {
                 transition={{ type: 'spring', stiffness: 400, damping: 25 }}
               >
                 <div className="podium-rank">{getRankLabel(rankPosition)}</div>
-                <GameThumbnail
-                  game={result.game}
-                  alt={result.game.title}
-                  className="podium-thumb"
-                />
-                <div className="podium-info">
-                  <div className="podium-title-row">
-                    <span className="podium-title" title={result.game.title}>{result.game.title}</span>
-                    {result.game.isBundle && (
-                      <span className="bundle-badge-mini" title="Paquete Especial / Bundle">📦 BUNDLE</span>
-                    )}
+                <div className="podium-content">
+                  <GameThumbnail
+                    game={result.game}
+                    alt={result.game.title}
+                    className="podium-thumb"
+                  />
+                  <div className="podium-info">
+                    <div className="podium-title-row">
+                      <span className="podium-title" title={result.game.title}>{result.game.title}</span>
+                      {result.game.isBundle && (
+                        <span className="bundle-badge-mini" title="Paquete Especial / Bundle">📦 BUNDLE</span>
+                      )}
+                    </div>
+                    <span className="podium-score">
+                      <strong>{result.weightedPoints}</strong> pts ponderados ({result.rawPoints} pts base)
+                    </span>
                   </div>
-                  <span className="podium-score">
-                    <strong>{result.weightedPoints}</strong> pts ponderados ({result.rawPoints} pts base)
-                  </span>
                 </div>
               </motion.div>
             );
