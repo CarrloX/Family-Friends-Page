@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import type { Game } from '../types/voting';
-import { searchSteamStore, fetchSteamGameDetails, formatCopPrice, type SteamSearchResultItem } from '../services/steamStoreApi';
+import { FaSteam } from 'react-icons/fa';
+import type { Game, PurchasePlatform } from '../types/voting';
+import { searchSteamStore, fetchSteamGameDetails, formatCopPrice, parseCopInputToCents, type SteamSearchResultItem } from '../services/steamStoreApi';
 import { GameThumbnail } from './GameThumbnail';
+import { EnebaIcon } from './FinishVotingModal';
 
 interface GameSearchEditorProps {
   gamesMap: Record<string, Game>;
@@ -317,6 +319,15 @@ const SlotPreview = ({ game, isLoadingDetails }: {
     <div className="slot-preview-meta">
       <div className="slot-game-title">
         <span className="slot-title-text">{game.title || 'Seleccionar juego'}</span>
+        {game.purchasePlatform === 'eneba' ? (
+          <span className="mini-store-badge eneba" title="Tienda Eneba">
+            <EnebaIcon className="mini-store-icon" /> ENEBA
+          </span>
+        ) : (
+          <span className="mini-store-badge steam" title="Tienda Steam">
+            <FaSteam className="mini-store-icon" /> STEAM
+          </span>
+        )}
         {game.isBundle && (
           <span className="bundle-badge neon-pulse" title="Paquete Especial / Bundle Activo">
             📦 BUNDLE / PAQUETE
@@ -338,6 +349,15 @@ const SlotPreview = ({ game, isLoadingDetails }: {
           {game.price.initialFormatted && game.price.initial && game.price.final && game.price.initial > game.price.final ? (
             <span className="bundle-summary-initial-strikethrough">{game.price.initialFormatted} ➔ </span>
           ) : null}
+          <strong>{game.price.finalFormatted}</strong>
+          {game.price.discountPercent && game.price.discountPercent > 0 ? (
+            <span className="bundle-pill-discount"> (-{game.price.discountPercent}%)</span>
+          ) : null}
+        </div>
+      )}
+      {!game.isBundle && game.price?.finalFormatted && (
+        <div className="slot-bundle-price-pill">
+          Precio:{' '}
           <strong>{game.price.finalFormatted}</strong>
           {game.price.discountPercent && game.price.discountPercent > 0 ? (
             <span className="bundle-pill-discount"> (-{game.price.discountPercent}%)</span>
@@ -445,11 +465,11 @@ const SteamSearchSection = ({
   );
 };
 
-/* ── Sub-componente: campos manuales de edición (título, descripción, portada) ── */
+/* ── Sub-componente: campos manuales de edición (título, descripción, portada, tienda y precio) ── */
 const ManualEditControls = ({
   gameId, game, isLoadingDetails, customCoverUrl, uploadError,
   setCustomCoverUrl, handleTitleChange, handleDescriptionChange,
-  handleApplyCustomCover, handleFileUpload, disabled = false,
+  handleApplyCustomCover, handleFileUpload, handlePlatformChange, handlePriceChange, disabled = false,
 }: {
   gameId: string;
   game: Game;
@@ -461,6 +481,8 @@ const ManualEditControls = ({
   handleDescriptionChange: (v: string) => void;
   handleApplyCustomCover: () => void;
   handleFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  handlePlatformChange: (p: PurchasePlatform) => void;
+  handlePriceChange: (v: string) => void;
   disabled?: boolean;
 }) => {
   let fileUploadTitle = 'Subir imagen local (máx 2 MB)';
@@ -469,6 +491,11 @@ const ManualEditControls = ({
   } else if (isLoadingDetails) {
     fileUploadTitle = 'Sincronizando con Steam...';
   }
+
+  const currentPriceCop =
+    game.price?.final !== undefined && game.price.final !== null
+      ? String(Math.round(game.price.final / 100))
+      : '';
 
   return (
     <div className="slot-manual-controls">
@@ -495,6 +522,55 @@ const ManualEditControls = ({
           placeholder="Descripción corta del juego..."
           disabled={isLoadingDetails || disabled}
         />
+      </div>
+
+      <div className="manual-field-row">
+        <div className="manual-field flex-1">
+          <span id={`manual-platform-label-${gameId}`} className="manual-label">Plataforma / Tienda:</span>
+          <div className="platform-toggle-group mini" role="radiogroup" aria-labelledby={`manual-platform-label-${gameId}`}>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={game.purchasePlatform !== 'eneba'}
+              className={`platform-toggle-btn platform-steam ${game.purchasePlatform !== 'eneba' ? 'active' : ''}`}
+              onClick={() => handlePlatformChange('steam')}
+              disabled={isLoadingDetails || disabled}
+            >
+              <FaSteam className="platform-btn-icon" />
+              <span>Steam</span>
+            </button>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={game.purchasePlatform === 'eneba'}
+              className={`platform-toggle-btn platform-eneba ${game.purchasePlatform === 'eneba' ? 'active' : ''}`}
+              onClick={() => handlePlatformChange('eneba')}
+              disabled={isLoadingDetails || disabled}
+            >
+              <EnebaIcon className="platform-btn-icon" />
+              <span>Eneba</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="manual-field flex-1">
+          <label htmlFor={`manual-price-input-${gameId}`} className="manual-label">Precio Asignado ($ COP):</label>
+          <div className="paid-price-wrapper">
+            <span className="paid-prefix" aria-hidden="true">$</span>
+            <input
+              id={`manual-price-input-${gameId}`}
+              type="number"
+              min="0"
+              step="500"
+              className="manual-input paid-price-input-element"
+              placeholder="0"
+              value={currentPriceCop}
+              onChange={(e) => handlePriceChange(e.target.value)}
+              disabled={isLoadingDetails || disabled}
+            />
+            <span className="paid-suffix">COP</span>
+          </div>
+        </div>
       </div>
 
       <div className="manual-field">
@@ -1086,6 +1162,38 @@ const SingleGameSlotEditor = ({
     }
   };
 
+  const handlePlatformChange = (platform: PurchasePlatform) => {
+    if (disabled || isLoadingDetails) return;
+    onUpdateGame(gameId, {
+      ...game,
+      purchasePlatform: platform,
+    });
+  };
+
+  const handlePriceChange = (valStr: string) => {
+    if (disabled || isLoadingDetails) return;
+    const trimmed = valStr.trim();
+    if (trimmed === '') {
+      onUpdateGame(gameId, {
+        ...game,
+        price: undefined,
+      });
+      return;
+    }
+    const cents = parseCopInputToCents(trimmed);
+    if (cents === null) return;
+    onUpdateGame(gameId, {
+      ...game,
+      price: {
+        ...game.price,
+        currency: 'COP',
+        final: cents,
+        finalFormatted: cents === 0 ? 'Gratis' : formatCopPrice(cents),
+        isFree: cents === 0,
+      },
+    });
+  };
+
   return (
     <div className="game-slot-card">
       <SlotBadgeRow
@@ -1128,6 +1236,8 @@ const SingleGameSlotEditor = ({
         handleDescriptionChange={handleDescriptionChange}
         handleApplyCustomCover={handleApplyCustomCover}
         handleFileUpload={handleFileUpload}
+        handlePlatformChange={handlePlatformChange}
+        handlePriceChange={handlePriceChange}
         disabled={disabled}
       />
 

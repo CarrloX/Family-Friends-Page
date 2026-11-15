@@ -283,6 +283,7 @@ export const SteamVotingDashboard: React.FC = () => {
     handleConfirmFinishVoting,
     handleClearHistory,
     handleDeleteHistoryRecord,
+    handleUpdateHistoryRecord,
     handleResetAllAura,
   } = useVotingHistoryActions({
     canManageContent,
@@ -492,6 +493,7 @@ export const SteamVotingDashboard: React.FC = () => {
         history={history}
         onClearHistory={handleClearHistory}
         onDeleteHistoryRecord={handleDeleteHistoryRecord}
+        onUpdateHistoryRecord={handleUpdateHistoryRecord}
         onCloseHistoryModal={() => setShowHistoryModal(false)}
         canManageContent={canManageContent}
         voterToDelete={voterToDelete}

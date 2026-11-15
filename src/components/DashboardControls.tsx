@@ -128,6 +128,7 @@ interface DashboardModalsProps {
   history: VotingHistoryRecord[];
   onClearHistory: () => Promise<void>;
   onDeleteHistoryRecord: (recordId: string) => Promise<void>;
+  onUpdateHistoryRecord?: (recordId: string, updates: Partial<VotingHistoryRecord>) => Promise<void>;
   onCloseHistoryModal: () => void;
   canManageContent: boolean;
   voterToDelete: Voter | null;
@@ -153,6 +154,7 @@ export const DashboardModals: React.FC<DashboardModalsProps> = ({
   history,
   onClearHistory,
   onDeleteHistoryRecord,
+  onUpdateHistoryRecord,
   onCloseHistoryModal,
   canManageContent,
   voterToDelete,
@@ -187,6 +189,7 @@ export const DashboardModals: React.FC<DashboardModalsProps> = ({
           history={history}
           onClearHistory={onClearHistory}
           onDeleteRecord={onDeleteHistoryRecord}
+          onUpdateRecord={onUpdateHistoryRecord}
           onClose={onCloseHistoryModal}
           canManageContent={canManageContent}
         />

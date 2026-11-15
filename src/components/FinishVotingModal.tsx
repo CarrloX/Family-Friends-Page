@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
+import { FaSteam } from 'react-icons/fa';
 import type {
   Voter,
   Game,
@@ -7,6 +8,7 @@ import type {
   SteamPriceInfo,
   VotingHistoryRecord,
   VoterSnapshotInHistory,
+  PurchasePlatform,
 } from '../types/voting';
 import {
   calculateAuraStatus,
@@ -17,8 +19,9 @@ import {
 import { VoterPaymentRow } from './VoterPaymentRow';
 import { GameThumbnail } from './GameThumbnail';
 import { formatHistoryDate } from '../utils/formatDate';
-import { formatCopPrice } from '../services/steamStoreApi';
+import { formatCopPrice, parseCopInputToCents } from '../services/steamStoreApi';
 import { useModalFocusTrap } from '../hooks/useModalFocusTrap';
+import enebaLogoUrl from '../assets/eneba-logo.svg';
 
 // ============================================================
 // Funciones puras auxiliares para reducir complejidad cognitiva
@@ -47,18 +50,35 @@ function resolveEffectivePrice(
   };
 }
 
-function calculateIndividualQuota(
-  effectivePrice: SteamPriceInfo | undefined,
-  votersCount: number
-): { amount: number; formatted: string } | null {
-  if (!effectivePrice || effectivePrice.isFree || !effectivePrice.final || votersCount === 0) {
-    return null;
+function validateDevResultsOrder(allResults: GameResult[]): void {
+  if (import.meta.env.DEV && allResults.length > 1 && allResults[0].weightedPoints < allResults[1].weightedPoints) {
+    console.warn(
+      '[FinishVotingModal] Infracción de contrato: allResults no está ordenado descendentemente. allResults[0] tiene menor puntuación que allResults[1].'
+    );
   }
-  const quota = Math.ceil(effectivePrice.final / votersCount);
-  return {
-    amount: quota,
-    formatted: formatCopPrice(quota),
-  };
+}
+
+function resolveWinningGameWithPrice(
+  baseGame: Game,
+  purchasePlatform: PurchasePlatform,
+  paidPriceCents: number | null,
+  paidPriceFormatted: string | null,
+  effectivePrice?: SteamPriceInfo
+): Game {
+  const winningGame = cloneGameSnapshot(baseGame);
+  winningGame.purchasePlatform = purchasePlatform;
+  if (paidPriceCents !== null) {
+    winningGame.price = {
+      ...winningGame.price,
+      currency: 'COP',
+      final: paidPriceCents,
+      finalFormatted: paidPriceFormatted || undefined,
+      isFree: paidPriceCents === 0,
+    };
+  } else if (effectivePrice) {
+    winningGame.price = { ...effectivePrice };
+  }
+  return winningGame;
 }
 
 function buildInitialQuotaPayments(voters: Voter[]): Record<string, boolean> {
@@ -118,12 +138,19 @@ interface FreezeDataPayload {
   precioCongeladoFormatted: string | null;
 }
 
+interface PurchaseDataPayload {
+  purchasePlatform?: PurchasePlatform;
+  precioPagado?: number | null;
+  precioPagadoFormatted?: string | null;
+}
+
 function buildFinishedSessionData(
   winningGame: Game,
   allResults: GameResult[],
   voters: Voter[],
   snapshots: VoterSnapshotInHistory[],
-  freezeData: FreezeDataPayload
+  freezeData: FreezeDataPayload,
+  purchaseData: PurchaseDataPayload = {}
 ): { historyRecord: VotingHistoryRecord; updatedVoters: Voter[] } {
   const now = new Date();
   const createdAt = now.toISOString();
@@ -133,6 +160,9 @@ function buildFinishedSessionData(
     createdAt,
     date: formatHistoryDate(createdAt),
     winningGame,
+    purchasePlatform: purchaseData.purchasePlatform ?? 'steam',
+    precioPagado: purchaseData.precioPagado ?? null,
+    precioPagadoFormatted: purchaseData.precioPagadoFormatted ?? null,
     isBundle: Boolean(winningGame.isBundle),
     bundleDescription: winningGame.bundleDescription,
     bundleImage: winningGame.bundleImage,
@@ -165,13 +195,22 @@ function buildFinishedSessionData(
 // Subcomponentes de presentación para modularizar el modal
 // ============================================================
 
+export const EnebaIcon: React.FC<{ className?: string }> = ({ className = '' }) => (
+  <img
+    src={enebaLogoUrl}
+    alt="Eneba"
+    className={`eneba-logo-img ${className}`}
+    width={16}
+    height={16}
+    loading="eager"
+  />
+);
+
 interface WinningGamePreviewProps {
   winningGame: Game;
   weightedPoints: number;
   isPrecioCongelado: boolean;
   effectivePrice?: SteamPriceInfo;
-  individualQuota: { amount: number; formatted: string } | null;
-  votersCount: number;
 }
 
 const WinningGamePreview = ({
@@ -179,8 +218,6 @@ const WinningGamePreview = ({
   weightedPoints,
   isPrecioCongelado,
   effectivePrice,
-  individualQuota,
-  votersCount,
 }: WinningGamePreviewProps) => (
   <div className="modal-winner-card">
     <GameThumbnail
@@ -216,16 +253,119 @@ const WinningGamePreview = ({
         ) : (
           effectivePrice?.finalFormatted && (
             <span className="winner-modal-price">
-              <span aria-hidden="true">🏷️ </span>{effectivePrice.finalFormatted}
+              <span aria-hidden="true">🏷️ </span>Ref. Steam: {effectivePrice.finalFormatted}
               {effectivePrice.discountPercent ? ` (-${effectivePrice.discountPercent}%)` : ''}
             </span>
           )
         )}
-        {individualQuota && (
-          <span className="winner-modal-quota-split">
-            <span aria-hidden="true">💵 </span>Cuota: <strong>{individualQuota.formatted}</strong> / integrante ({votersCount} miembros)
-          </span>
-        )}
+      </div>
+    </div>
+  </div>
+);
+
+interface PurchaseDetailsCardProps {
+  purchasePlatform: PurchasePlatform;
+  onPlatformChange: (p: PurchasePlatform) => void;
+  paidPriceCop: string;
+  onPaidPriceChange: (val: string) => void;
+  onResetDetectedPrice: () => void;
+  onSetFreePrice: () => void;
+  detectedPriceFormatted?: string | null;
+  disabled?: boolean;
+}
+
+const PurchaseDetailsCard: React.FC<PurchaseDetailsCardProps> = ({
+  purchasePlatform,
+  onPlatformChange,
+  paidPriceCop,
+  onPaidPriceChange,
+  onResetDetectedPrice,
+  onSetFreePrice,
+  detectedPriceFormatted,
+  disabled = false,
+}) => (
+  <div className="finish-purchase-card">
+    <div className="purchase-card-header">
+      <div className="purchase-card-title-group">
+        <span className="purchase-card-title-badge">🛒 DATOS DE LA COMPRA</span>
+        <span className="purchase-card-subtitle">
+          Selecciona si se compró en Steam o Eneba y ajusta el precio real pagado:
+        </span>
+      </div>
+    </div>
+
+    <div className="purchase-card-grid">
+      <div className="purchase-field-item">
+        <span id="finish-platform-label" className="purchase-label">¿Dónde fue comprado?</span>
+        <div className="platform-toggle-group" role="radiogroup" aria-labelledby="finish-platform-label">
+          <button
+            type="button"
+            role="radio"
+            aria-checked={purchasePlatform === 'steam'}
+            className={`platform-toggle-btn platform-steam ${purchasePlatform === 'steam' ? 'active' : ''}`}
+            onClick={() => onPlatformChange('steam')}
+            disabled={disabled}
+          >
+            <FaSteam className="platform-btn-icon" />
+            <span>Steam</span>
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={purchasePlatform === 'eneba'}
+            className={`platform-toggle-btn platform-eneba ${purchasePlatform === 'eneba' ? 'active' : ''}`}
+            onClick={() => onPlatformChange('eneba')}
+            disabled={disabled}
+          >
+            <EnebaIcon className="platform-btn-icon" />
+            <span>Eneba</span>
+          </button>
+        </div>
+      </div>
+
+      <div className="purchase-field-item">
+        <label htmlFor="paid-price-input" className="purchase-label">
+          Precio Pagado ($ COP):
+        </label>
+        <div className="paid-price-input-row">
+          <div className="paid-price-wrapper">
+            <span className="paid-prefix" aria-hidden="true">$</span>
+            <input
+              id="paid-price-input"
+              type="text"
+              inputMode="numeric"
+              className="paid-price-input-element"
+              placeholder="0"
+              value={paidPriceCop}
+              onChange={(e) => onPaidPriceChange(e.target.value)}
+              disabled={disabled}
+            />
+            <span className="paid-suffix">COP</span>
+          </div>
+
+          <div className="paid-shortcuts-group">
+            {detectedPriceFormatted && (
+              <button
+                type="button"
+                className="btn-paid-shortcut"
+                onClick={onResetDetectedPrice}
+                disabled={disabled}
+                title={`Usar precio de referencia (${detectedPriceFormatted})`}
+              >
+                Ref ({detectedPriceFormatted})
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn-paid-shortcut"
+              onClick={onSetFreePrice}
+              disabled={disabled}
+              title="Marcar como juego gratis o regalo ($0 COP)"
+            >
+              Gratis ($0)
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -349,14 +489,7 @@ export const FinishVotingModal = React.memo(({
   // El elemento [0] es el 1.er lugar ganador.
   const winningResult = allResults[0];
 
-  // Verificación defensiva en entorno de desarrollo para alertar si algún llamador viola el contrato
-  if (import.meta.env.DEV && allResults.length > 1) {
-    if (allResults[0].weightedPoints < allResults[1].weightedPoints) {
-      console.warn(
-        '[FinishVotingModal] Infracción de contrato: allResults no está ordenado descendentemente. allResults[0] tiene menor puntuación que allResults[1].'
-      );
-    }
-  }
+  validateDevResultsOrder(allResults);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [hasConfirmedReview, setHasConfirmedReview] = useState(false);
@@ -406,12 +539,50 @@ export const FinishVotingModal = React.memo(({
     fallbackPrice
   );
 
-  const individualQuota = calculateIndividualQuota(effectivePrice, voters.length);
+  const [purchasePlatform, setPurchasePlatform] = useState<PurchasePlatform>(
+    () => winningResult?.game?.purchasePlatform || 'steam'
+  );
 
-  const winningGame = cloneGameSnapshot(winningResult.game);
-  if (effectivePrice) {
-    winningGame.price = { ...effectivePrice };
-  }
+  const detectedPriceCop = useMemo(() => {
+    if (effectivePrice?.final !== undefined && effectivePrice.final !== null) {
+      const pesos = Math.round(effectivePrice.final / 100);
+      return new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 }).format(pesos);
+    }
+    return '';
+  }, [effectivePrice]);
+
+  const [paidPriceCop, setPaidPriceCop] = useState<string>(detectedPriceCop);
+
+  const handleResetDetectedPrice = useCallback(() => {
+    setPaidPriceCop(detectedPriceCop);
+  }, [detectedPriceCop]);
+
+  const handleSetFreePrice = useCallback(() => {
+    setPaidPriceCop('0');
+  }, []);
+
+  const paidPriceCents = useMemo(() => {
+    if (paidPriceCop.trim() === '') {
+      return effectivePrice?.final ?? null;
+    }
+    return parseCopInputToCents(paidPriceCop);
+  }, [paidPriceCop, effectivePrice]);
+
+  const paidPriceFormatted = useMemo(() => {
+    if (paidPriceCents === null) {
+      return effectivePrice?.finalFormatted || null;
+    }
+    if (paidPriceCents === 0) return 'Gratis';
+    return formatCopPrice(paidPriceCents);
+  }, [paidPriceCents, effectivePrice]);
+
+  const winningGame = resolveWinningGameWithPrice(
+    winningResult.game,
+    purchasePlatform,
+    paidPriceCents,
+    paidPriceFormatted,
+    effectivePrice
+  );
 
   const handleConfirm = async () => {
     if (isSaving || !hasConfirmedReview || !winningResult?.game) return;
@@ -425,7 +596,12 @@ export const FinishVotingModal = React.memo(({
         allResults,
         voters,
         snapshots,
-        { isPrecioCongelado, precioCongelado, descuentoCongelado, precioCongeladoFormatted }
+        { isPrecioCongelado, precioCongelado, descuentoCongelado, precioCongeladoFormatted },
+        {
+          purchasePlatform,
+          precioPagado: paidPriceCents,
+          precioPagadoFormatted: paidPriceFormatted,
+        }
       );
 
       await onConfirmFinish(updatedVoters, historyRecord);
@@ -510,8 +686,17 @@ export const FinishVotingModal = React.memo(({
           weightedPoints={winningResult.weightedPoints}
           isPrecioCongelado={isPrecioCongelado}
           effectivePrice={effectivePrice}
-          individualQuota={individualQuota}
-          votersCount={voters.length}
+        />
+
+        <PurchaseDetailsCard
+          purchasePlatform={purchasePlatform}
+          onPlatformChange={setPurchasePlatform}
+          paidPriceCop={paidPriceCop}
+          onPaidPriceChange={setPaidPriceCop}
+          onResetDetectedPrice={handleResetDetectedPrice}
+          onSetFreePrice={handleSetFreePrice}
+          detectedPriceFormatted={effectivePrice?.finalFormatted}
+          disabled={isSaving}
         />
 
         <fieldset className="voters-payment-section">

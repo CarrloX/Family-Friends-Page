@@ -1,8 +1,11 @@
 import React from 'react';
 import { motion } from 'framer-motion';
+import { FaSteam } from 'react-icons/fa';
 import type { VotingHistoryRecord } from '../types/voting';
 import { GameThumbnail } from './GameThumbnail';
 import { formatHistoryDate } from '../utils/formatDate';
+import { formatCopPrice } from '../services/steamStoreApi';
+import { EnebaIcon } from './FinishVotingModal';
 
 interface HistoryListItemProps {
   rec: VotingHistoryRecord;
@@ -11,6 +14,13 @@ interface HistoryListItemProps {
   canManageContent: boolean;
   onSelect: (id: string) => void;
   onRequestDelete: (rec: VotingHistoryRecord) => void;
+}
+
+function resolveFormattedPaidPrice(rec: VotingHistoryRecord): string | null | undefined {
+  if (typeof rec.precioPagado === 'number') {
+    return rec.precioPagado === 0 ? 'Gratis' : formatCopPrice(rec.precioPagado);
+  }
+  return rec.precioPagadoFormatted;
 }
 
 export const HistoryListItem = React.memo(({
@@ -22,6 +32,7 @@ export const HistoryListItem = React.memo(({
   onRequestDelete,
 }: HistoryListItemProps) => {
   const isBundle = Boolean(rec.isBundle || rec.winningGame?.isBundle);
+  const formattedPaidPrice = resolveFormattedPaidPrice(rec);
 
   return (
     <motion.div
@@ -58,6 +69,22 @@ export const HistoryListItem = React.memo(({
             )}
           </div>
           <span className="history-item-date">{formatHistoryDate(rec)}</span>
+          <div className="history-item-badges-row">
+            {rec.purchasePlatform === 'eneba' ? (
+              <span className="mini-store-badge eneba" title="Comprado a través de Eneba">
+                <EnebaIcon className="mini-store-icon" /> Eneba
+              </span>
+            ) : (
+              <span className="mini-store-badge steam" title="Comprado a través de Steam">
+                <FaSteam className="mini-store-icon" /> Steam
+              </span>
+            )}
+            {formattedPaidPrice ? (
+              <span className="mini-price-paid" title={`Precio: ${formattedPaidPrice}`}>
+                {formattedPaidPrice}
+              </span>
+            ) : null}
+          </div>
         </div>
       </motion.button>
       {canManageContent && isLatest && (

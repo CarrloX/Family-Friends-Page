@@ -49,16 +49,34 @@ interface SteamAppDetailsResponse {
 }
 
 /**
- * Formatea un valor en centavos a formato de Moneda Colombiana (COP).
+ * Formatea un valor en centavos a formato de Moneda Colombiana (COP) con estilo Steam (COL$ X.XXX).
  */
 export function formatCopPrice(cents: number): string {
   if (cents === 0) return 'Gratis';
-  const val = cents / 100;
-  return new Intl.NumberFormat('es-CO', {
-    style: 'currency',
-    currency: 'COP',
+  const val = Math.round(cents / 100);
+  const formattedNumber = new Intl.NumberFormat('es-CO', {
     maximumFractionDigits: 0,
   }).format(val);
+  return `COL$ ${formattedNumber}`;
+}
+
+/**
+ * Parsea una entrada de texto ingresada por el usuario (ej: "84.951", "84951", "$ 84.951 COP", "0")
+ * a un valor numérico entero en centavos para consistencia con la API de Steam.
+ * En Colombia los precios de videojuegos no tienen centavos fraccionarios; los puntos y comas se interpretan
+ * como separadores de miles ingresados por el usuario.
+ */
+export function parseCopInputToCents(val: string): number | null {
+  const trimmed = val.trim();
+  if (!trimmed) return null;
+
+  const cleanDigits = trimmed.replace(/[^\d]/g, '');
+  if (!cleanDigits) return null;
+
+  const pesos = Number(cleanDigits);
+  if (Number.isNaN(pesos) || pesos < 0) return null;
+
+  return Math.round(pesos * 100);
 }
 
 /**

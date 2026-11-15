@@ -16,6 +16,7 @@ import { canManageContent } from './accessControl';
 import type { Voter, Game, VotingHistoryRecord, FreezePriceState } from '../types/voting';
 import { fixSteamCoverUrl } from '../utils/steamImages';
 import { formatHistoryDate } from '../utils/formatDate';
+import { formatCopPrice } from './steamStoreApi';
 
 // ============================================================
 // Constantes para localStorage (fallback)
@@ -770,6 +771,11 @@ export function sanitizeVotingHistoryRecord(
     createdAt,
     date: record.date || formattedDate,
     winningGame,
+    purchasePlatform: record.purchasePlatform === 'eneba' ? 'eneba' : (record.purchasePlatform === 'steam' ? 'steam' : (winningGame?.purchasePlatform || 'steam')),
+    precioPagado: typeof record.precioPagado === 'number' ? record.precioPagado : null,
+    precioPagadoFormatted: typeof record.precioPagado === 'number'
+      ? (record.precioPagado === 0 ? 'Gratis' : formatCopPrice(record.precioPagado))
+      : (typeof record.precioPagadoFormatted === 'string' ? record.precioPagadoFormatted : null),
     isBundle: isBundle ? true : undefined,
     bundleDescription: isBundle ? (winningGame?.bundleDescription || record.bundleDescription) : undefined,
     bundleImage: isBundle ? (winningGame?.bundleImage || record.bundleImage) : undefined,
@@ -1571,6 +1577,60 @@ export async function deleteHistoryRecord(
     }
     return { status: 'local', message: 'Registro eliminado localmente' };
   }, { isBarrier: true });
+}
+
+/**
+ * Actualiza los datos de un registro específico del historial (por ejemplo, precio pagado y plataforma)
+ * en Firestore y localStorage.
+ */
+export async function updateHistoryRecord(
+  recordId: string,
+  updates: Partial<VotingHistoryRecord>
+): Promise<SyncState> {
+  return executeCoordinatedWrite(async () => {
+    if (!canWriteToPersistence()) {
+      return buildReadOnlyState();
+    }
+
+    const saveLocalFallback = (): boolean => {
+      const history = readLocal<VotingHistoryRecord[]>(LS_KEY_HISTORY, []);
+      const updated = history.map((r) => {
+        if (r.id !== recordId) return r;
+        return sanitizeVotingHistoryRecord({ ...r, ...updates });
+      });
+      return writeLocal(LS_KEY_HISTORY, updated);
+    };
+
+    if (isFirebaseReady()) {
+      try {
+        const db = getFirestoreInstance()!;
+        const targetDocRef = await findFirestoreHistoryDocRef(db, recordId);
+        if (targetDocRef) {
+          const payload = removeUndefinedDeep({
+            ...updates,
+            lastModified: Timestamp.now(),
+          });
+          await setDoc(targetDocRef, payload, { merge: true });
+        }
+        saveLocalFallback();
+        if (import.meta.env.DEV) {
+          console.log('[Store] Registro de historial actualizado en Firestore:', recordId);
+        }
+        return { status: 'synced', message: 'Registro de compra actualizado' };
+      } catch (err) {
+        return handleDestructiveSyncError(
+          err,
+          'Error actualizando registro en Firestore'
+        );
+      }
+    }
+
+    const ok = saveLocalFallback();
+    if (!ok) {
+      return { status: 'error', message: 'Error al actualizar registro localmente: almacenamiento no disponible o lleno' };
+    }
+    return { status: 'local', message: 'Registro actualizado localmente' };
+  });
 }
 
 /**

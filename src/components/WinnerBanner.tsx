@@ -7,6 +7,7 @@ import { fetchSteamGameDetails, formatCopPrice } from '../services/steamStoreApi
 import { GameThumbnail } from './GameThumbnail';
 import { getGameImageFallbacks } from '../utils/steamImages';
 import { FreezePriceButton } from './FreezePriceButton';
+import { EnebaIcon } from './FinishVotingModal';
 
 interface WinnerBannerProps {
   /**
@@ -326,6 +327,15 @@ const WinnerCard: React.FC<WinnerCardProps> = ({
           <div className="winner-meta-header">
             <div className="winner-badges-row">
               {displayedGenre && <div className="winner-genre">{displayedGenre}</div>}
+              {winner.game.purchasePlatform === 'eneba' ? (
+                <span className="mini-store-badge eneba" title="Tienda Eneba">
+                  <EnebaIcon className="mini-store-icon" /> ENEBA
+                </span>
+              ) : (
+                <span className="mini-store-badge steam" title="Tienda Steam">
+                  <FaSteam className="mini-store-icon" /> STEAM
+                </span>
+              )}
               {winner.game.isBundle && (
                 <span className="bundle-badge bundle-badge-winner neon-pulse">
                   📦 BUNDLE / PAQUETE ESPECIAL

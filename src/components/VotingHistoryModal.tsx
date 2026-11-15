@@ -1,12 +1,15 @@
 import React, { useState, useMemo, useCallback, useSyncExternalStore } from 'react';
 import { motion, AnimatePresence, useDragControls } from 'framer-motion';
-import type { VotingHistoryRecord } from '../types/voting';
+import { FaSteam } from 'react-icons/fa';
+import type { VotingHistoryRecord, PurchasePlatform } from '../types/voting';
 import { DeleteHistoryRecordConfirmModal } from './DeleteHistoryRecordConfirmModal';
 import { HistoryListItem } from './HistoryListItem';
 import { HistoryCompetitorsCarousel } from './HistoryCompetitorsCarousel';
 import { VoterSnapshotRow } from './VoterSnapshotRow';
 import { GameThumbnail } from './GameThumbnail';
+import { EnebaIcon } from './FinishVotingModal';
 import { formatHistoryDate } from '../utils/formatDate';
+import { formatCopPrice, parseCopInputToCents } from '../services/steamStoreApi';
 
 const ITEMS_PER_PAGE = 5;
 
@@ -32,51 +35,282 @@ interface HistoryWinnerPriceBadgeProps {
   record: VotingHistoryRecord;
 }
 
-const HistoryWinnerPriceBadge: React.FC<HistoryWinnerPriceBadgeProps> = ({ record }) => {
-  if (record.isPrecioCongelado) {
-    const formattedPrice =
-      record.precioCongeladoFormatted ||
-      record.winningGame?.price?.finalFormatted ||
-      'Precio Congelado';
-    const discountSuffix =
-      record.descuentoCongelado && record.descuentoCongelado > 0
-        ? ` (-${record.descuentoCongelado}%)`
-        : '';
-    return (
-      <span
-        className="record-frozen-price-tag"
-        title="Precio congelado preservado permanentemente al momento del cierre"
-      >
-        🔒 {formattedPrice}
-        {discountSuffix}
-      </span>
-    );
+const PlatformPill: React.FC<{ platform?: PurchasePlatform }> = ({ platform }) => {
+  const isEneba = platform === 'eneba';
+  const label = isEneba ? 'Eneba' : 'Steam';
+  return (
+    <span
+      className={`record-platform-pill ${isEneba ? 'eneba' : 'steam'}`}
+      title={`Juego adquirido a través de ${label}`}
+    >
+      {isEneba ? <EnebaIcon className="platform-icon" /> : <FaSteam className="platform-icon" />}
+      <span>{label}</span>
+    </span>
+  );
+};
+
+function resolveHistoryPriceBadgeData(record: VotingHistoryRecord): {
+  type: 'paid' | 'frozen' | 'normal' | 'none';
+  text: string;
+  badgeClass: string;
+  title: string;
+  icon: string;
+} {
+  if (record.precioPagado !== undefined && record.precioPagado !== null) {
+    const text = record.precioPagado === 0 ? 'Gratis' : formatCopPrice(record.precioPagado);
+    return {
+      type: 'paid',
+      text,
+      badgeClass: 'record-price-tag paid-price-tag',
+      title: 'Precio de compra registrado para este juego',
+      icon: '🏷️',
+    };
   }
 
-  const price = record.winningGame?.price;
-  if (!price?.finalFormatted) return null;
+  if (record.precioPagadoFormatted) {
+    return {
+      type: 'paid',
+      text: record.precioPagadoFormatted,
+      badgeClass: 'record-price-tag paid-price-tag',
+      title: 'Precio de compra registrado para este juego',
+      icon: '🏷️',
+    };
+  }
+
+  if (record.isPrecioCongelado) {
+    const base = record.precioCongeladoFormatted ?? record.winningGame?.price?.finalFormatted ?? 'Precio Congelado';
+    const discount = record.descuentoCongelado ? ` (-${record.descuentoCongelado}%)` : '';
+    return {
+      type: 'frozen',
+      text: `${base}${discount}`,
+      badgeClass: 'record-frozen-price-tag',
+      title: 'Precio congelado preservado permanentemente al momento del cierre',
+      icon: '🔒',
+    };
+  }
+
+  const finalFormatted = record.winningGame?.price?.finalFormatted;
+  if (finalFormatted) {
+    const discount = record.winningGame?.price?.discountPercent ? ` (-${record.winningGame.price.discountPercent}%)` : '';
+    return {
+      type: 'normal',
+      text: `${finalFormatted}${discount}`,
+      badgeClass: 'record-price-tag',
+      title: 'Precio de referencia de Steam',
+      icon: '🏷️',
+    };
+  }
+
+  return { type: 'none', text: '', badgeClass: '', title: '', icon: '' };
+}
+
+const HistoryWinnerPriceBadge: React.FC<HistoryWinnerPriceBadgeProps> = ({ record }) => {
+  const priceData = resolveHistoryPriceBadgeData(record);
 
   return (
-    <span className="record-price-tag">
-      🏷️ {price.finalFormatted}
-      {price.discountPercent ? ` (-${price.discountPercent}%)` : ''}
-    </span>
+    <div className="history-price-badge-group">
+      <PlatformPill platform={record.purchasePlatform} />
+      {priceData.type !== 'none' && (
+        <span className={priceData.badgeClass} title={priceData.title}>
+          {priceData.icon} {priceData.text}
+        </span>
+      )}
+    </div>
+  );
+};
+
+interface HistoryRecordPurchaseEditorProps {
+  record: VotingHistoryRecord;
+  onSave: (updates: {
+    purchasePlatform: PurchasePlatform;
+    precioPagado: number | null;
+    precioPagadoFormatted: string | null;
+  }) => Promise<void>;
+  onCancel: () => void;
+}
+
+const HistoryRecordPurchaseEditor: React.FC<HistoryRecordPurchaseEditorProps> = ({
+  record,
+  onSave,
+  onCancel,
+}) => {
+  const [platform, setPlatform] = useState<PurchasePlatform>(
+    record.purchasePlatform === 'eneba' ? 'eneba' : 'steam'
+  );
+
+  const initialPriceCop = useMemo(() => {
+    if (record.precioPagado !== undefined && record.precioPagado !== null) {
+      const pesos = Math.round(record.precioPagado / 100);
+      return new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 }).format(pesos);
+    }
+    if (record.winningGame?.price?.final !== undefined && record.winningGame.price.final !== null) {
+      const pesos = Math.round(record.winningGame.price.final / 100);
+      return new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 }).format(pesos);
+    }
+    return '';
+  }, [record.precioPagado, record.winningGame]);
+
+  const [priceCop, setPriceCop] = useState<string>(initialPriceCop);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const priceCents = useMemo(() => {
+    if (priceCop.trim() === '') return null;
+    return parseCopInputToCents(priceCop);
+  }, [priceCop]);
+
+  const priceFormatted = useMemo(() => {
+    if (priceCents === null) return null;
+    if (priceCents === 0) return 'Gratis';
+    return formatCopPrice(priceCents);
+  }, [priceCents]);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    setError(null);
+    try {
+      await onSave({
+        purchasePlatform: platform,
+        precioPagado: priceCents,
+        precioPagadoFormatted: priceFormatted,
+      });
+      onCancel();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al guardar cambios');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <motion.div
+      className="history-purchase-inline-editor"
+      initial={{ opacity: 0, y: -8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -8 }}
+      transition={{ duration: 0.2 }}
+    >
+      <div className="editor-title-row">
+        <span className="editor-title-icon" aria-hidden="true">✏️</span>
+        <span className="editor-title-text">MODIFICAR DATOS DE COMPRA</span>
+      </div>
+
+      <div className="editor-fields-grid">
+        <div className="editor-field">
+          <span id="history-platform-label" className="editor-field-label">Plataforma:</span>
+          <div className="platform-toggle-group mini" role="radiogroup" aria-labelledby="history-platform-label">
+            <button
+              type="button"
+              role="radio"
+              aria-checked={platform === 'steam'}
+              className={`platform-toggle-btn platform-steam ${platform === 'steam' ? 'active' : ''}`}
+              onClick={() => setPlatform('steam')}
+              disabled={isSaving}
+            >
+              <FaSteam className="platform-btn-icon" />
+              <span>Steam</span>
+            </button>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={platform === 'eneba'}
+              className={`platform-toggle-btn platform-eneba ${platform === 'eneba' ? 'active' : ''}`}
+              onClick={() => setPlatform('eneba')}
+              disabled={isSaving}
+            >
+              <EnebaIcon className="platform-btn-icon" />
+              <span>Eneba</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="editor-field">
+          <label htmlFor="history-edit-price" className="editor-field-label">
+            Precio Pagado ($ COP):
+          </label>
+          <div className="paid-price-input-row mini">
+            <div className="paid-price-wrapper">
+              <span className="paid-prefix" aria-hidden="true">$</span>
+              <input
+                id="history-edit-price"
+                type="text"
+                inputMode="numeric"
+                className="paid-price-input-element"
+                placeholder="0"
+                value={priceCop}
+                onChange={(e) => setPriceCop(e.target.value)}
+                disabled={isSaving}
+              />
+              <span className="paid-suffix">COP</span>
+            </div>
+            <button
+              type="button"
+              className="btn-paid-shortcut"
+              onClick={() => setPriceCop('0')}
+              disabled={isSaving}
+              title="Marcar como juego gratis o regalo ($0)"
+            >
+              Gratis ($0)
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {error && <div className="editor-error-text">⚠️ {error}</div>}
+
+      <div className="editor-actions-row">
+        <button
+          type="button"
+          className="btn-editor-cancel"
+          onClick={onCancel}
+          disabled={isSaving}
+        >
+          Cancelar
+        </button>
+        <button
+          type="button"
+          className="btn-editor-save"
+          onClick={handleSave}
+          disabled={isSaving}
+        >
+          {isSaving ? 'Guardando…' : '💾 Guardar Cambios'}
+        </button>
+      </div>
+    </motion.div>
   );
 };
 
 interface HistoryDetailsPanelProps {
   record: VotingHistoryRecord;
   isMobile: boolean;
+  canManageContent?: boolean;
+  onUpdateRecord?: (recordId: string, updates: Partial<VotingHistoryRecord>) => Promise<void>;
   onBack: () => void;
 }
 
 const HistoryDetailsPanel: React.FC<HistoryDetailsPanelProps> = ({
   record,
   isMobile,
+  canManageContent = false,
+  onUpdateRecord,
   onBack,
 }) => {
+  const [isEditingPurchase, setIsEditingPurchase] = useState(false);
+
   const competitorItems =
     record.resultsSnapshot || Object.values(record.gamesMap || {});
+
+  const handleSavePurchase = useCallback(
+    async (updates: {
+      purchasePlatform: PurchasePlatform;
+      precioPagado: number | null;
+      precioPagadoFormatted: string | null;
+    }) => {
+      if (!onUpdateRecord) return;
+      await onUpdateRecord(record.id, updates);
+    },
+    [onUpdateRecord, record.id]
+  );
 
   return (
     <div className="history-details-panel">
@@ -125,10 +359,32 @@ const HistoryDetailsPanel: React.FC<HistoryDetailsPanelProps> = ({
                 🎁 {record.bundleDescription || record.winningGame?.bundleDescription}
               </p>
             )}
+            <span className="record-date-tag">🗓️ {formatHistoryDate(record)}</span>
             <div className="history-winner-tags-row">
-              <span className="record-date-tag">🗓️ {formatHistoryDate(record)}</span>
               <HistoryWinnerPriceBadge record={record} />
             </div>
+
+            {canManageContent && onUpdateRecord && !isEditingPurchase && (
+              <div className="history-admin-purchase-actions">
+                <button
+                  type="button"
+                  className="btn-edit-purchase-details"
+                  onClick={() => setIsEditingPurchase(true)}
+                  title="Modificar precio pagado o plataforma de compra"
+                >
+                  ✏️ {record.precioPagado !== null && record.precioPagado !== undefined ? 'Editar precio pagado / plataforma' : 'Agregar precio pagado / plataforma'}
+                </button>
+              </div>
+            )}
+
+            {isEditingPurchase && (
+              <HistoryRecordPurchaseEditor
+                key={`purchase-editor-${record.id}`}
+                record={record}
+                onSave={handleSavePurchase}
+                onCancel={() => setIsEditingPurchase(false)}
+              />
+            )}
           </div>
         </div>
       </div>
@@ -361,6 +617,7 @@ interface VotingHistoryModalProps {
   history: VotingHistoryRecord[];
   onClearHistory: () => Promise<void> | void;
   onDeleteRecord: (recordId: string) => Promise<void>;
+  onUpdateRecord?: (recordId: string, updates: Partial<VotingHistoryRecord>) => Promise<void>;
   onClose: () => void;
   canManageContent?: boolean;
 }
@@ -369,6 +626,7 @@ export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = React.memo(
   history,
   onClearHistory,
   onDeleteRecord,
+  onUpdateRecord,
   onClose,
   canManageContent = false,
 }) => {
@@ -555,6 +813,8 @@ export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = React.memo(
               <HistoryDetailsPanel
                 record={selectedRecord}
                 isMobile={isMobile}
+                canManageContent={canManageContent}
+                onUpdateRecord={onUpdateRecord}
                 onBack={handleBackToMobileList}
               />
             )}

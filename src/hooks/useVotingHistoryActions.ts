@@ -4,6 +4,7 @@ import type { FreezePriceState, Game, Voter, VotingHistoryRecord } from '../type
 import {
   clearHistory as clearHistoryStore,
   deleteHistoryRecord,
+  updateHistoryRecord,
   invalidatePendingWrites,
   loadHistory,
   loadVoters,
@@ -280,10 +281,30 @@ export function useVotingHistoryActions({
     setShowResetAuraConfirm,
   ]);
 
+  const handleUpdateHistoryRecord = useCallback(async (
+    recordId: string,
+    updates: Partial<VotingHistoryRecord>
+  ) => {
+    if (!canManageContent || isImportingRef.current) return;
+
+    setSyncState({ status: 'saving', message: 'Actualizando registro...' });
+    const result = await updateHistoryRecord(recordId, updates);
+    setSyncState(result);
+
+    if (result.status === 'synced' || result.status === 'local') {
+      setHistory((prev) =>
+        prev.map((rec) => (rec.id === recordId ? { ...rec, ...updates } : rec))
+      );
+    } else {
+      throw new Error(result.message || 'No se pudo actualizar el registro.');
+    }
+  }, [canManageContent, isImportingRef, setHistory, setSyncState]);
+
   return {
     handleConfirmFinishVoting,
     handleClearHistory,
     handleDeleteHistoryRecord,
+    handleUpdateHistoryRecord,
     handleResetAllAura,
   };
 }

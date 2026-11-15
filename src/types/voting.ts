@@ -10,6 +10,13 @@ export type AuraRank =
 
 export const VOTING_TYPE_MARKER = true;
 
+/** Plataforma o tienda donde se adquiere o compra el juego */
+export type PurchasePlatform = 'steam' | 'eneba';
+
+export function getPurchasePlatformLabel(platform?: PurchasePlatform): string {
+  return platform === 'eneba' ? 'Eneba' : 'Steam';
+}
+
 export interface SteamPriceInfo {
   isFree?: boolean;
   currency?: string;
@@ -29,6 +36,8 @@ export interface Game {
   tinyCoverImage?: string;
   description: string;
   price?: SteamPriceInfo;
+  /** Plataforma de adquisición o compra: Steam o Eneba */
+  purchasePlatform?: PurchasePlatform;
   /** Indica si la propuesta corresponde a un Bundle o Paquete Especial */
   isBundle?: boolean;
   /** Texto descriptivo o contenido del paquete (ej. "Incluye Juego Base + DLCs") */
@@ -99,6 +108,12 @@ export interface VotingHistoryRecord {
   resultsSnapshot: GameResult[];
   /** Snapshot de los votantes y su saldo/rango Aura al momento de finalizar */
   votersSnapshots: VoterSnapshotInHistory[];
+  /** Plataforma en la que fue adquirido o comprado el juego (Steam o Eneba) */
+  purchasePlatform?: PurchasePlatform;
+  /** Precio efectivamente pagado por el juego (en centavos COP) */
+  precioPagado?: number | null;
+  /** Precio pagado preformateado en moneda local (ej. '$ 25.000 COP') */
+  precioPagadoFormatted?: string | null;
   /** Estado de congelamiento de precio en el momento del cierre */
   isPrecioCongelado?: boolean;
   precioCongelado?: number | null;
@@ -120,6 +135,7 @@ export interface VotingHistoryRecord {
 export function cloneGameSnapshot(game: Game): Game {
   return {
     ...game,
+    purchasePlatform: game.purchasePlatform,
     price: game.price ? { ...game.price } : undefined,
   };
 }

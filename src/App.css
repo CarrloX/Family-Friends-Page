@@ -1369,7 +1369,7 @@
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-  margin-top: 4px;
+  margin-top: 6px;
 }
 
 .record-frozen-price-tag {
@@ -4681,6 +4681,7 @@ textarea.manual-input {
 .record-date-tag {
   font-size: 11px;
   color: rgba(255, 255, 255, 0.7);
+  margin-top: 2px;
 }
 
 .history-details-banner {
@@ -7886,4 +7887,472 @@ textarea.manual-input {
   font-size: 11px;
   color: #93c5fd;
   font-weight: 400;
+}
+
+
+/* ============================================================
+   ESTILOS DE PLATAFORMA DE COMPRA (STEAM / ENEBA) Y PRECIO PAGADO
+   ============================================================ */
+
+/* Badges pequeños para tarjetas y listas */
+.mini-store-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  line-height: 1.2;
+}
+
+.mini-store-badge.steam {
+  background: rgba(102, 192, 244, 0.15);
+  border: 1px solid rgba(102, 192, 244, 0.4);
+  color: #66c0f4;
+}
+
+.mini-store-badge.eneba {
+  background: rgba(147, 51, 234, 0.2);
+  border: 1px solid rgba(245, 158, 11, 0.5);
+  color: #fbbf24;
+  box-shadow: 0 0 6px rgba(147, 51, 234, 0.25);
+}
+
+.mini-store-badge .eneba-logo-img {
+  width: 12px;
+  height: 12px;
+}
+
+.mini-store-badge .mini-store-icon {
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.history-item-badges-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 3px;
+  flex-wrap: wrap;
+}
+
+.mini-price-paid {
+  font-size: 11px;
+  font-weight: 700;
+  color: #86efac;
+  background: rgba(34, 197, 94, 0.15);
+  border: 1px solid rgba(34, 197, 94, 0.35);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+/* Pills de plataforma en detalles de historial y badges */
+.record-platform-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.record-platform-pill.steam {
+  background: #17202d;
+  border: 1px solid #38bdf8;
+  color: #7dd3fc;
+  box-shadow: 0 2px 6px rgba(56, 189, 248, 0.18);
+}
+
+.record-platform-pill.eneba {
+  background: #3b0764;
+  border: 1px solid #f59e0b;
+  color: #fde047;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.25);
+}
+
+.history-price-badge-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.paid-price-tag {
+  background: #064e3b !important;
+  border: 1px solid #10b981 !important;
+  color: #a7f3d0 !important;
+  font-weight: 800;
+}
+
+/* Grupo selector de plataforma (Toggle buttons) */
+.platform-toggle-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.platform-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(30, 41, 59, 0.6);
+  color: #94a3b8;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+}
+
+.platform-toggle-btn:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.35);
+  transform: translateY(-1px);
+}
+
+.platform-toggle-btn.platform-steam.active {
+  background: linear-gradient(135deg, #1b2838 0%, #2a475e 100%);
+  border-color: #66c0f4;
+  color: #ffffff;
+  box-shadow: 0 0 12px rgba(102, 192, 244, 0.35);
+}
+
+.platform-toggle-btn.platform-steam .platform-btn-icon {
+  color: #66c0f4;
+  font-size: 15px;
+}
+
+.platform-toggle-btn.platform-steam.active .platform-btn-icon {
+  color: #ffffff;
+}
+
+.platform-toggle-btn.platform-eneba.active {
+  background: linear-gradient(135deg, #4c1d95 0%, #7c3aed 60%, #d97706 100%);
+  border-color: #f59e0b;
+  color: #ffffff;
+  box-shadow: 0 0 14px rgba(245, 158, 11, 0.4);
+}
+
+.platform-toggle-btn.platform-eneba .platform-btn-icon {
+  color: #fbbf24;
+}
+
+.eneba-logo-img {
+  display: inline-block;
+  vertical-align: middle;
+  object-fit: contain;
+  flex-shrink: 0;
+  width: 17px;
+  height: 17px;
+  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.4));
+}
+
+.platform-toggle-btn.platform-eneba.active .platform-btn-icon {
+  color: #ffffff;
+}
+
+.platform-toggle-group.mini .platform-toggle-btn {
+  padding: 4px 10px;
+  font-size: 11px;
+  border-radius: 6px;
+}
+
+/* Tarjeta de configuración de compra en FinishVotingModal */
+.finish-purchase-card {
+  background: linear-gradient(180deg, rgba(30, 41, 59, 0.75) 0%, rgba(15, 23, 42, 0.85) 100%);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin: 12px 0 14px 0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+.purchase-card-header {
+  margin-bottom: 12px;
+}
+
+.purchase-card-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.purchase-card-title-badge {
+  font-size: 12px;
+  font-weight: 800;
+  color: #38bdf8;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+
+.purchase-card-subtitle {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.purchase-card-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+@media (max-width: 640px) {
+  .purchase-card-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}
+
+.purchase-field-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.purchase-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #cbd5e1;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+/* Input para ingresar precio pagado */
+.paid-price-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.paid-price-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  border-radius: 8px;
+  padding: 0 10px;
+  height: 38px;
+  min-width: 150px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.paid-price-wrapper:focus-within {
+  border-color: #38bdf8;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.35);
+}
+
+.paid-prefix {
+  color: #94a3b8;
+  font-weight: 700;
+  font-size: 14px;
+  margin-right: 4px;
+}
+
+.paid-suffix {
+  color: #64748b;
+  font-weight: 700;
+  font-size: 11px;
+  margin-left: 6px;
+}
+
+.paid-price-input-element {
+  background: transparent;
+  border: none;
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 800;
+  width: 100%;
+  outline: none;
+}
+
+.paid-price-input-element::-webkit-outer-spin-button,
+.paid-price-input-element::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.paid-price-input-element[type=number] {
+  -moz-appearance: textfield;
+}
+
+.paid-shortcuts-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-paid-shortcut {
+  background: rgba(51, 65, 85, 0.5);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-paid-shortcut:hover:not(:disabled) {
+  background: rgba(71, 85, 105, 0.7);
+  color: #ffffff;
+  border-color: #38bdf8;
+}
+
+/* Acciones y editor inline en historial */
+.history-admin-purchase-actions {
+  margin-top: 8px;
+}
+
+.btn-edit-purchase-details {
+  background: rgba(51, 65, 85, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  color: #e2e8f0;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-edit-purchase-details:hover {
+  background: rgba(71, 85, 105, 0.85);
+  border-color: #38bdf8;
+  color: #ffffff;
+}
+
+.history-purchase-inline-editor {
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(56, 189, 248, 0.5);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-top: 10px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.editor-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 800;
+  color: #38bdf8;
+  letter-spacing: 0.5px;
+  margin-bottom: 10px;
+  text-transform: uppercase;
+}
+
+.editor-fields-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px;
+  align-items: center;
+}
+
+@media (max-width: 640px) {
+  .editor-fields-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+}
+
+.editor-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.editor-field-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #94a3b8;
+  text-transform: uppercase;
+}
+
+.paid-price-input-row.mini .paid-price-wrapper {
+  height: 32px;
+  min-width: 130px;
+}
+
+.paid-price-input-row.mini .paid-price-input-element {
+  font-size: 13px;
+}
+
+.editor-error-text {
+  margin-top: 8px;
+  font-size: 11px;
+  color: #f87171;
+}
+
+.editor-actions-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.btn-editor-cancel {
+  background: rgba(51, 65, 85, 0.5);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.btn-editor-cancel:hover:not(:disabled) {
+  color: #ffffff;
+  border-color: #cbd5e1;
+}
+
+.btn-editor-save {
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+  border: 1px solid #38bdf8;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-editor-save:hover:not(:disabled) {
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+  transform: translateY(-1px);
+}
+
+.manual-field-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+@media (max-width: 640px) {
+  .manual-field-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+.manual-field-row .flex-1 {
+  flex: 1;
 }
