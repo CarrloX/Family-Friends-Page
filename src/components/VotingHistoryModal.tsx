@@ -11,7 +11,7 @@ import { EnebaIcon } from './FinishVotingModal';
 import { formatHistoryDate } from '../utils/formatDate';
 import { formatCopPrice, parseCopInputToCents } from '../services/steamStoreApi';
 
-const ITEMS_PER_PAGE = 5;
+const ITEMS_PER_PAGE = 6;
 
 function subscribeToMobileMediaQuery(callback: () => void) {
   const mql = window.matchMedia('(max-width: 768px)');

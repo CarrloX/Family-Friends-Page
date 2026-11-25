@@ -16,11 +16,29 @@ interface HistoryListItemProps {
   onRequestDelete: (rec: VotingHistoryRecord) => void;
 }
 
-function resolveFormattedPaidPrice(rec: VotingHistoryRecord): string | null | undefined {
+function resolveFormattedPrice(rec: VotingHistoryRecord): string | null {
   if (typeof rec.precioPagado === 'number') {
     return rec.precioPagado === 0 ? 'Gratis' : formatCopPrice(rec.precioPagado);
   }
-  return rec.precioPagadoFormatted;
+  if (rec.precioPagadoFormatted) {
+    return rec.precioPagadoFormatted;
+  }
+  if (rec.isPrecioCongelado) {
+    if (typeof rec.precioCongelado === 'number') {
+      return formatCopPrice(rec.precioCongelado);
+    }
+    if (rec.precioCongeladoFormatted) {
+      return rec.precioCongeladoFormatted;
+    }
+  }
+  const winningPrice = rec.winningGame?.price;
+  if (typeof winningPrice?.final === 'number') {
+    return winningPrice.final === 0 ? 'Gratis' : formatCopPrice(winningPrice.final);
+  }
+  if (winningPrice?.finalFormatted) {
+    return winningPrice.finalFormatted;
+  }
+  return null;
 }
 
 export const HistoryListItem = React.memo(({
@@ -32,7 +50,7 @@ export const HistoryListItem = React.memo(({
   onRequestDelete,
 }: HistoryListItemProps) => {
   const isBundle = Boolean(rec.isBundle || rec.winningGame?.isBundle);
-  const formattedPaidPrice = resolveFormattedPaidPrice(rec);
+  const formattedPrice = resolveFormattedPrice(rec);
 
   return (
     <motion.div
@@ -79,9 +97,9 @@ export const HistoryListItem = React.memo(({
                 <FaSteam className="mini-store-icon" /> Steam
               </span>
             )}
-            {formattedPaidPrice ? (
-              <span className="mini-price-paid" title={`Precio: ${formattedPaidPrice}`}>
-                {formattedPaidPrice}
+            {formattedPrice ? (
+              <span className="mini-price-paid" title={`Precio: ${formattedPrice}`}>
+                {formattedPrice}
               </span>
             ) : null}
           </div>

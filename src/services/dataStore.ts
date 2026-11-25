@@ -748,6 +748,53 @@ export function resolveCanonicalCreatedAt(
   );
 }
 
+function resolvePurchasePlatform(
+  recordPlatform: VotingHistoryRecord['purchasePlatform'],
+  winningGame?: Game
+): 'steam' | 'eneba' {
+  if (recordPlatform === 'eneba' || recordPlatform === 'steam') {
+    return recordPlatform;
+  }
+  return winningGame?.purchasePlatform ?? 'steam';
+}
+
+function resolvePaidPriceFields(
+  precioPagado: unknown,
+  precioPagadoFormatted: unknown
+): Pick<VotingHistoryRecord, 'precioPagado' | 'precioPagadoFormatted'> {
+  if (typeof precioPagado === 'number') {
+    return {
+      precioPagado,
+      precioPagadoFormatted: precioPagado === 0 ? 'Gratis' : formatCopPrice(precioPagado),
+    };
+  }
+  return {
+    precioPagado: null,
+    precioPagadoFormatted: typeof precioPagadoFormatted === 'string' ? precioPagadoFormatted : null,
+  };
+}
+
+function resolveHistoryBundleFields(
+  isBundle: boolean,
+  winningGame: Game,
+  record: VotingHistoryRecord
+): Pick<VotingHistoryRecord, 'isBundle' | 'bundleDescription' | 'bundleImage' | 'bundleUrl'> {
+  if (!isBundle) {
+    return {
+      isBundle: undefined,
+      bundleDescription: undefined,
+      bundleImage: undefined,
+      bundleUrl: undefined,
+    };
+  }
+  return {
+    isBundle: true,
+    bundleDescription: winningGame?.bundleDescription || record.bundleDescription,
+    bundleImage: winningGame?.bundleImage || record.bundleImage,
+    bundleUrl: winningGame?.bundleUrl || record.bundleUrl,
+  };
+}
+
 export function sanitizeVotingHistoryRecord(
   record: VotingHistoryRecord & { createdAt?: unknown; savedAt?: unknown }
 ): VotingHistoryRecord {
@@ -771,15 +818,9 @@ export function sanitizeVotingHistoryRecord(
     createdAt,
     date: record.date || formattedDate,
     winningGame,
-    purchasePlatform: record.purchasePlatform === 'eneba' ? 'eneba' : (record.purchasePlatform === 'steam' ? 'steam' : (winningGame?.purchasePlatform || 'steam')),
-    precioPagado: typeof record.precioPagado === 'number' ? record.precioPagado : null,
-    precioPagadoFormatted: typeof record.precioPagado === 'number'
-      ? (record.precioPagado === 0 ? 'Gratis' : formatCopPrice(record.precioPagado))
-      : (typeof record.precioPagadoFormatted === 'string' ? record.precioPagadoFormatted : null),
-    isBundle: isBundle ? true : undefined,
-    bundleDescription: isBundle ? (winningGame?.bundleDescription || record.bundleDescription) : undefined,
-    bundleImage: isBundle ? (winningGame?.bundleImage || record.bundleImage) : undefined,
-    bundleUrl: isBundle ? (winningGame?.bundleUrl || record.bundleUrl) : undefined,
+    purchasePlatform: resolvePurchasePlatform(record.purchasePlatform, winningGame),
+    ...resolvePaidPriceFields(record.precioPagado, record.precioPagadoFormatted),
+    ...resolveHistoryBundleFields(isBundle, winningGame, record),
     resultsSnapshot,
     votersSnapshots: Array.isArray(record.votersSnapshots) ? record.votersSnapshots : [],
   };

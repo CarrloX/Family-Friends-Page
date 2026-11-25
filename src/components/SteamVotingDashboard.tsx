@@ -436,7 +436,7 @@ export const SteamVotingDashboard: React.FC = () => {
             </span>
           </div>
 
-          <div className="user-cards-grid">
+          <div className={`user-cards-grid voters-count-${voters.length}`} data-voters-count={voters.length}>
             <AnimatePresence mode="popLayout">
               {voters.map((voter, index) => (
                 <UserCard

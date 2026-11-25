@@ -310,7 +310,7 @@ export async function refreshCurrentUserClaims(
     // Verificación post-red: comprobar que el usuario autenticado en la sesión sigue siendo
     // el mismo tras la resolución asíncrona (previene contaminación por respuestas desordenadas).
     const activeUser = getCurrentUser();
-    if (!activeUser || activeUser.uid !== user.uid) {
+    if (activeUser?.uid !== user.uid) {
       return false;
     }
 

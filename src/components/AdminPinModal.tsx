@@ -70,7 +70,7 @@ export const AdminPinModal = ({
   }, [lockoutRemaining]);
 
   const triggerShake = () => {
-    inputControls.start({
+    void inputControls.start({
       x: [-8, 8, -6, 6, -3, 3, 0],
       transition: { duration: 0.4, ease: 'easeInOut' },
     });
