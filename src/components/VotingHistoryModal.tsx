@@ -314,7 +314,12 @@ const HistoryDetailsPanel: React.FC<HistoryDetailsPanelProps> = ({
 
   return (
     <div className="history-details-panel">
-      <div className="history-record-header">
+      <motion.div
+        className="history-record-header"
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+      >
         {/* Fondo difuminado cinematográfico del juego ganador */}
         <div className="history-header-blur-bg" aria-hidden="true">
           <GameThumbnail
@@ -327,14 +332,16 @@ const HistoryDetailsPanel: React.FC<HistoryDetailsPanelProps> = ({
         </div>
 
         {isMobile && (
-          <button
+          <motion.button
             type="button"
             className="mobile-back-btn"
             onClick={onBack}
             aria-label="Volver a la lista"
+            whileTap={{ scale: 0.92 }}
+            transition={{ duration: 0.1 }}
           >
             ◀ Volver
-          </button>
+          </motion.button>
         )}
 
         <div className="history-record-header-main">
@@ -387,16 +394,27 @@ const HistoryDetailsPanel: React.FC<HistoryDetailsPanelProps> = ({
             )}
           </div>
         </div>
-      </div>
+      </motion.div>
 
       {/* PODIUM RESULTS CAROUSEL */}
-      <HistoryCompetitorsCarousel
-        items={competitorItems}
-        recordId={record.id}
-      />
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.24, delay: 0.05, ease: [0.22, 1, 0.36, 1] }}
+      >
+        <HistoryCompetitorsCarousel
+          items={competitorItems}
+          recordId={record.id}
+        />
+      </motion.div>
 
       {/* VOTERS BREAKDOWN TABLE */}
-      <div className="history-voters-table-container">
+      <motion.div
+        className="history-voters-table-container"
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.24, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
+      >
         <h5>👥 DESGLOSE DE CUOTAS Y EVOLUCIÓN DE AURA:</h5>
         <table className="history-voters-table">
           <thead>
@@ -413,7 +431,7 @@ const HistoryDetailsPanel: React.FC<HistoryDetailsPanelProps> = ({
             ))}
           </tbody>
         </table>
-      </div>
+      </motion.div>
     </div>
   );
 };
@@ -611,6 +629,129 @@ const ClearHistoryConfirmModal: React.FC<ClearHistoryConfirmModalProps> = ({
 // Componente Principal
 // ============================================================
 
+interface HistoryContentLayoutProps {
+  history: VotingHistoryRecord[];
+  paginatedHistory: VotingHistoryRecord[];
+  isMobile: boolean;
+  mobileShowDetails: boolean;
+  selectedRecord: VotingHistoryRecord | null;
+  selectedRecordId: string | null;
+  canManageContent: boolean;
+  currentPage: number;
+  totalPages: number;
+  onSelectRecord: (id: string) => void;
+  onRequestDelete: (rec: VotingHistoryRecord) => void;
+  onPageChange: (page: number) => void;
+  onUpdateRecord?: (recordId: string, updates: Partial<VotingHistoryRecord>) => Promise<void>;
+  onBack: () => void;
+}
+
+const HistoryContentLayout: React.FC<HistoryContentLayoutProps> = ({
+  history,
+  paginatedHistory,
+  isMobile,
+  mobileShowDetails,
+  selectedRecord,
+  selectedRecordId,
+  canManageContent,
+  currentPage,
+  totalPages,
+  onSelectRecord,
+  onRequestDelete,
+  onPageChange,
+  onUpdateRecord,
+  onBack,
+}) => {
+  if (history.length === 0) {
+    return (
+      <div className="empty-history-box">
+        <span className="empty-icon">📂</span>
+        <h3>No hay votaciones registradas aún</h3>
+        <p>
+          Cuando hagas clic en <strong>&quot;Finalizar Votación 🏆&quot;</strong>, los resultados y el historial de cuotas se guardarán aquí automáticamente.
+        </p>
+      </div>
+    );
+  }
+
+  const sidebarNode = (
+    <HistorySidebar
+      history={history}
+      paginatedHistory={paginatedHistory}
+      isMobile={isMobile}
+      selectedRecordId={selectedRecordId}
+      canManageContent={canManageContent}
+      currentPage={currentPage}
+      totalPages={totalPages}
+      onSelectRecord={onSelectRecord}
+      onRequestDelete={onRequestDelete}
+      onPageChange={onPageChange}
+    />
+  );
+
+  const detailsNode = selectedRecord ? (
+    <HistoryDetailsPanel
+      record={selectedRecord}
+      isMobile={isMobile}
+      canManageContent={canManageContent}
+      onUpdateRecord={onUpdateRecord}
+      onBack={onBack}
+    />
+  ) : null;
+
+  return (
+    <div className="history-content-layout">
+      {isMobile ? (
+        <AnimatePresence mode="wait" initial={false}>
+          {!mobileShowDetails ? (
+            <motion.div
+              key="mobile-history-sidebar"
+              className="history-view-transition"
+              initial={{ opacity: 0, x: -22 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -22 }}
+              transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+            >
+              {sidebarNode}
+            </motion.div>
+          ) : (
+            detailsNode && (
+              <motion.div
+                key={`mobile-history-details-${selectedRecord?.id}`}
+                className="history-view-transition"
+                initial={{ opacity: 0, x: 22 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 22 }}
+                transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+              >
+                {detailsNode}
+              </motion.div>
+            )
+          )}
+        </AnimatePresence>
+      ) : (
+        <>
+          {sidebarNode}
+          {detailsNode && (
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div
+                key={`desktop-history-details-${selectedRecord?.id}`}
+                className="history-view-transition"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.18, ease: 'easeOut' }}
+              >
+                {detailsNode}
+              </motion.div>
+            </AnimatePresence>
+          )}
+        </>
+      )}
+    </div>
+  );
+};
+
 interface VotingHistoryModalProps {
   history: VotingHistoryRecord[];
   onClearHistory: () => Promise<void> | void;
@@ -703,28 +844,25 @@ export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = React.memo(
     return history.find((r) => r.id === selectedRecordId) || history[0] || null;
   }, [history, selectedRecordId]);
 
-  const showSidebar = !isMobile || !mobileShowDetails;
-  const showDetails = Boolean(selectedRecord) && (!isMobile || mobileShowDetails);
-
   return (
     <motion.div
       className="modal-backdrop bottom-sheet-backdrop"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      transition={{ duration: isMobile ? 0.18 : 0.25 }}
+      transition={{ duration: isMobile ? 0.22 : 0.25, ease: 'easeOut' }}
       onClick={onClose}
       style={{ WebkitTapHighlightColor: 'transparent', outline: 'none' }}
     >
       <motion.div
         className="history-modal-container bottom-sheet-panel"
-        initial={isMobile ? { y: '100%' } : { y: '100%', opacity: 0, scale: 0.95 }}
-        animate={isMobile ? { y: 0 } : { y: 0, opacity: 1, scale: 1 }}
-        exit={isMobile ? { y: '100%' } : { y: '100%', opacity: 0, scale: 0.95 }}
+        initial={isMobile ? { y: '100%', opacity: 0 } : { y: '100%', opacity: 0, scale: 0.95 }}
+        animate={isMobile ? { y: 0, opacity: 1 } : { y: 0, opacity: 1, scale: 1 }}
+        exit={isMobile ? { y: '100%', opacity: 0 } : { y: '100%', opacity: 0, scale: 0.95 }}
         transition={
           isMobile
-            ? { duration: 0.24, ease: [0.16, 1, 0.3, 1] }
-            : { type: 'spring', stiffness: 320, damping: 30 }
+            ? { type: 'spring', stiffness: 380, damping: 34, mass: 0.85 }
+            : { type: 'spring', stiffness: 340, damping: 28 }
         }
         onClick={(e) => e.stopPropagation()}
         style={{ WebkitTapHighlightColor: 'transparent', outline: 'none' }}
@@ -785,42 +923,22 @@ export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = React.memo(
           )}
         </div>
 
-        {history.length === 0 ? (
-          <div className="empty-history-box">
-            <span className="empty-icon">📂</span>
-            <h3>No hay votaciones registradas aún</h3>
-            <p>
-              Cuando hagas clic en <strong>&quot;Finalizar Votación 🏆&quot;</strong>, los resultados y el historial de cuotas se guardarán aquí automáticamente.
-            </p>
-          </div>
-        ) : (
-          <div className="history-content-layout">
-            {showSidebar && (
-              <HistorySidebar
-                history={history}
-                paginatedHistory={paginatedHistory}
-                isMobile={isMobile}
-                selectedRecordId={selectedRecordId}
-                canManageContent={canManageContent}
-                currentPage={safeCurrentPage}
-                totalPages={totalPages}
-                onSelectRecord={handleSelectRecord}
-                onRequestDelete={setRecordToDelete}
-                onPageChange={handlePageChange}
-              />
-            )}
-
-            {showDetails && selectedRecord && (
-              <HistoryDetailsPanel
-                record={selectedRecord}
-                isMobile={isMobile}
-                canManageContent={canManageContent}
-                onUpdateRecord={onUpdateRecord}
-                onBack={handleBackToMobileList}
-              />
-            )}
-          </div>
-        )}
+        <HistoryContentLayout
+          history={history}
+          paginatedHistory={paginatedHistory}
+          isMobile={isMobile}
+          mobileShowDetails={mobileShowDetails}
+          selectedRecord={selectedRecord}
+          selectedRecordId={selectedRecordId}
+          canManageContent={canManageContent}
+          currentPage={safeCurrentPage}
+          totalPages={totalPages}
+          onSelectRecord={handleSelectRecord}
+          onRequestDelete={setRecordToDelete}
+          onPageChange={handlePageChange}
+          onUpdateRecord={onUpdateRecord}
+          onBack={handleBackToMobileList}
+        />
 
         <HistoryModalFooter
           isMobile={isMobile}

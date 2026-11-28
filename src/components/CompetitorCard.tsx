@@ -15,9 +15,13 @@ const getMedal = (position: number): string => MEDALS[position] ?? `${position +
 export const CompetitorCard = React.memo(
   ({ game, pts, position, recordId }: CompetitorCardProps) => {
     const medal = getMedal(position);
+    const staggerStyle = { '--card-index': Math.min(position, 6) } as React.CSSProperties;
 
     return (
-      <div className={`competitor-card ${position === 0 ? 'winner-competitor' : ''}`}>
+      <div
+        className={`competitor-card ${position === 0 ? 'winner-competitor' : ''}`}
+        style={staggerStyle}
+      >
         <GameThumbnail
           game={game}
           alt=""

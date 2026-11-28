@@ -4047,6 +4047,18 @@ textarea.manual-input {
   /* El modal de historial usa framer-motion para arrastre fluido sin saltos CSS */
   .bottom-sheet-panel.history-modal-container {
     animation: none;
+    height: auto;
+    max-height: 95vh;
+    max-height: 95dvh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .bottom-sheet-panel.history-modal-container .bottom-sheet-handle-zone,
+  .bottom-sheet-panel.history-modal-container .modal-header,
+  .bottom-sheet-panel.history-modal-container .modal-footer-actions {
+    flex-shrink: 0;
   }
 
   .bottom-sheet-panel.history-modal-container .modal-header {
@@ -4060,10 +4072,20 @@ textarea.manual-input {
     cursor: grabbing;
   }
 
-  /* Asegurar que el contenido sea scrollable */
-  .bottom-sheet-panel.finish-modal-container,
-  .bottom-sheet-panel.history-modal-container {
+  /* Asegurar que el contenido sea scrollable en pantallas bajas sin mostrar barra */
+  .bottom-sheet-panel.finish-modal-container {
     overflow-y: auto;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .bottom-sheet-panel.finish-modal-container::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
   }
 }
 
@@ -4202,6 +4224,30 @@ textarea.manual-input {
   @media (prefers-reduced-motion: no-preference) {
     animation: bounceIn 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
   }
+}
+
+.history-modal-container,
+.history-content-layout,
+.history-items-list,
+.history-details-panel,
+.history-voters-table-container {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.history-modal-container::-webkit-scrollbar,
+.history-content-layout::-webkit-scrollbar,
+.history-items-list::-webkit-scrollbar,
+.history-details-panel::-webkit-scrollbar,
+.history-voters-table-container::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.history-voters-table-container {
+  width: 100%;
+  overflow-x: auto;
 }
 
 .modal-header {
@@ -4834,7 +4880,16 @@ textarea.manual-input {
 
 @media (max-width: 768px) {
   .history-content-layout {
-    grid-template-columns: 1fr;
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    height: auto;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
   }
 
   .history-sidebar {
@@ -4843,6 +4898,7 @@ textarea.manual-input {
     padding-right: 0;
     padding-bottom: 12px;
     max-height: none;
+    height: auto;
     overflow: visible;
   }
 
@@ -4853,6 +4909,32 @@ textarea.manual-input {
 
   .history-pagination {
     display: none;
+  }
+
+  .competitors-grid {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .competitors-grid::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+}
+
+@media (max-width: 768px) and (max-height: 680px) {
+  .bottom-sheet-panel.history-modal-container {
+    gap: 12px;
+    padding: 10px 14px 14px;
+  }
+
+  .bottom-sheet-panel.history-modal-container .history-record-header {
+    min-height: 155px;
+  }
+
+  .bottom-sheet-panel.history-modal-container .history-record-header-main {
+    min-height: 120px;
   }
 }
 
@@ -5246,6 +5328,11 @@ textarea.manual-input {
   background: linear-gradient(90deg, #9333ea, #c084fc);
 }
 
+.history-view-transition {
+  min-width: 0;
+  width: 100%;
+}
+
 .competitor-card {
   display: flex;
   align-items: center;
@@ -5257,6 +5344,8 @@ textarea.manual-input {
   transition: background-color 0.25s ease, border-color 0.25s ease;
   @media (prefers-reduced-motion: no-preference) {
     transition: transform 0.25s ease, background-color 0.25s ease, border-color 0.25s ease;
+    animation: competitorSlideIn 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation-delay: calc(var(--card-index, 0) * 45ms);
   }
   contain: layout style paint;
   flex: 0 0 215px;
@@ -5264,6 +5353,17 @@ textarea.manual-input {
   max-width: 260px;
   scroll-snap-align: start;
   user-select: none;
+}
+
+@keyframes competitorSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .competitor-card:hover {
@@ -5962,28 +6062,6 @@ textarea.manual-input {
 
   .history-modal-container .btn-modal-cancel {
     display: none;
-  }
-
-
-  .history-content-layout {
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-    height: auto;
-    overflow: visible;
-  }
-
-  .history-sidebar {
-    border-right: none;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    padding-right: 0;
-    padding-bottom: 12px;
-    max-height: none;
-    overflow: hidden;
-  }
-
-  .history-items-list {
-    max-height: none;
   }
 
   .history-record-header {
