@@ -88,11 +88,6 @@ const VotingInProgressView: React.FC<{ totalVoters: number; resultsCount: number
           </div>
         </div>
       </div>
-
-      <div className="voting-instruction-hint">
-        <span>👇</span>
-        <span>Asigna puntos en las tarjetas de abajo para proyectar al ganador en vivo</span>
-      </div>
     </div>
   </motion.div>
 );
