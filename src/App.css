@@ -6856,11 +6856,13 @@ textarea.manual-input {
     backdrop-filter: none;
   }
 
-  /* Evitar blur de pantalla completa en el backdrop de modales en móvil y desactivar el fondo activo */
+  /* En móvil se evita backdrop-filter en vivo y se usa un scrim translúcido con glow estático */
   .modal-backdrop {
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
-    background: rgba(5, 7, 14, 0.9);
+    background:
+      radial-gradient(ellipse at 50% 8%, rgba(168, 85, 247, 0.24) 0%, rgba(56, 189, 248, 0.1) 38%, transparent 72%),
+      rgba(5, 7, 14, 0.74);
     animation: none;
     will-change: auto;
     transform: none;
@@ -6878,7 +6880,6 @@ textarea.manual-input {
   }
 
   .steam-dashboard-container.modal-open .dashboard-content {
-    visibility: hidden;
     pointer-events: none;
     contain: layout style;
   }
