@@ -450,19 +450,17 @@ const HistorySidebar: React.FC<HistorySidebarProps> = ({
     <div className="history-sidebar">
       <span className="sidebar-heading">REGISTROS GUARDADOS ({history.length})</span>
       <div className="history-items-list">
-        <AnimatePresence mode="popLayout">
-          {recordsToRender.map((rec) => (
-            <HistoryListItem
-              key={rec.id}
-              rec={rec}
-              isSelected={rec.id === selectedRecordId}
-              isLatest={rec.id === latestRecordId}
-              canManageContent={canManageContent}
-              onSelect={onSelectRecord}
-              onRequestDelete={onRequestDelete}
-            />
-          ))}
-        </AnimatePresence>
+        {recordsToRender.map((rec) => (
+          <HistoryListItem
+            key={rec.id}
+            rec={rec}
+            isSelected={rec.id === selectedRecordId}
+            isLatest={rec.id === latestRecordId}
+            canManageContent={canManageContent}
+            onSelect={onSelectRecord}
+            onRequestDelete={onRequestDelete}
+          />
+        ))}
       </div>
       {!isMobile && totalPages > 1 && (
         <div className="history-pagination">
@@ -714,16 +712,20 @@ export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = React.memo(
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      transition={{ duration: 0.25 }}
+      transition={{ duration: isMobile ? 0.18 : 0.25 }}
       onClick={onClose}
       style={{ WebkitTapHighlightColor: 'transparent', outline: 'none' }}
     >
       <motion.div
         className="history-modal-container bottom-sheet-panel"
-        initial={{ y: '100%', opacity: 0, scale: 0.95 }}
-        animate={{ y: 0, opacity: 1, scale: 1 }}
-        exit={{ y: '100%', opacity: 0, scale: 0.95 }}
-        transition={{ type: 'spring', stiffness: 320, damping: 30 }}
+        initial={isMobile ? { y: '100%' } : { y: '100%', opacity: 0, scale: 0.95 }}
+        animate={isMobile ? { y: 0 } : { y: 0, opacity: 1, scale: 1 }}
+        exit={isMobile ? { y: '100%' } : { y: '100%', opacity: 0, scale: 0.95 }}
+        transition={
+          isMobile
+            ? { duration: 0.24, ease: [0.16, 1, 0.3, 1] }
+            : { type: 'spring', stiffness: 320, damping: 30 }
+        }
         onClick={(e) => e.stopPropagation()}
         style={{ WebkitTapHighlightColor: 'transparent', outline: 'none' }}
         drag={isMobile ? 'y' : false}
@@ -754,7 +756,6 @@ export const VotingHistoryModal: React.FC<VotingHistoryModalProps> = React.memo(
               scaleX: isHandlePressed ? 0.68 : 1,
               scaleY: isHandlePressed ? 1.35 : 1,
               backgroundColor: isHandlePressed ? 'var(--neon-purple-bright)' : 'rgba(168, 85, 247, 0.55)',
-              boxShadow: isHandlePressed ? '0 0 16px rgba(168, 85, 247, 0.95)' : '0 0 0px transparent',
             }}
             transition={{ type: 'spring', stiffness: 450, damping: 24 }}
           />

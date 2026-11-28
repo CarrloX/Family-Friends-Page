@@ -332,6 +332,26 @@ export const SteamVotingDashboard: React.FC = () => {
 
 
 
+  const hasOpenModal =
+    showFinishModal ||
+    showHistoryModal ||
+    Boolean(voterToDelete) ||
+    showResetAuraConfirm ||
+    showPinModal;
+
+  useEffect(() => {
+    if (!hasOpenModal) return;
+    const savedScrollY = window.scrollY;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      if (window.scrollY !== savedScrollY) {
+        window.scrollTo({ top: savedScrollY, behavior: 'instant' });
+      }
+    };
+  }, [hasOpenModal]);
+
   // ─── Loading state ────────────────────────────────────────
   if (initialLoadStatus === 'loading') {
     return <DashboardSkeleton />;
@@ -350,7 +370,7 @@ export const SteamVotingDashboard: React.FC = () => {
 
   // ─── Render principal ─────────────────────────────────────
   return (
-    <div className="steam-dashboard-container">
+    <div className={`steam-dashboard-container ${hasOpenModal ? 'modal-open' : ''}`}>
       <div className="bg-gradient-overlay"></div>
       <div className="bg-grid-lines"></div>
 
@@ -401,7 +421,11 @@ export const SteamVotingDashboard: React.FC = () => {
       </AnimatePresence>
 
       {/* Contenido principal */}
-      <div className="dashboard-content">
+      <div
+        className="dashboard-content"
+        inert={hasOpenModal ? true : undefined}
+        aria-hidden={hasOpenModal || undefined}
+      >
         <Header isVotingInProgress={isLoading ? undefined : totalAssignedPoints === 0} />
 
         <AnimatePresence>

@@ -1,5 +1,4 @@
 import React from 'react';
-import { motion } from 'framer-motion';
 import { FaSteam } from 'react-icons/fa';
 import type { VotingHistoryRecord } from '../types/voting';
 import { GameThumbnail } from './GameThumbnail';
@@ -53,22 +52,12 @@ export const HistoryListItem = React.memo(({
   const formattedPrice = resolveFormattedPrice(rec);
 
   return (
-    <motion.div
-      layout
-      layoutId={`history-item-${rec.id}`}
-      className="history-list-item-wrapper"
-      initial={{ opacity: 0, x: -15, scale: 0.97 }}
-      animate={{ opacity: 1, x: 0, scale: 1 }}
-      exit={{ opacity: 0, x: -15, scale: 0.95 }}
-      transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-    >
-      <motion.button
+    <div className="history-list-item-wrapper">
+      <button
         type="button"
         className={`history-list-item ${isSelected ? 'selected' : ''}`}
         onClick={() => onSelect(rec.id)}
         aria-pressed={isSelected}
-        whileHover={{ scale: 1.01 }}
-        whileTap={{ scale: 0.98 }}
       >
         <GameThumbnail
           game={rec.winningGame}
@@ -104,20 +93,18 @@ export const HistoryListItem = React.memo(({
             ) : null}
           </div>
         </div>
-      </motion.button>
+      </button>
       {canManageContent && isLatest && (
-        <motion.button
+        <button
           type="button"
           className="history-delete-btn"
           onClick={() => onRequestDelete(rec)}
           aria-label={`Deshacer y eliminar la votación más reciente de ${rec.winningGame?.title ?? 'este juego'}`}
           title="Deshacer y eliminar la votación más reciente (restaura el Aura previo)"
-          whileHover={{ scale: 1.15 }}
-          whileTap={{ scale: 0.85 }}
         >
           <span aria-hidden="true">🗑️</span>
-        </motion.button>
+        </button>
       )}
-    </motion.div>
+    </div>
   );
 });

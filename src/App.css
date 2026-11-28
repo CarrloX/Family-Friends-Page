@@ -6856,6 +6856,39 @@ textarea.manual-input {
     backdrop-filter: none;
   }
 
+  /* Evitar blur de pantalla completa en el backdrop de modales en móvil y desactivar el fondo activo */
+  .modal-backdrop {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: rgba(5, 7, 14, 0.9);
+    animation: none;
+    will-change: auto;
+    transform: none;
+    padding: 0;
+  }
+
+  .bottom-sheet-panel.history-modal-container {
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.65);
+  }
+
+  .mobile-back-btn {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: rgba(30, 27, 75, 0.95);
+  }
+
+  .steam-dashboard-container.modal-open .dashboard-content {
+    visibility: hidden;
+    pointer-events: none;
+    contain: layout style;
+  }
+
+  .steam-dashboard-container.modal-open .dashboard-content *,
+  .steam-dashboard-container.modal-open .bg-gradient-overlay,
+  .steam-dashboard-container.modal-open .bg-grid-lines {
+    animation-play-state: paused !important;
+  }
+
   /* Disable continuous glowPulse animations on mobile */
   .steam-header-badge:hover {
     animation: none;
