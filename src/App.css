@@ -3257,7 +3257,7 @@ background: #3b0764;
   border: 1px solid rgba(168, 85, 247, 0.4);
   color: #ffffff;
   font-size: 12px;
-  padding: 8px 10px;
+  padding: 8px 34px 8px 10px;
   border-radius: 6px;
   outline: none;
   transition: border-color 0.3s ease, box-shadow 0.3s ease;
@@ -3284,13 +3284,50 @@ background: #3b0764;
   right: 10px;
   top: 50%;
   transform: translateY(-50%);
-  font-size: 12px;
-  animation: spin 1s infinite linear;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  filter: drop-shadow(0 0 6px rgba(168, 85, 247, 0.55));
 }
 
-@keyframes spin {
+.search-spinner-svg {
+  width: 100%;
+  height: 100%;
+  animation: searchSpinnerRotate 0.9s linear infinite;
+  will-change: transform;
+}
+
+.search-spinner-track {
+  stroke: rgba(168, 85, 247, 0.22);
+}
+
+.search-spinner-arc {
+  stroke-dasharray: 42 56;
+  stroke-dashoffset: 0;
+  animation: searchSpinnerDash 1.4s ease-in-out infinite;
+}
+
+@keyframes searchSpinnerRotate {
   100% {
-    transform: translateY(-50%) rotate(360deg);
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes searchSpinnerDash {
+  0% {
+    stroke-dasharray: 10 56;
+    stroke-dashoffset: 0;
+  }
+  50% {
+    stroke-dasharray: 40 56;
+    stroke-dashoffset: -14;
+  }
+  100% {
+    stroke-dasharray: 10 56;
+    stroke-dashoffset: -56;
   }
 }
 
@@ -3369,6 +3406,17 @@ background: #3b0764;
 .dropdown-item-meta {
   font-size: 10px;
   color: #38bdf8;
+}
+
+.dropdown-status-message {
+  padding: 10px 12px;
+  font-size: 12px;
+  color: #94a3b8;
+  text-align: center;
+}
+
+.dropdown-status-message.is-error {
+  color: #fca5a5;
 }
 
 .slot-manual-controls {

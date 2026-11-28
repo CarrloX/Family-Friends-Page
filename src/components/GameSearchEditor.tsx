@@ -4,6 +4,7 @@ import { FaSteam } from 'react-icons/fa';
 import type { Game, PurchasePlatform } from '../types/voting';
 import { searchSteamStore, fetchSteamGameDetails, formatCopPrice, parseCopInputToCents, type SteamSearchResultItem } from '../services/steamStoreApi';
 import { GameThumbnail } from './GameThumbnail';
+import { getSteamPlaceholderSvg } from '../utils/steamImages';
 import { EnebaIcon } from './FinishVotingModal';
 
 interface GameSearchEditorProps {
@@ -159,6 +160,7 @@ function useSteamSlotSearch() {
   const [searchResults, setSearchResults] = useState<SteamSearchResultItem[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [focusedIndex, setFocusedIndex] = useState<number>(-1);
 
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -168,6 +170,7 @@ function useSteamSlotSearch() {
   const handleSearchTermChange = (value: string) => {
     setSearchTerm(value);
     setFocusedIndex(-1);
+    setSearchError(null);
     if (!value.trim() || value.trim().length < 2) {
       setSearchResults([]);
       setIsSearching(false);
@@ -193,13 +196,15 @@ function useSteamSlotSearch() {
     const timer = window.setTimeout(async () => {
       try {
         const results = await searchSteamStore(cleanTerm, controller.signal);
-        if (requestId !== requestIdRef.current) return;
+        if (requestId !== requestIdRef.current || controller.signal.aborted) return;
         setSearchResults(results);
+        setSearchError(null);
         setShowDropdown(true);
       } catch {
-        if (requestId !== requestIdRef.current) return;
+        if (requestId !== requestIdRef.current || controller.signal.aborted) return;
         setSearchResults([]);
-        setShowDropdown(false);
+        setSearchError('No se pudo conectar con la tienda de Steam. Intentá de nuevo en unos segundos.');
+        setShowDropdown(true);
       } finally {
         if (requestId === requestIdRef.current) {
           setIsSearching(false);
@@ -228,6 +233,7 @@ function useSteamSlotSearch() {
     setSearchResults([]);
     setIsSearching(false);
     setShowDropdown(false);
+    setSearchError(null);
     setFocusedIndex(-1);
   };
 
@@ -236,6 +242,7 @@ function useSteamSlotSearch() {
     searchResults,
     isSearching,
     showDropdown,
+    searchError,
     setShowDropdown,
     focusedIndex,
     setFocusedIndex,
@@ -369,9 +376,27 @@ const SlotPreview = ({ game, isLoadingDetails }: {
 );
 
 /* ── Sub-componente: buscador + dropdown de resultados de Steam ── */
+const handleDropdownThumbError = (
+  e: React.SyntheticEvent<HTMLImageElement>,
+  headerImage: string,
+  title: string
+) => {
+  const img = e.currentTarget;
+  const step = Number.parseInt(img.dataset.fallbackStep || '0', 10);
+  if (step === 0 && headerImage && img.src !== headerImage) {
+    img.dataset.fallbackStep = '1';
+    img.src = headerImage;
+    return;
+  }
+  if (step < 2) {
+    img.dataset.fallbackStep = '2';
+    img.src = getSteamPlaceholderSvg(title);
+  }
+};
+
 const SteamSearchSection = ({
   gameId, isLoadingDetails, searchTerm, searchResults, isSearching,
-  showDropdown, focusedIndex, dropdownRef, setShowDropdown,
+  showDropdown, searchError, focusedIndex, dropdownRef, setShowDropdown,
   handleSearchTermChange, handleKeyDown, handleSelectSteamGame,
   disabled = false,
 }: {
@@ -381,6 +406,7 @@ const SteamSearchSection = ({
   searchResults: SteamSearchResultItem[];
   isSearching: boolean;
   showDropdown: boolean;
+  searchError: string | null;
   focusedIndex: number;
   dropdownRef: React.RefObject<HTMLDivElement | null>;
   setShowDropdown: (v: boolean) => void;
@@ -396,6 +422,12 @@ const SteamSearchSection = ({
     searchPlaceholder = 'Obteniendo detalles del juego...';
   }
 
+  const hasDropdownContent =
+    showDropdown &&
+    !disabled &&
+    !isSearching &&
+    (searchResults.length > 0 || Boolean(searchError) || searchTerm.trim().length >= 2);
+
   return (
     <div className="slot-search-container" ref={dropdownRef}>
       <label htmlFor={`slot-search-input-${gameId}`} className="slot-label">🔍 Buscar en Steam Store:</label>
@@ -409,10 +441,10 @@ const SteamSearchSection = ({
           value={searchTerm}
           onChange={(e) => !disabled && handleSearchTermChange(e.target.value)}
           onKeyDown={(e) => !disabled && handleKeyDown(e)}
-          onFocus={() => !disabled && searchResults.length > 0 && setShowDropdown(true)}
+          onFocus={() => !disabled && (searchResults.length > 0 || Boolean(searchError)) && setShowDropdown(true)}
           disabled={isLoadingDetails || disabled}
           aria-autocomplete="list"
-          aria-expanded={showDropdown && searchResults.length > 0}
+          aria-expanded={hasDropdownContent && searchResults.length > 0}
           aria-controls={`steam-results-${gameId}`}
           aria-activedescendant={
             showDropdown && focusedIndex >= 0 && searchResults[focusedIndex]
@@ -421,44 +453,86 @@ const SteamSearchSection = ({
           }
         />
         {(isSearching || isLoadingDetails) && (
-          <span
+          <output
             className="search-spinner"
+            aria-label={isLoadingDetails ? 'Obteniendo detalles de Steam...' : 'Buscando en Steam...'}
             title={isLoadingDetails ? 'Obteniendo detalles de Steam...' : 'Buscando en Steam...'}
           >
-            ⏳
-          </span>
+            <svg
+              className="search-spinner-svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              aria-hidden="true"
+            >
+              <defs>
+                <linearGradient id={`search-spinner-grad-${gameId}`} x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#38bdf8" />
+                  <stop offset="50%" stopColor="#818cf8" />
+                  <stop offset="100%" stopColor="#a855f7" />
+                </linearGradient>
+              </defs>
+              <circle
+                className="search-spinner-track"
+                cx="12"
+                cy="12"
+                r="9"
+                strokeWidth="2.6"
+              />
+              <circle
+                className="search-spinner-arc"
+                cx="12"
+                cy="12"
+                r="9"
+                stroke={`url(#search-spinner-grad-${gameId})`}
+                strokeWidth="2.6"
+                strokeLinecap="round"
+              />
+            </svg>
+          </output>
         )}
       </div>
 
       {/* STEAM STORE TYPEAHEAD DROPDOWN */}
-      {showDropdown && searchResults.length > 0 && !disabled && (
+      {hasDropdownContent && (
         <div
           id={`steam-results-${gameId}`}
           className="steam-search-dropdown"
           role="listbox"
           aria-label="Resultados de búsqueda de Steam"
         >
-          {searchResults.map((item, idx) => (
-            <motion.div
-              key={item.id}
-              id={`steam-option-${gameId}-${item.id}`}
-              role="option"
-              tabIndex={-1}
-              className={`dropdown-item-row ${idx === focusedIndex ? 'focused' : ''}`}
-              aria-selected={idx === focusedIndex}
-              onClick={() => handleSelectSteamGame(item)}
-              whileHover={{ scale: 1.01, backgroundColor: 'rgba(102, 192, 244, 0.15)' }}
-              whileTap={{ scale: 0.98 }}
-            >
-              <img src={item.tiny_image} alt={item.name} className="dropdown-item-thumb" loading="lazy" />
-              <div className="dropdown-item-info">
-                <span className="dropdown-item-title">{item.name}</span>
-                <span className="dropdown-item-meta">
-                  AppID: {item.id} • {item.price_formatted}
-                </span>
-              </div>
-            </motion.div>
-          ))}
+          {searchResults.length > 0 ? (
+            searchResults.map((item, idx) => (
+              <motion.div
+                key={item.id}
+                id={`steam-option-${gameId}-${item.id}`}
+                role="option"
+                tabIndex={-1}
+                className={`dropdown-item-row ${idx === focusedIndex ? 'focused' : ''}`}
+                aria-selected={idx === focusedIndex}
+                onClick={() => handleSelectSteamGame(item)}
+                whileHover={{ scale: 1.01, backgroundColor: 'rgba(102, 192, 244, 0.15)' }}
+                whileTap={{ scale: 0.98 }}
+              >
+                <img
+                  src={item.tiny_image}
+                  alt={item.name}
+                  className="dropdown-item-thumb"
+                  loading="lazy"
+                  onError={(e) => handleDropdownThumbError(e, item.header_image, item.name)}
+                />
+                <div className="dropdown-item-info">
+                  <span className="dropdown-item-title">{item.name}</span>
+                  <span className="dropdown-item-meta">
+                    AppID: {item.id} • {item.price_formatted}
+                  </span>
+                </div>
+              </motion.div>
+            ))
+          ) : (
+            <div className={`dropdown-status-message ${searchError ? 'is-error' : ''}`}>
+              {searchError || `No se encontraron juegos en Steam para "${searchTerm.trim()}".`}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -1011,6 +1085,7 @@ const SingleGameSlotEditor = ({
     searchResults,
     isSearching,
     showDropdown,
+    searchError,
     setShowDropdown,
     focusedIndex,
     setFocusedIndex,
@@ -1085,6 +1160,7 @@ const SingleGameSlotEditor = ({
         : (details.price || item.price);
       onUpdateGame(gameId, {
         ...baseGame,
+        coverImage: details.headerImage || baseGame.coverImage,
         genre: details.genres || 'Juego de Steam',
         price: effectiveDetailsPrice,
         description: details.description || `Juego oficial de la Tienda de Steam (${item.name}).`,
@@ -1216,6 +1292,7 @@ const SingleGameSlotEditor = ({
         searchResults={searchResults}
         isSearching={isSearching}
         showDropdown={showDropdown}
+        searchError={searchError}
         focusedIndex={focusedIndex}
         dropdownRef={dropdownRef}
         setShowDropdown={setShowDropdown}

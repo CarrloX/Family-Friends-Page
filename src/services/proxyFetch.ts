@@ -2,16 +2,26 @@
  * Robust fetch utility with multiple CORS fallback proxies and local dev proxy support.
  */
 
-// List of public CORS proxies to try in order when direct/local proxy fails
-const CORS_PROXIES = [
+// Lista de proxies CORS públicos ordenados por disponibilidad actual
+const CORS_PROXIES: Array<(target: string) => string> = [
+  (target: string) => `https://api.cors.lol/?url=${encodeURIComponent(target)}`,
   (target: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(target)}`,
   (target: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(target)}`,
+  (target: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(target)}`,
 ];
+
+function isLocalhost(): boolean {
+  if (typeof window === 'undefined') return false;
+  return (
+    window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1'
+  );
+}
 
 function isProxyCapableEnvironment(): boolean {
   if (typeof window === 'undefined') return false;
-  // Entorno de desarrollo local (Vite dev server)
-  if (import.meta.env.DEV || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+  // Entorno de desarrollo local (Vite dev/preview server)
+  if (import.meta.env.DEV || isLocalhost()) {
     return true;
   }
   // Despliegue en Vercel (gestionado mediante vercel.json rewrites)
@@ -21,12 +31,25 @@ function isProxyCapableEnvironment(): boolean {
   return false;
 }
 
+function getCorsProxiesForCurrentOrigin(): Array<(target: string) => string> {
+  if (isLocalhost()) {
+    return [
+      ...CORS_PROXIES,
+      (target: string) => `https://proxy.corsfix.com/?${target}`,
+    ];
+  }
+  return CORS_PROXIES;
+}
+
 function resolveLocalProxyUrl(targetUrl: string): string | null {
   if (targetUrl.startsWith('https://store.steampowered.com/')) {
     return targetUrl.replace('https://store.steampowered.com', '/api/steam-store');
   }
   if (targetUrl.startsWith('https://api.steampowered.com/')) {
     return targetUrl.replace('https://api.steampowered.com', '/api/steam-web');
+  }
+  if (targetUrl.startsWith('https://steamcommunity.com/')) {
+    return targetUrl.replace('https://steamcommunity.com', '/api/steam-community');
   }
   return null;
 }
@@ -52,6 +75,10 @@ async function fetchFromLocalProxy<T>(targetUrl: string, timeoutMs: number, sign
   try {
     const res = await fetch(localUrl, { signal: combineSignals(timeoutMs, signal) });
     if (!res.ok) return null;
+    const contentType = res.headers.get('content-type') || '';
+    if (contentType && !contentType.includes('application/json') && !contentType.includes('text/plain')) {
+      return null;
+    }
     const data = await res.json();
     return (data as T) ?? null;
   } catch {
@@ -106,7 +133,7 @@ export async function fetchWithCorsFallback<T = unknown>(
     return null;
   }
 
-  for (const proxyFn of CORS_PROXIES) {
+  for (const proxyFn of getCorsProxiesForCurrentOrigin()) {
     if (signal?.aborted) {
       return null;
     }

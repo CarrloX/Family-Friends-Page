@@ -39,6 +39,10 @@
       "destination": "https://api.steampowered.com/:path*"
     },
     {
+      "source": "/api/steam-community/:path*",
+      "destination": "https://steamcommunity.com/:path*"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

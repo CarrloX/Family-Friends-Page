@@ -42,10 +42,18 @@ interface SteamAppDetailsResponse {
       name?: string;
       is_free?: boolean;
       short_description?: string;
+      header_image?: string;
       genres?: Array<{ id?: string; description: string }>;
       price_overview?: SteamPriceOverview;
     };
   };
+}
+
+interface SteamCommunitySearchAppItem {
+  appid?: string | number;
+  name?: string;
+  icon?: string;
+  logo?: string;
 }
 
 /**
@@ -81,6 +89,7 @@ export function parseCopInputToCents(val: string): number | null {
 
 /**
  * Busca juegos en la Steam Store API por término con precios regionales de Colombia (cc=CO).
+ * Si `storesearch` no responde, utiliza el endpoint alternativo de Steam Community SearchApps.
  */
 export async function searchSteamStore(query: string, signal?: AbortSignal): Promise<SteamSearchResultItem[]> {
   const cleanTerm = query.trim();
@@ -92,79 +101,104 @@ export async function searchSteamStore(query: string, signal?: AbortSignal): Pro
     return [];
   }
 
-  // Intentar consultar Steam Store API a través del sistema de proxy con precios regionales de Colombia (cc=CO)
-  try {
-    const targetUrl = `https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(
-      cleanTerm
-    )}&l=spanish&cc=CO`;
+  // 1. Intentar consultar Steam Store API a través del sistema de proxy con precios regionales de Colombia (cc=CO)
+  const targetUrl = `https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(
+    cleanTerm
+  )}&l=spanish&cc=CO`;
 
-    const data = await fetchWithCorsFallback<SteamStoreSearchResponse>(targetUrl, {
-      timeoutMs: 4000,
-      localProxyPrefix: '/api/steam-store',
-      signal,
-    });
+  const data = await fetchWithCorsFallback<SteamStoreSearchResponse>(targetUrl, {
+    timeoutMs: 4500,
+    localProxyPrefix: '/api/steam-store',
+    signal,
+  });
 
-    if (data && Array.isArray(data.items) && data.items.length > 0) {
-      const results: SteamSearchResultItem[] = data.items.map((item) => {
-        const tinyImg =
-          item.tiny_image || `https://cdn.akamai.steamstatic.com/steam/apps/${item.id}/capsule_sm_120.jpg`;
-
-        // Derivar header image directamente desde el endpoint oficial de Steam (shared.akamai)
-        // NOTA: Steam storesearch devuelve tiny_image con subcarpeta hash (e.g. /apps/123/hash/capsule_231x87.jpg),
-        // pero header.jpg NO existe dentro de esa subcarpeta hash. Vive en la raíz del appId.
-        const headerImg = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${item.id}/header.jpg`;
-
-        let priceInfo: SteamPriceInfo | undefined = undefined;
-        let formattedPrice = 'Ver en Steam';
-
-        if (item.price && typeof item.price.final === 'number') {
-          const isFree = item.price.final === 0;
-          const initial = typeof item.price.initial === 'number' ? item.price.initial : item.price.final;
-          const final = item.price.final;
-          const discountPercent = typeof item.price.discount_percent === 'number' ? item.price.discount_percent : 0;
-
-          const initialFormatted = initial > 0 ? formatCopPrice(initial) : undefined;
-          const finalFormatted = isFree ? 'Gratis' : formatCopPrice(final);
-
-          formattedPrice = finalFormatted;
-
-          priceInfo = {
-            isFree,
-            currency: item.price.currency || 'COP',
-            initial,
-            final,
-            discountPercent,
-            finalFormatted,
-            ...(discountPercent > 0 && initialFormatted ? { initialFormatted } : {}),
-          };
-        }
-
-        return {
-          id: item.id,
-          name: item.name,
-          tiny_image: tinyImg,
-          header_image: headerImg,
-          price_formatted: formattedPrice,
-          ...(priceInfo ? { price: priceInfo } : {}),
-        };
-      });
-
-      console.log(`[SteamStoreApi] ${results.length} juegos encontrados para "${cleanTerm}".`);
-      return results;
-    }
-  } catch (err) {
-    console.warn('[SteamStoreApi] Error buscando juegos en Steam Store:', err);
+  if (signal?.aborted) {
+    return [];
   }
 
-  return [];
+  if (data && Array.isArray(data.items)) {
+    const results: SteamSearchResultItem[] = data.items.map((item) => {
+      const headerImg = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${item.id}/header.jpg`;
+      const tinyImg = item.tiny_image || headerImg;
+
+      let priceInfo: SteamPriceInfo | undefined = undefined;
+      let formattedPrice = 'Ver en Steam';
+
+      if (item.price && typeof item.price.final === 'number') {
+        const isFree = item.price.final === 0;
+        const initial = typeof item.price.initial === 'number' ? item.price.initial : item.price.final;
+        const final = item.price.final;
+        const discountPercent = typeof item.price.discount_percent === 'number' ? item.price.discount_percent : 0;
+
+        const initialFormatted = initial > 0 ? formatCopPrice(initial) : undefined;
+        const finalFormatted = isFree ? 'Gratis' : formatCopPrice(final);
+
+        formattedPrice = finalFormatted;
+
+        priceInfo = {
+          isFree,
+          currency: item.price.currency || 'COP',
+          initial,
+          final,
+          discountPercent,
+          finalFormatted,
+          ...(discountPercent > 0 && initialFormatted ? { initialFormatted } : {}),
+        };
+      }
+
+      return {
+        id: item.id,
+        name: item.name,
+        tiny_image: tinyImg,
+        header_image: headerImg,
+        price_formatted: formattedPrice,
+        ...(priceInfo ? { price: priceInfo } : {}),
+      };
+    });
+
+    console.log(`[SteamStoreApi] ${results.length} juegos encontrados para "${cleanTerm}".`);
+    return results;
+  }
+
+  // 2. Fallback secundario: Steam Community SearchApps (útil si storesearch falla o limita peticiones)
+  const communityUrl = `https://steamcommunity.com/actions/SearchApps/${encodeURIComponent(cleanTerm)}`;
+  const communityData = await fetchWithCorsFallback<SteamCommunitySearchAppItem[]>(communityUrl, {
+    timeoutMs: 4500,
+    localProxyPrefix: '/api/steam-community',
+    signal,
+  });
+
+  if (signal?.aborted) {
+    return [];
+  }
+
+  if (Array.isArray(communityData)) {
+    const fallbackResults: SteamSearchResultItem[] = communityData
+      .map((item): SteamSearchResultItem | null => {
+        const appId = Number(item.appid);
+        const name = item.name?.trim();
+        if (!appId || Number.isNaN(appId) || !name) return null;
+        const headerImg = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`;
+        return {
+          id: appId,
+          name,
+          tiny_image: item.logo || item.icon || headerImg,
+          header_image: headerImg,
+          price_formatted: 'Ver en Steam',
+        };
+      })
+      .filter((item): item is SteamSearchResultItem => item !== null);
+
+    console.log(`[SteamStoreApi] ${fallbackResults.length} juegos encontrados vía fallback para "${cleanTerm}".`);
+    return fallbackResults;
+  }
+
+  console.warn(`[SteamStoreApi] No se pudo obtener respuesta de búsqueda para "${cleanTerm}".`);
+  throw new Error('No se pudo conectar con el buscador de Steam.');
 }
 
 // Cache en memoria para evitar peticiones redundantes y bloqueos de tasa (429)
-const appDetailsCache = new Map<number, {
-  description?: string;
-  genres?: string;
-  price?: SteamPriceInfo;
-}>();
+const appDetailsCache = new Map<number, AppDetailsResult>();
 
 function parseSteamPriceInfo(
   priceOverview?: SteamPriceOverview,
@@ -205,6 +239,7 @@ export type AppDetailsResult = {
   description?: string;
   genres?: string;
   price?: SteamPriceInfo;
+  headerImage?: string;
 };
 
 function parseAppInfoDetails(
@@ -221,11 +256,13 @@ function parseAppInfoDetails(
   const genresList = genresArray.length > 0 ? genresArray.join(' / ') : undefined;
 
   const priceInfo = parseSteamPriceInfo(appInfo.price_overview, appInfo.is_free);
+  const headerImage = appInfo.header_image?.trim() || undefined;
 
   return {
     ...(cleanDesc ? { description: cleanDesc } : {}),
     ...(genresList ? { genres: genresList } : {}),
     ...(priceInfo ? { price: priceInfo } : {}),
+    ...(headerImage ? { headerImage } : {}),
   };
 }
 

@@ -3,6 +3,24 @@ import react, { reactCompilerPreset } from '@vitejs/plugin-react'
 import babel from '@rolldown/plugin-babel'
 import { VitePWA } from 'vite-plugin-pwa'
 
+const steamProxyConfig = {
+  '/api/steam-store': {
+    target: 'https://store.steampowered.com',
+    changeOrigin: true,
+    rewrite: (path: string) => path.replace(/^\/api\/steam-store/, ''),
+  },
+  '/api/steam-web': {
+    target: 'https://api.steampowered.com',
+    changeOrigin: true,
+    rewrite: (path: string) => path.replace(/^\/api\/steam-web/, ''),
+  },
+  '/api/steam-community': {
+    target: 'https://steamcommunity.com',
+    changeOrigin: true,
+    rewrite: (path: string) => path.replace(/^\/api\/steam-community/, ''),
+  },
+};
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
@@ -128,18 +146,10 @@ export default defineConfig({
     chunkSizeWarningLimit: 1000,
   },
   server: {
-    proxy: {
-      '/api/steam-store': {
-        target: 'https://store.steampowered.com',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/steam-store/, ''),
-      },
-      '/api/steam-web': {
-        target: 'https://api.steampowered.com',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/steam-web/, ''),
-      },
-    },
+    proxy: steamProxyConfig,
+  },
+  preview: {
+    proxy: steamProxyConfig,
   },
 })
 

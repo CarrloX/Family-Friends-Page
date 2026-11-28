@@ -5,7 +5,7 @@ import type { GameResult, SteamPriceInfo } from '../types/voting';
 import { getMaxVotePoints } from '../types/voting';
 import { fetchSteamGameDetails, formatCopPrice } from '../services/steamStoreApi';
 import { GameThumbnail } from './GameThumbnail';
-import { getGameImageFallbacks } from '../utils/steamImages';
+import { getGameImageFallbacks, fixSteamCoverUrl } from '../utils/steamImages';
 import { FreezePriceButton } from './FreezePriceButton';
 import { EnebaIcon } from './FinishVotingModal';
 
@@ -121,6 +121,7 @@ const handleImgError = (
 
 const WinnerCoverImage: React.FC<WinnerCoverImageProps> = ({ src, alt, fallbacks }) => (
   <img
+    key={src}
     src={src}
     alt={alt}
     className="winner-image"
@@ -538,16 +539,24 @@ const PodiumList: React.FC<{ runnersUp: GameResult[] }> = ({ runnersUp }) => {
   );
 };
 
-const STEAM_CDN_APPS = 'https://cdn.akamai.steamstatic.com/steam/apps';
-
-function resolveWinnerHdCover(winnerGame?: GameResult['game'], appId?: number): string | undefined {
+function resolveWinnerHdCover(
+  winnerGame?: GameResult['game'],
+  appId?: number,
+  fetchedHeaderImage?: string
+): string | undefined {
   if (winnerGame?.isBundle && winnerGame.bundleImage) {
     return winnerGame.bundleImage;
   }
-  if (appId) {
-    return `${STEAM_CDN_APPS}/${appId}/capsule_616x353.jpg`;
+  if (fetchedHeaderImage) {
+    return fetchedHeaderImage;
   }
-  return winnerGame?.bundleImage || winnerGame?.coverImage;
+  if (winnerGame?.coverImage) {
+    return fixSteamCoverUrl(winnerGame.coverImage, appId);
+  }
+  if (appId) {
+    return `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`;
+  }
+  return undefined;
 }
 
 export const WinnerBanner: React.FC<WinnerBannerProps> = React.memo(({
@@ -569,7 +578,7 @@ export const WinnerBanner: React.FC<WinnerBannerProps> = React.memo(({
   const maxPoints = getMaxVotePoints(results.length);
   const totalVoters = votersCount;
 
-  // High-Definition Steam Cover (616x353 HD capsule) for 1st Place Winner
+  // High-Definition Steam Cover for 1st Place Winner
   const appId = winner?.game?.appId;
 
   // Estado para detalles en vivo cargados asíncronamente desde la API oficial de Steam
@@ -578,6 +587,7 @@ export const WinnerBanner: React.FC<WinnerBannerProps> = React.memo(({
     price?: SteamPriceInfo;
     genre?: string;
     description?: string;
+    headerImage?: string;
   }>({});
 
   useEffect(() => {
@@ -592,6 +602,7 @@ export const WinnerBanner: React.FC<WinnerBannerProps> = React.memo(({
           price: details.price,
           genre: details.genres,
           description: details.description,
+          headerImage: details.headerImage,
         });
       })
       .catch((err) => {
@@ -650,11 +661,15 @@ export const WinnerBanner: React.FC<WinnerBannerProps> = React.memo(({
     ? totalAssignedPoints > 0
     : results.some((r) => r.rawPoints > 0 || r.weightedPoints > 0);
 
-  const winnerHdCover = resolveWinnerHdCover(winner?.game, appId);
+  const liveHeaderImage = fetchedDetails.appId === appId ? fetchedDetails.headerImage : undefined;
+  const winnerHdCover = resolveWinnerHdCover(winner?.game, appId, liveHeaderImage);
 
   // Fallback chain for winner cover: robust multi-CDN fallback
   const winnerCoverFallbacks: string[] = winner?.game
-    ? getGameImageFallbacks(winner.game)
+    ? [
+        ...(liveHeaderImage ? [liveHeaderImage] : []),
+        ...getGameImageFallbacks(winner.game),
+      ].filter((url, idx, arr) => url !== winnerHdCover && arr.indexOf(url) === idx)
     : [];
 
   return (
