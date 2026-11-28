@@ -53,6 +53,23 @@ function buildFrozenPriceState(
   };
 }
 
+/**
+ * Actualiza la firma de estado persistido solo si no hay cambios pendientes en `voters` o `gamesMap`.
+ * Evita que guardar únicamente el estado de congelamiento marque como persistida una edición concurrente de juegos o votos.
+ */
+function syncSignatureIfNoPendingChanges(
+  lastPersistedSignatureRef: RefObject<string>,
+  voters: Voter[],
+  gamesMap: Record<string, Game>,
+  previousFreezeState: FreezePriceState,
+  nextFreezeState: FreezePriceState
+): void {
+  const previousSignature = serializeDashboardState(voters, gamesMap, previousFreezeState);
+  if (lastPersistedSignatureRef.current === previousSignature) {
+    lastPersistedSignatureRef.current = serializeDashboardState(voters, gamesMap, nextFreezeState);
+  }
+}
+
 export function usePriceFreeze({
   canManageContent,
   isImportingRef,
@@ -100,7 +117,13 @@ export function usePriceFreeze({
       const syncRes = await unfreezePriceState();
 
       if (syncRes.status === 'synced' || syncRes.status === 'local') {
-        lastPersistedDashboardSignatureRef.current = serializeDashboardState(voters, gamesMap, resetFreezeState);
+        syncSignatureIfNoPendingChanges(
+          lastPersistedDashboardSignatureRef,
+          voters,
+          gamesMap,
+          previousFreezeState,
+          resetFreezeState
+        );
         setFreezeState(resetFreezeState);
         setSyncState({
           status: syncRes.status,
@@ -186,7 +209,13 @@ export function usePriceFreeze({
       if (!previousFreezeState.isPrecioCongelado) {
         const frozenState = await freezePrice(currentLivePrice);
         if (frozenState) {
-          lastPersistedDashboardSignatureRef.current = serializeDashboardState(voters, gamesMap, frozenState);
+          syncSignatureIfNoPendingChanges(
+            lastPersistedDashboardSignatureRef,
+            voters,
+            gamesMap,
+            previousFreezeState,
+            frozenState
+          );
           setFreezeState(frozenState);
         } else {
           setFreezeState(previousFreezeState);
@@ -194,7 +223,13 @@ export function usePriceFreeze({
       } else {
         const success = await unfreezePrice();
         if (success) {
-          lastPersistedDashboardSignatureRef.current = serializeDashboardState(voters, gamesMap, DEFAULT_FREEZE_STATE);
+          syncSignatureIfNoPendingChanges(
+            lastPersistedDashboardSignatureRef,
+            voters,
+            gamesMap,
+            previousFreezeState,
+            DEFAULT_FREEZE_STATE
+          );
           setFreezeState(DEFAULT_FREEZE_STATE);
         } else {
           setFreezeState(previousFreezeState);

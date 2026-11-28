@@ -523,31 +523,27 @@ export async function saveActiveVotingState(
         const batch = writeBatch(db);
 
         // 1. Documento de votación activa
+        // Usamos mergeFields con las claves de nivel superior para reemplazar `gamesMap` por completo
+        // en lugar de `{ merge: true }`, ya que el deep-merge de Firestore conserva claves eliminadas.
         const activeDocRef = doc(db, COLLECTION_ACTIVE_VOTING, DOC_ACTIVE_VOTING);
-        batch.set(
-          activeDocRef,
-          removeUndefinedDeep({
-            voters: cleanVoters,
-            gamesMap: cleanGamesMap,
-            games: cleanGames,
-            ...freezeData,
-            lastUpdated: Timestamp.now(),
-          }),
-          { merge: true }
-        );
+        const activePayload = removeUndefinedDeep({
+          voters: cleanVoters,
+          gamesMap: cleanGamesMap,
+          games: cleanGames,
+          ...freezeData,
+          lastUpdated: Timestamp.now(),
+        });
+        batch.set(activeDocRef, activePayload, { mergeFields: Object.keys(activePayload) });
 
         // 2. Documento consolidado del grupo (miembros y catálogo)
         const groupDocRef = doc(db, COLLECTION_GROUP, DOC_MIEMBROS);
-        batch.set(
-          groupDocRef,
-          removeUndefinedDeep({
-            voters: cleanVoters,
-            gamesMap: cleanGamesMap,
-            games: cleanGames,
-            lastUpdated: Timestamp.now(),
-          }),
-          { merge: true }
-        );
+        const groupPayload = removeUndefinedDeep({
+          voters: cleanVoters,
+          gamesMap: cleanGamesMap,
+          games: cleanGames,
+          lastUpdated: Timestamp.now(),
+        });
+        batch.set(groupDocRef, groupPayload, { mergeFields: Object.keys(groupPayload) });
 
         await batch.commit();
         saveLocal();
@@ -1020,7 +1016,7 @@ export async function saveGames(gamesMap: Record<string, Game>): Promise<SyncSta
           games,
           lastUpdated: Timestamp.now(),
         });
-        await setDoc(docRef, payload, { merge: true });
+        await setDoc(docRef, payload, { mergeFields: Object.keys(payload) });
         saveLocal();
         if (import.meta.env.DEV) {
           console.log('[Store] Catálogo sincronizado correctamente.');
@@ -1170,24 +1166,21 @@ async function commitFinishedVotingBatch(
 
   // 3. Votación activa: reflejar los nuevos saldos, estado y limpiar precio congelado para el nuevo ciclo en 'votacion_actual/estado'
   const activeDocRef = doc(db, COLLECTION_ACTIVE_VOTING, DOC_ACTIVE_VOTING);
-  batch.set(
-    activeDocRef,
-    removeUndefinedDeep({
-      voters,
-      gamesMap,
-      games,
-      isPrecioCongelado: false,
-      precioCongelado: null,
-      descuentoCongelado: null,
-      precioCongeladoFormatted: null,
-      precioOriginalCongelado: null,
-      precioOriginalCongeladoFormatted: null,
-      congeladoAt: null,
-      congeladoGameId: null,
-      lastUpdated: Timestamp.now(),
-    }),
-    { merge: true }
-  );
+  const activePayload = removeUndefinedDeep({
+    voters,
+    gamesMap,
+    games,
+    isPrecioCongelado: false,
+    precioCongelado: null,
+    descuentoCongelado: null,
+    precioCongeladoFormatted: null,
+    precioOriginalCongelado: null,
+    precioOriginalCongeladoFormatted: null,
+    congeladoAt: null,
+    congeladoGameId: null,
+    lastUpdated: Timestamp.now(),
+  });
+  batch.set(activeDocRef, activePayload, { mergeFields: Object.keys(activePayload) });
 
   await batch.commit();
 }
